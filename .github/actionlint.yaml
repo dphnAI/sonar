@@ -1,3 +1,4 @@
 self-hosted-runner:
   labels:
     - aphrodite-wheel-builder
+    - sonar-arm64-wheel-builder

@@ -201,7 +201,7 @@ if [ "$backend" = auto ]; then
 fi
 
 case "$backend:$os:$architecture" in
-    cuda:Linux:x86_64 | rocm:Linux:x86_64 | xpu:Linux:x86_64) ;;
+    cuda:Linux:x86_64 | cuda:Linux:aarch64 | rocm:Linux:x86_64 | xpu:Linux:x86_64) ;;
     cpu:Linux:x86_64 | cpu:Linux:aarch64 | metal:Darwin:aarch64) ;;
     *)
         die "Sonar does not publish a $backend wheel for $os/$architecture."
@@ -236,8 +236,8 @@ check_cuda() {
     IFS='
 '
     for capability in $compute_caps; do
-        case "$capability" in
-            8.0 | 8.6 | 8.9 | 9.0 | 10.0 | 10.3 | 12.*) ;;
+        case "$architecture:$capability" in
+            *:8.0 | *:8.6 | *:8.9 | *:9.0 | *:10.0 | *:10.3 | *:12.* | aarch64:11.0) ;;
             *) unsupported_caps="${unsupported_caps}${unsupported_caps:+, }${capability}" ;;
         esac
     done

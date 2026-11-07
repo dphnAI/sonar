@@ -29,6 +29,13 @@ if [[ ! -x "$PLATFORM_BUILD_SCRIPT" ]]; then
   exit 1
 fi
 
+# Keep publication tools from the triggering revision across historical checkouts.
+publication_tools="$(mktemp -d "${RUNNER_TEMP}/sonar-publication.XXXXXX")"
+trap 'rm -rf -- "$publication_tools"' EXIT
+for script in generate_nightly_index.py verify_wheel_version.py; do
+  cp ".github/scripts/${script}" "${publication_tools}/${script}"
+done
+
 encode_path() {
   printf '%s' "${1//+/%2B}"
 }
@@ -129,6 +136,7 @@ write_commit_index() {
   local entries
   local output
   local encoded_name
+  local install_command
 
   entries="$(mktemp "${RUNNER_TEMP}/sonar-platform-entries.XXXXXX")"
   output="$(mktemp "${RUNNER_TEMP}/sonar-platform-index.XXXXXX")"
@@ -144,13 +152,16 @@ write_commit_index() {
       "${public_root}/commits/${commit}/${encoded_name}" >"$entries"
   fi
 
-  python3 .github/scripts/generate_nightly_index.py \
+  install_command="uv pip install sonar --extra-index-url ${public_root}/commits/${commit} --index-strategy first-index"
+  if [[ "$PLATFORM_BACKEND" == cuda ]]; then
+    install_command+=" --torch-backend cu130"
+  fi
+  python3 "${publication_tools}/generate_nightly_index.py" \
     --entry-file "$entries" \
     --commit "$commit" \
     --title "Sonar ${PLATFORM_BACKEND} wheel for ${commit:0:12}" \
     --description "Precompiled ${PLATFORM_BACKEND} wheel for ${PLATFORM_ARCHITECTURE} at commit ${commit}." \
-    --install-command \
-    "uv pip install sonar --extra-index-url ${public_root}/commits/${commit} --index-strategy first-index" \
+    --install-command "$install_command" \
     --output "$output"
   "$rclone" copyto \
     "$output" \
@@ -234,6 +245,7 @@ for commit in ${commits[@]+"${commits[@]}"}; do
       echo "::error::The build did not export a wheel for ${commit}"
       exit 1
     fi
+    python3 "${publication_tools}/verify_wheel_version.py" "$wheel" "$version"
 
     wheel_name="$(basename "$wheel")"
     if command -v sha256sum >/dev/null 2>&1; then
@@ -292,10 +304,11 @@ package_dir="${index_dir}/simple/sonar"
 nightly_dir="${index_root}/nightly/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}"
 mkdir -p "$package_dir" "$nightly_dir"
 install_command="uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}/simple --index-strategy first-index"
-if [[ "$PLATFORM_BACKEND" == cpu ]]; then
-  install_command="curl -LsSf https://sonar.dphn.ai/install.sh | sh -s -- --backend cpu --channel nightly"
-fi
-python3 .github/scripts/generate_nightly_index.py \
+case "$PLATFORM_BACKEND" in
+  cuda) install_command+=" --torch-backend cu130" ;;
+  cpu) install_command="curl -LsSf https://sonar.dphn.ai/install.sh | sh -s -- --backend cpu --channel nightly" ;;
+esac
+python3 "${publication_tools}/generate_nightly_index.py" \
   --entry-file "$entries" \
   --commit "$target_commit" \
   --title "Sonar nightly ${PLATFORM_BACKEND} wheels" \

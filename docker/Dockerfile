@@ -506,6 +506,7 @@ ARG sonar_target_device="cuda"
 ARG SONAR_VERSION_OVERRIDE=""
 ARG max_jobs=2
 ARG nvcc_threads=8
+ARG python_abi_tag=cp38
 ARG USE_SCCACHE
 ARG SCCACHE_ENDPOINT
 ENV SONAR_TARGET_DEVICE=${sonar_target_device}
@@ -536,16 +537,13 @@ RUN --mount=type=cache,id=sonar-wheel-uv,target=/opt/uv/cache \
         export RUSTC_WRAPPER=sccache; \
         sccache --show-stats; \
     fi \
-    && python3 setup.py bdist_wheel --dist-dir=dist --py-limited-api=cp38 \
+    && python3 setup.py bdist_wheel --dist-dir=dist --py-limited-api=${python_abi_tag} \
     && if [ "$USE_SCCACHE" = "1" ]; then \
         sccache --show-stats; \
     fi
 
 RUN python3 .github/scripts/verify_cuda_wheel_artifacts.py \
     "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
-
-# Copy extension wheels from extensions-build stage for later use
-COPY --from=extensions-build /tmp/ep_kernels_workspace/dist /tmp/ep_kernels_workspace/dist
 
 #################### WHEEL BUILD IMAGE ####################
 
@@ -866,8 +864,8 @@ uv pip list
 # Pytorch now installs NVSHMEM, setting LD_LIBRARY_PATH
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
-# Install EP kernels wheels (DeepEP) that have been built in the `build` stage
-RUN --mount=type=bind,from=build,src=/tmp/ep_kernels_workspace/dist,target=/sonar-workspace/ep_kernels/dist \
+# Install EP kernels directly from their build stage; wheel-only builds do not need them.
+RUN --mount=type=bind,from=extensions-build,src=/tmp/ep_kernels_workspace/dist,target=/sonar-workspace/ep_kernels/dist \
     --mount=type=cache,target=/opt/uv/cache \
     uv pip install --system ep_kernels/dist/*.whl --verbose \
         --index-url ${PYTORCH_CUDA_INDEX_BASE_URL}/cu$(echo $CUDA_VERSION | cut -d. -f1,2 | tr -d '.') \

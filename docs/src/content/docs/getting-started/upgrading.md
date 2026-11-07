@@ -74,6 +74,8 @@ uv pip install --upgrade sonar \
   --torch-backend cu130
 ```
 
+On Linux ARM64, replace `cuda/x86_64` with `cuda/aarch64` in either index URL.
+
 Use a fresh virtual environment when core dependencies change. Keep the old
 environment until the replacement passes validation.
 
