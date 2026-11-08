@@ -17,6 +17,136 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture
+def installer_environment(tmp_path: Path) -> dict[str, str]:
+    commands = {
+        "uname": 'case "$1" in -s) echo "$TEST_OS";; -m) echo "$TEST_MACHINE";; *) exit 1;; esac',
+        "nvidia-smi": (
+            'case "${1:-}" in\n'
+            '  -L) echo "GPU 0: Test GPU";;\n'
+            '  --query-gpu=compute_cap) printf "%s\\n" "$TEST_COMPUTE_CAPS";;\n'
+            '  "") echo "CUDA Version: $TEST_CUDA_VERSION";;\n'
+            "  *) exit 1;;\n"
+            "esac"
+        ),
+        "getconf": 'echo "glibc 2.35"',
+        "ldconfig": 'echo "libnuma.so.1"',
+        "uv": "exit 99",
+    }
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name, body in commands.items():
+        command = bin_dir / name
+        command.write_text(f"#!/bin/sh\n{body}\n")
+        command.chmod(0o755)
+    return {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "SONAR_BASE_URL": "https://sonar.invalid",
+        "TEST_OS": "Linux",
+        "TEST_MACHINE": "aarch64",
+        "TEST_COMPUTE_CAPS": "11.0",
+        "TEST_CUDA_VERSION": "13.0",
+    }
+
+
+def _installer_dry_run(
+    tmp_path: Path, env: dict[str, str], backend: str, channel: str = "release"
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "sh",
+            str(Path(__file__).resolve().parents[2] / "docs/public/install.sh"),
+            "--yes",
+            "--dry-run",
+            "--backend",
+            backend,
+            "--channel",
+            channel,
+            "--venv",
+            str(tmp_path / "venv"),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+
+@pytest.mark.parametrize(
+    ("machine", "backend", "channel"),
+    [
+        ("aarch64", "auto", "release"),
+        ("arm64", "cuda", "nightly"),
+        ("amd64", "cuda", "release"),
+        ("x86_64", "auto", "nightly"),
+        ("aarch64", "cpu", "release"),
+    ],
+)
+def test_installer_selects_platform_index(
+    tmp_path: Path,
+    installer_environment: dict[str, str],
+    machine: str,
+    backend: str,
+    channel: str,
+) -> None:
+    installer_environment.update(TEST_MACHINE=machine, TEST_COMPUTE_CAPS="8.0")
+    result = _installer_dry_run(tmp_path, installer_environment, backend, channel)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    architecture = "aarch64" if machine in ("aarch64", "arm64") else "x86_64"
+    selected_backend = "cuda" if backend == "auto" else backend
+    index = f"https://sonar.invalid/whl/{channel}/{selected_backend}/{architecture}/simple"
+    assert index in result.stdout
+    torch_backend = "cu130" if selected_backend == "cuda" else "cpu"
+    assert f"'--torch-backend' '{torch_backend}'" in result.stdout
+    assert not (tmp_path / "venv").exists()
+
+
+@pytest.mark.parametrize(
+    ("machine", "os_name", "cuda_version", "compute_caps", "error"),
+    [
+        ("aarch64", "Linux", "13.0", "8.0", None),
+        ("aarch64", "Linux", "13.0", "11.0", None),
+        ("aarch64", "Linux", "13.0", "11.0\n12.1", None),
+        ("x86_64", "Linux", "13.0", "12.1", None),
+        ("x86_64", "Linux", "13.0", "11.0", "compute capability: 11.0"),
+        ("aarch64", "Linux", "13.0", "8.7", "compute capability: 8.7"),
+        ("aarch64", "Linux", "13.0", "11.0\n8.7", "compute capability: 8.7"),
+        ("aarch64", "Linux", "12.9", "11.0", "requires CUDA 13.0"),
+        ("aarch64", "Linux", "13.0", "", "Could not determine"),
+        ("aarch64", "Darwin", "13.0", "11.0", "does not publish a cuda wheel"),
+        ("ppc64le", "Linux", "13.0", "8.0", "does not publish wheels"),
+    ],
+)
+def test_installer_validates_cuda_platform(
+    tmp_path: Path,
+    installer_environment: dict[str, str],
+    machine: str,
+    os_name: str,
+    cuda_version: str,
+    compute_caps: str,
+    error: str | None,
+) -> None:
+    installer_environment.update(
+        TEST_MACHINE=machine,
+        TEST_OS=os_name,
+        TEST_CUDA_VERSION=cuda_version,
+        TEST_COMPUTE_CAPS=compute_caps,
+    )
+    result = _installer_dry_run(tmp_path, installer_environment, "cuda")
+
+    if error is None:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "'--torch-backend' 'cu130'" in result.stdout
+    else:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert error in result.stderr
+        assert "https://sonar.invalid/whl/" not in result.stdout
+    assert not (tmp_path / "venv").exists()
+
+
 def _wheel(name: str, version: str, *, dependency: bool = False) -> tuple[str, bytes]:
     module = name.replace("-", "_")
     dist_info = f"{module}-{version}.dist-info"
@@ -53,9 +183,11 @@ def _wheel(name: str, version: str, *, dependency: bool = False) -> tuple[str, b
         pytest.param(200, 200, False, "sdist", id="source-distribution-only"),
     ],
 )
+@pytest.mark.parametrize("platform_backend", ["default", "cuda"])
 def test_installer_pins_sonar_index(
     tmp_path: Path,
     preflight_status: int,
+    platform_backend: str,
     resolution_status: int,
     already_installed: bool,
     index_content: str,
@@ -68,6 +200,8 @@ def test_installer_pins_sonar_index(
     if sys.platform != "linux" or architecture not in ("x86_64", "aarch64"):
         pytest.skip("installer integration test requires a supported Linux platform")
     backend = "rocm" if architecture == "x86_64" else "cpu"
+    if platform_backend == "cuda":
+        backend = "cuda"
     if backend == "cpu":
         try:
             ctypes.CDLL("libnuma.so.1")

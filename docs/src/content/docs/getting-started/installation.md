@@ -44,8 +44,10 @@ not available, it prints the required package-manager command and exits.
 
 ## NVIDIA CUDA
 
-Current source builds and nightly wheels require Python 3.11-3.14. CUDA wheels
-support Linux x86-64 and NVIDIA GPUs with compute capability 8.0 or newer.
+CUDA wheels support Linux x86-64 and ARM64 (`aarch64`) with Python 3.11-3.14
+and a driver supporting CUDA 13.0 or newer. Supported compute capabilities are
+8.0, 8.6, 8.9, 9.0, 10.0, 10.3, and 12.x. ARM64 wheels also support 11.0
+(Jetson Thor). Jetson Orin (8.7) and CUDA 12 drivers are not supported.
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). Then
 create an environment and install Sonar.
@@ -67,6 +69,10 @@ uv pip install sonar \
   --index-strategy first-index \
   --torch-backend cu130
 ```
+
+On ARM64, replace `cuda/x86_64` with `cuda/aarch64` in either index URL.
+The automatic installer selects this index when it detects an NVIDIA GPU on
+Linux ARM64. You can also select it with `--backend cuda`.
 
 ### Develop with precompiled extensions
 

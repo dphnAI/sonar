@@ -67,6 +67,9 @@
     "NVCC_THREADS": {
       "default": "8"
     },
+    "python_abi_tag": {
+      "default": "cp38"
+    },
     "GDRCOPY_CUDA_VERSION": {
       "default": "12.8"
     },

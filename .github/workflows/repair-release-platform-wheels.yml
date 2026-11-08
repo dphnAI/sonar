@@ -14,6 +14,7 @@ on:
         type: choice
         options:
           - all
+          - cuda-arm64
           - cpu
           - metal
 
@@ -27,8 +28,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  cuda-arm64-wheel:
+    if: ${{ inputs.target == 'all' || inputs.target == 'cuda-arm64' }}
+    name: CUDA wheel (aarch64)
+    runs-on: [self-hosted, linux, x64, sonar-arm64-wheel-builder]
+    timeout-minutes: 1440
+    env:
+      DOCKER_HOST: tcp://127.0.0.1:23750
+      MAX_JOBS: "64"
+      NVCC_THREADS: "4"
+      CUDA_VERSION: "13.0.3"
+      TORCH_CUDA_ARCH_LIST: "8.0 8.6 8.9 9.0 10.0 11.0 12.0+PTX"
+    steps:
+      - name: Check out repair source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Start isolated ARM64 CUDA builder
+        run: .github/scripts/ensure_cuda_arm64_builder.sh
+
+      - name: Build ARM64 CUDA wheel
+        env:
+          SONAR_VERSION_OVERRIDE: ${{ inputs.release_tag }}
+        run: |
+          SONAR_VERSION_OVERRIDE="${SONAR_VERSION_OVERRIDE#v}" \
+            .github/scripts/build_cuda_arm64_wheel.sh dist/cuda-aarch64
+
+      - name: Verify ARM64 CUDA wheel
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          wheel="$(find dist/cuda-aarch64 -maxdepth 1 \
+            -type f -name '*.whl' -print -quit)"
+          python3 .github/scripts/verify_wheel_version.py \
+            "$wheel" "${RELEASE_TAG#v}"
+          [[ "$(basename "$wheel")" == *-cp311-abi3-*aarch64.whl ]]
+
+      - name: Upload ARM64 CUDA wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuda-aarch64
+          path: dist/cuda-aarch64/*.whl
+          if-no-files-found: error
+
+      - name: Limit ARM64 CUDA build cache
+        if: ${{ always() }}
+        run: |
+          docker buildx prune --builder sonar-cuda-arm64 --force \
+            --filter type=regular --max-used-space 25gb
+
   cpu-wheel:
-    if: ${{ inputs.target != 'metal' }}
+    if: ${{ inputs.target == 'all' || inputs.target == 'cpu' }}
     name: CPU wheel (${{ matrix.architecture }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
@@ -98,7 +152,7 @@ jobs:
           if-no-files-found: error
 
   metal-wheel:
-    if: ${{ inputs.target != 'cpu' }}
+    if: ${{ inputs.target == 'all' || inputs.target == 'metal' }}
     name: Metal wheel (Apple Silicon)
     runs-on: macos-15
     timeout-minutes: 180
@@ -168,9 +222,10 @@ jobs:
 
   publish:
     name: Publish repaired platform wheels
-    needs: [cpu-wheel, metal-wheel]
+    needs: [cuda-arm64-wheel, cpu-wheel, metal-wheel]
     if: >-
       ${{ always() && !cancelled() &&
+          needs.cuda-arm64-wheel.result != 'failure' &&
           needs.cpu-wheel.result != 'failure' &&
           needs.metal-wheel.result != 'failure' }}
     runs-on: ubuntu-24.04
@@ -188,15 +243,22 @@ jobs:
       - name: Check out main
         uses: actions/checkout@v4
 
+      - name: Download ARM64 CUDA wheel
+        if: ${{ inputs.target == 'all' || inputs.target == 'cuda-arm64' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: cuda-aarch64
+          path: platform-wheels/cuda-aarch64
+
       - name: Download CPU wheels
-        if: ${{ inputs.target != 'metal' }}
+        if: ${{ inputs.target == 'all' || inputs.target == 'cpu' }}
         uses: actions/download-artifact@v4
         with:
           pattern: "cpu-*"
           path: platform-wheels
 
       - name: Download Metal wheel
-        if: ${{ inputs.target != 'cpu' }}
+        if: ${{ inputs.target == 'all' || inputs.target == 'metal' }}
         uses: actions/download-artifact@v4
         with:
           pattern: "metal-*"
@@ -213,13 +275,17 @@ jobs:
           set -euo pipefail
           PRUNE_RELEASE_VERSION="${PRUNE_RELEASE_VERSION#v}"
           export PRUNE_RELEASE_VERSION
-          if [[ "${{ inputs.target }}" != metal ]]; then
+          if [[ "${{ inputs.target }}" == all || "${{ inputs.target }}" == cuda-arm64 ]]; then
+            .github/scripts/publish_platform_wheels.sh \
+              platform-wheels/cuda-aarch64 release cuda aarch64 page-index
+          fi
+          if [[ "${{ inputs.target }}" == all || "${{ inputs.target }}" == cpu ]]; then
             .github/scripts/publish_platform_wheels.sh \
               platform-wheels/cpu-x86_64 release cpu x86_64 page-index
             .github/scripts/publish_platform_wheels.sh \
               platform-wheels/cpu-aarch64 release cpu aarch64 page-index
           fi
-          if [[ "${{ inputs.target }}" != cpu ]]; then
+          if [[ "${{ inputs.target }}" == all || "${{ inputs.target }}" == metal ]]; then
             .github/scripts/publish_platform_wheels.sh \
               platform-wheels/metal-aarch64 release metal aarch64 page-index
           fi
@@ -235,11 +301,14 @@ jobs:
           )
           while IFS= read -r asset; do
             case "$asset" in
+              "sonar-${version}-"*aarch64.whl)
+                [[ "${{ inputs.target }}" == all || "${{ inputs.target }}" == cuda-arm64 ]] || continue
+                ;;
               "sonar-${version}+cpu-"*.whl)
-                [[ "${{ inputs.target }}" != metal ]] || continue
+                [[ "${{ inputs.target }}" == all || "${{ inputs.target }}" == cpu ]] || continue
                 ;;
               "sonar-${version}+metal-"*.whl)
-                [[ "${{ inputs.target }}" != cpu ]] || continue
+                [[ "${{ inputs.target }}" == all || "${{ inputs.target }}" == metal ]] || continue
                 ;;
               *)
                 continue

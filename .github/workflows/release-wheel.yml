@@ -86,6 +86,55 @@ jobs:
             --filter type=regular \
             --max-used-space 25gb
 
+  cuda-arm64-wheel:
+    name: CUDA wheel (aarch64)
+    runs-on: [self-hosted, linux, x64, sonar-arm64-wheel-builder]
+    timeout-minutes: 1440
+    env:
+      DOCKER_HOST: tcp://127.0.0.1:23750
+      MAX_JOBS: "64"
+      NVCC_THREADS: "4"
+      CUDA_VERSION: "13.0.3"
+      TORCH_CUDA_ARCH_LIST: "8.0 8.6 8.9 9.0 10.0 11.0 12.0+PTX"
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Start isolated ARM64 CUDA builder
+        run: .github/scripts/ensure_cuda_arm64_builder.sh
+
+      - name: Build ARM64 CUDA wheel
+        run: |
+          SONAR_VERSION_OVERRIDE="${GITHUB_REF_NAME#v}" \
+            .github/scripts/build_cuda_arm64_wheel.sh dist/cuda-aarch64
+
+      - name: Verify ARM64 CUDA wheel
+        run: |
+          wheel="$(find dist/cuda-aarch64 -maxdepth 1 \
+            -type f -name '*.whl' -print -quit)"
+          python3 .github/scripts/verify_wheel_version.py \
+            "$wheel" "${GITHUB_REF_NAME#v}"
+          [[ "$(basename "$wheel")" == *-cp311-abi3-*aarch64.whl ]]
+
+      - name: Upload ARM64 CUDA wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuda-aarch64
+          path: dist/cuda-aarch64/*.whl
+          if-no-files-found: error
+
+      - name: Limit ARM64 CUDA build cache
+        if: ${{ always() }}
+        run: |
+          docker buildx prune --builder sonar-cuda-arm64 --force \
+            --filter type=regular --max-used-space 25gb
+
   cpu-wheel:
     name: CPU wheel (${{ matrix.architecture }})
     runs-on: ${{ matrix.runner }}
@@ -268,7 +317,7 @@ jobs:
 
   publish-platform-wheels:
     name: Publish platform wheels
-    needs: [cuda-wheel, cpu-wheel, metal-wheel, rocm-wheel]
+    needs: [cuda-wheel, cuda-arm64-wheel, cpu-wheel, metal-wheel, rocm-wheel]
     runs-on: ubuntu-24.04
     env:
       RCLONE_CONFIG_B2_TYPE: s3
@@ -286,11 +335,11 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - name: Download CUDA wheel
+      - name: Download CUDA wheels
         uses: actions/download-artifact@v4
         with:
-          name: cuda-x86_64
-          path: platform-wheels/cuda-x86_64
+          pattern: "cuda-*"
+          path: platform-wheels
 
       - name: Download CPU wheels
         uses: actions/download-artifact@v4
@@ -320,6 +369,8 @@ jobs:
           set -euo pipefail
           .github/scripts/publish_platform_wheels.sh \
             platform-wheels/cuda-x86_64 release cuda x86_64 page-index
+          .github/scripts/publish_platform_wheels.sh \
+            platform-wheels/cuda-aarch64 release cuda aarch64 page-index
           .github/scripts/publish_platform_wheels.sh \
             platform-wheels/cpu-x86_64 release cpu x86_64 page-index
           .github/scripts/publish_platform_wheels.sh \

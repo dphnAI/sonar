@@ -32,18 +32,21 @@ version="${major}.${minor}.$((patch + 1)).dev${timestamp}+${PLATFORM_VERSION_LOC
 
 mkdir -p "$output_dir"
 find "$output_dir" -maxdepth 1 -type f -name '*.whl' -delete
-if [[ "$PLATFORM_BACKEND" == "cuda" ]]; then
+if [[ -n "${PLATFORM_BUILD_SCRIPT:-}" ]]; then
+  SONAR_VERSION_OVERRIDE="$version" "$PLATFORM_BUILD_SCRIPT" "$output_dir"
+  wheel="$(find "$output_dir" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+elif [[ "$PLATFORM_BACKEND" == cuda && "$PLATFORM_ARCHITECTURE" == x86_64 ]]; then
   SONAR_VERSION_OVERRIDE="$version" ./docker/export_wheels.sh
   wheel="$(find wheels/main -maxdepth 1 -type f -name '*.whl' -print -quit)"
 else
-  : "${PLATFORM_BUILD_SCRIPT:?PLATFORM_BUILD_SCRIPT is required for non-CUDA wheels}"
-  SONAR_VERSION_OVERRIDE="$version" "$PLATFORM_BUILD_SCRIPT" "$output_dir"
-  wheel="$(find "$output_dir" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+  echo "::error::PLATFORM_BUILD_SCRIPT is required for ${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}"
+  exit 1
 fi
 if [[ -z "$wheel" ]]; then
   echo "::error::The PR build did not export a ${PLATFORM_BACKEND} wheel"
   exit 1
 fi
+python3 .github/scripts/verify_wheel_version.py "$wheel" "$version"
 
 wheel_name="$(basename "$wheel")"
 if command -v sha256sum >/dev/null 2>&1; then

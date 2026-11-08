@@ -23,6 +23,7 @@ on:
         options:
           - all
           - cuda
+          - cuda-arm64
           - rocm
           - cpu
           - metal
@@ -236,6 +237,88 @@ jobs:
           docker buildx prune --builder default --force \
             --filter type=regular \
             --max-used-space 25gb
+
+  cuda-arm64-wheel:
+    name: CUDA nightly (aarch64)
+    needs: authorize
+    if: ${{ needs.authorize.outputs.build == 'true' && (inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'cuda' || inputs.platform == 'cuda-arm64') }}
+    runs-on: [self-hosted, linux, x64, sonar-arm64-wheel-builder]
+    timeout-minutes: 1440
+    env:
+      DOCKER_HOST: tcp://127.0.0.1:23750
+      MAX_JOBS: "64"
+      NVCC_THREADS: "4"
+      CUDA_VERSION: "13.0.3"
+      TORCH_CUDA_ARCH_LIST: "8.0 8.6 8.9 9.0 10.0 11.0 12.0+PTX"
+      RCLONE_CONFIG_B2_TYPE: s3
+      RCLONE_CONFIG_B2_PROVIDER: Other
+      RCLONE_CONFIG_B2_ACCESS_KEY_ID: ${{ secrets.B2_S3_KEY_ID }}
+      RCLONE_CONFIG_B2_SECRET_ACCESS_KEY: ${{ secrets.B2_S3_APPLICATION_KEY }}
+      RCLONE_CONFIG_B2_REGION: ${{ vars.B2_S3_REGION }}
+      RCLONE_CONFIG_B2_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+      RCLONE_CONFIG_B2_NO_CHECK_BUCKET: "true"
+      B2_S3_BUCKET: ${{ vars.B2_S3_BUCKET }}
+      B2_PUBLIC_BASE_URL: ${{ vars.B2_PUBLIC_BASE_URL }}
+      PR_WHEEL_NUMBER: ${{ needs.authorize.outputs.pr_number }}
+      TARGET_COMMIT: ${{ needs.authorize.outputs.target_sha }}
+      PLATFORM_BACKEND: cuda
+      PLATFORM_ARCHITECTURE: aarch64
+      PLATFORM_VERSION_LOCAL: cu130
+    steps:
+      - name: Check out target revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.target_sha }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Start isolated ARM64 CUDA builder
+        run: .github/scripts/ensure_cuda_arm64_builder.sh
+
+      - name: Install rclone
+        run: ./.github/scripts/install-rclone.sh "$RUNNER_TEMP/rclone-bin"
+
+      - name: Pin ARM64 CUDA build driver
+        run: |
+          install -m 0755 \
+            .github/scripts/build_cuda_arm64_wheel.sh \
+            "$RUNNER_TEMP/build_cuda_arm64_wheel.sh"
+          install -m 0644 \
+            docker/Dockerfile \
+            "$RUNNER_TEMP/Dockerfile.cuda-arm64"
+
+      - name: Build and publish missing ARM64 CUDA wheels
+        if: ${{ needs.authorize.outputs.temporary != 'true' }}
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PLATFORM_BUILD_SCRIPT: ${{ runner.temp }}/build_cuda_arm64_wheel.sh
+          CUDA_ARM64_BUILD_DOCKERFILE: ${{ runner.temp }}/Dockerfile.cuda-arm64
+        run: |
+          .github/scripts/reconcile_platform_wheels.sh \
+            dist/cuda-aarch64 page-index
+
+      - name: Build and publish PR ARM64 CUDA wheel
+        if: ${{ needs.authorize.outputs.temporary == 'true' }}
+        env:
+          PLATFORM_BUILD_SCRIPT: ${{ runner.temp }}/build_cuda_arm64_wheel.sh
+          CUDA_ARM64_BUILD_DOCKERFILE: ${{ runner.temp }}/Dockerfile.cuda-arm64
+        run: .github/scripts/build_pr_wheel.sh dist/cuda-aarch64 page-index
+
+      - name: Upload ARM64 CUDA index
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-index-cuda-aarch64
+          path: page-index
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Limit ARM64 CUDA build cache
+        if: ${{ always() }}
+        run: |
+          docker buildx prune --builder sonar-cuda-arm64 --force \
+            --filter type=regular --max-used-space 25gb
 
   cpu-wheel:
     name: CPU nightly (${{ matrix.architecture }})
@@ -528,7 +611,7 @@ jobs:
 
   build-pages:
     name: Build documentation with nightly indexes
-    needs: [authorize, cuda-wheel, cpu-wheel, metal-wheel, rocm-wheel]
+    needs: [authorize, cuda-wheel, cuda-arm64-wheel, cpu-wheel, metal-wheel, rocm-wheel]
     if: ${{ always() && !cancelled() && needs.authorize.outputs.temporary != 'true' }}
     runs-on: ubuntu-24.04
     steps:
