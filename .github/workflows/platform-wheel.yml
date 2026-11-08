@@ -240,8 +240,9 @@ jobs:
 
   cuda-arm64-wheel:
     name: CUDA nightly (aarch64)
-    needs: authorize
-    if: ${{ needs.authorize.outputs.build == 'true' && (inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'cuda' || inputs.platform == 'cuda-arm64') }}
+    needs: [authorize, cuda-wheel]
+    if: ${{ !cancelled() && needs.authorize.outputs.build == 'true' && (inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'cuda' || inputs.platform == 'cuda-arm64') && (needs.cuda-wheel.result == 'success' || needs.cuda-wheel.result == 'skipped') }}
+    # This label shares the native CUDA/ROCm runner on CPU.
     runs-on: [self-hosted, linux, x64, sonar-arm64-wheel-builder]
     timeout-minutes: 1440
     env:
