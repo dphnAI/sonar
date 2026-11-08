@@ -88,6 +88,8 @@ jobs:
 
   cuda-arm64-wheel:
     name: CUDA wheel (aarch64)
+    needs: cuda-wheel
+    # This label shares the native CUDA/ROCm runner on CPU.
     runs-on: [self-hosted, linux, x64, sonar-arm64-wheel-builder]
     timeout-minutes: 1440
     env:
