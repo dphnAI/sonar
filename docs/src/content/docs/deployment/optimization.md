@@ -233,6 +233,8 @@ before tensor-parallel slicing, then applies the requested runtime quantization.
 For mixed checkpoints such as Kimi-K3.1-Pro, use
 `--quantization-config '{"linear":"nf12"}'` to encode linear layers while retaining
 the checkpoint's MXFP4 routed experts.
+The published Kimi-K3.1-Pro checkpoint has no MTP prediction layers and cannot
+use `--spec-method mtp`.
 
 ### FP4 MoE on SM120 GPUs
 

@@ -47,6 +47,44 @@ def test_none_overrides_fall_back_to_arch_mapping():
     assert hf_config.architectures == ["DeepSeekMTPModel"]
 
 
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    ("model_type", "architecture"),
+    [
+        ("kimi_k3", "KimiK3ForConditionalGeneration"),
+        ("kimi_k31", "KimiK31ForConditionalGeneration"),
+    ],
+)
+def test_kimi_mtp_selects_prediction_model(model_type, architecture):
+    config = _make_hf_config(
+        model_type=model_type,
+        architectures=[architecture],
+        text_config=_make_hf_config(num_nextn_predict_layers=2),
+    )
+
+    draft = SpeculativeConfig.hf_config_override(config)
+
+    assert draft.model_type == "kimi_k3_mtp"
+    assert draft.architectures == ["KimiK3MTPModel"]
+    assert draft.n_predict == 2
+
+
+@pytest.mark.cpu_test
+@pytest.mark.parametrize("model_type", ["kimi_k3", "kimi_k31"])
+@pytest.mark.parametrize("n_predict", [None, 0, -1])
+def test_kimi_mtp_rejects_missing_prediction_layers(model_type, n_predict):
+    text_kwargs = {} if n_predict is None else {"num_nextn_predict_layers": n_predict}
+    config = _make_hf_config(
+        model_type=model_type,
+        text_config=_make_hf_config(**text_kwargs),
+    )
+
+    with pytest.raises(ValueError, match="MTP"):
+        SpeculativeConfig.hf_config_override(config)
+
+    assert config.model_type == model_type
+
+
 _DSPARK_CONFIG = "sonar.v1.worker.gpu.spec_decode.dspark.config.DSparkSpeculatorConfig"
 _SELF_CONTAINED_DRAFT_SPECULATORS = {
     "Gemma4DSparkModel": _DSPARK_CONFIG,

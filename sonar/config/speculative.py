@@ -797,11 +797,13 @@ class SpeculativeConfig:
             n_predict = getattr(hf_config, "num_nextn_predict_layers", None)
             hf_config.update({"n_predict": n_predict, "architectures": ["BailingMoeV25MTPModel"]})
 
-        if hf_config.model_type == "kimi_k3":
-            # Kimi-K3 keeps the text-model fields (incl. the MTP layer count)
+        if hf_config.model_type in ("kimi_k3", "kimi_k31"):
+            # Kimi-K3 and K3.1 keep the text-model fields (incl. the MTP layer count)
             # nested under ``text_config`` (a KimiLinearConfig).
             text_config = getattr(hf_config, "text_config", hf_config)
             n_predict = getattr(text_config, "num_nextn_predict_layers", None)
+            if n_predict is None or n_predict <= 0:
+                raise ValueError(f"The {hf_config.model_type} checkpoint does not contain MTP prediction layers")
             hf_config.model_type = "kimi_k3_mtp"
             hf_config.update({"n_predict": n_predict, "architectures": ["KimiK3MTPModel"]})
 
