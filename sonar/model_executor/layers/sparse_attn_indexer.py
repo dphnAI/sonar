@@ -511,7 +511,8 @@ def sparse_attn_indexer(
     # DeepSelect ranks SM100's BF16 decode logits directly; other top-k
     # backends and the DCP merge read an FP32 copy.
     fp32_decode_logits = topk_backend != "deep_select" or dcp_world_size != 1
-    if not isinstance(attn_metadata, dict):
+    # CUDA-graph memory profiling can supply metadata before caches are bound.
+    if not isinstance(attn_metadata, dict) or kv_cache.numel() == 0:
         # Reserve workspace for indexer during profiling run
         values_spec, scales_spec = _gather_workspace_shapes(total_seq_lens, head_dim, fp8_dtype, use_fp4_cache)
         profile_specs: list[tuple[tuple[int, ...], torch.dtype]] = [
@@ -622,7 +623,7 @@ def sparse_attn_indexer(
             num_tokens //= get_pcp_group().world_size
         k = k[:num_tokens]
 
-    if not skip_k_cache_insert:
+    if not skip_k_cache_insert and kv_cache.numel() > 0:
         assert k is not None
         k, slot_mapping_for_cache = maybe_gather_indexer_k(
             k,

@@ -213,9 +213,6 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
             heads *= q_proj_layer.group_size
         q = q.view(-1, heads, self.qk_head_dim)
 
-        # Add head dim of 1 to k_pe
-        k_pe = k_pe.unsqueeze(1)
-
         if self.rotary_emb is not None:
             q[..., self.qk_nope_head_dim :], k_pe = self.rotary_emb(positions, q[..., self.qk_nope_head_dim :], k_pe)
 

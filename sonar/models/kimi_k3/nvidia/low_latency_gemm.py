@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 import sonar.envs as envs
@@ -885,6 +886,19 @@ def try_low_latency_gemm(
     if not _residual_ok(x, weight, residual):
         return None
     return _run_residual_plan(_build_residual_plan(spec), x, weight, residual)
+
+
+def low_latency_linear(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    out = try_low_latency_gemm(x, weight)
+    return out if out is not None else F.linear(x, weight)
+
+
+def request_low_latency_warmup(weight: torch.Tensor) -> None:
+    """Register CuTe warmups for a packed weight not owned by a linear."""
+    table = _low_latency_table()
+    spec = table.get(tuple(weight.shape)) if table is not None else None
+    if spec is not None and shape_dynamic_skinny_gemm.is_available():
+        shape_dynamic_skinny_gemm.request_warmup_configs(weight.dtype, (config for _, config in spec.cute_configs))
 
 
 class _KimiK3LowLatencyApply:

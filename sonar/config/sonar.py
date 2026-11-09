@@ -110,6 +110,7 @@ DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES = frozenset(
         "InklingForCausalLM",
         "InklingForConditionalGeneration",
         "KimiK3ForConditionalGeneration",
+        "KimiK31ForConditionalGeneration",
         "KimiK3MTPModel",
         "KimiLinearForCausalLM",
         "MiniMaxM3SparseForCausalLM",
@@ -3266,6 +3267,7 @@ class SonarConfig:
         kda_architectures = (
             "KimiLinearForCausalLM",
             "KimiK3ForConditionalGeneration",
+            "KimiK31ForConditionalGeneration",
         )
         is_kda_model = self.model_config is not None and self.model_config.architecture in kda_architectures
         self.cache_config.use_kda_recoverssm = self.num_speculative_tokens > 0 and is_kda_model

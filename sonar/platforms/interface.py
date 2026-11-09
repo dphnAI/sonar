@@ -917,6 +917,7 @@ class Platform:
         from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
         from sonar.v1.attention.backend import MultipleOf
         from sonar.v1.kv_cache_interface import (
+            DS_MLA_STATE_CONTENT_BYTES,
             FullAttentionSpec,
             MambaSpec,
             MLAAttentionSpec,
@@ -943,6 +944,7 @@ class Platform:
                 dtype=kv_cache_dtype,
                 cache_dtype_str=cache_config.cache_dtype,
                 kv_quant_mode=kv_quant_mode,
+                state_content_bytes=DS_MLA_STATE_CONTENT_BYTES.get(cache_config.cache_dtype),
             ).page_size_bytes
         elif cache_config.cache_dtype.startswith("turboquant_") or cache_config.cache_dtype == "ultraquant_4bit":
             # TurboQuant and UltraQuant have packed K|V layouts; the standard
@@ -997,6 +999,11 @@ class Platform:
             # customize_spec may read the model config (e.g. Octave's rotary dim).
             with set_current_sonar_config(sonar_config):
                 attn_page_size_1_token = backend_cls.customize_spec(attn_spec).page_size_bytes
+            ds_blob_bytes = DS_MLA_STATE_CONTENT_BYTES.get(cache_config.cache_dtype)
+            if ds_blob_bytes is not None:
+                # Packed MLA rows include NoPE, RoPE, and scales rather than
+                # the plain quantized storage priced by the generic spec.
+                attn_page_size_1_token = ds_blob_bytes
 
         # Compute mamba page size
         model_cls, _ = ModelRegistry.resolve_model_cls(
@@ -1036,20 +1043,30 @@ class Platform:
                 # For hybrid MLA/Mamba models, make the manager block size a
                 # multiple of 128 so split kernel blocks keep that invariant.
                 kernel_block_alignment_size = max(kernel_block_alignment_size, 128)
+        checkpoint_alignment = 1
         if cache_config.mamba_cache_mode == "align":
             # Internal prefill checkpoints land on block boundaries.
-            kernel_block_alignment_size = lcm(
-                kernel_block_alignment_size,
-                get_mamba_prefill_checkpoint_alignment(sonar_config) or 1,
-            )
+            checkpoint_alignment = get_mamba_prefill_checkpoint_alignment(sonar_config) or 1
+            kernel_block_alignment_size = lcm(kernel_block_alignment_size, checkpoint_alignment)
 
-        # Use minimum block size that satisfies both backend alignment and
-        # mamba page size compatibility
-        attn_block_size = kernel_block_alignment_size * cdiv(
-            mamba_page_size,
-            kernel_block_alignment_size * attn_page_size_1_token,
-        )
-        attn_block_size = backend_block_alignment * cdiv(attn_block_size, backend_block_alignment)
+        # Packed hybrid models size the whole block row without page padding.
+        packed_block_size = None
+        if hasattr(model_cls, "get_packed_hybrid_block_size"):
+            packed_block_size = model_cls.get_packed_hybrid_block_size(
+                sonar_config,
+                attn_page_size_1_token,
+                mamba_page_size,
+                lcm(backend_block_alignment, checkpoint_alignment),
+            )
+        if packed_block_size is not None:
+            attn_block_size = packed_block_size
+        else:
+            # Satisfy both backend alignment and mamba page size compatibility.
+            attn_block_size = kernel_block_alignment_size * cdiv(
+                mamba_page_size,
+                kernel_block_alignment_size * attn_page_size_1_token,
+            )
+            attn_block_size = backend_block_alignment * cdiv(attn_block_size, backend_block_alignment)
 
         if cache_config.block_size < attn_block_size:
             cache_config.block_size = attn_block_size
@@ -1060,6 +1077,9 @@ class Platform:
 
         if cache_config.mamba_cache_mode == "align":
             cache_config.mamba_block_size = cache_config.block_size
+
+        if packed_block_size is not None:
+            return
 
         # Pad mamba page size to exactly match attention page size
         attn_page_size = cache_config.block_size * attn_page_size_1_token

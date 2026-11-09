@@ -484,6 +484,10 @@ _MULTIMODAL_MODELS = {
         "sonar.models.kimi_k3",
         "KimiK3ForConditionalGeneration",
     ),
+    "KimiK31ForConditionalGeneration": (
+        "sonar.models.kimi_k3",
+        "KimiK3ForConditionalGeneration",
+    ),
     "MoonshotKimiaForCausalLM": ("kimi_audio", "KimiAudioForConditionalGeneration"),
     "LightOnOCRForConditionalGeneration": (
         "lightonocr",
