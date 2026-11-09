@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 
 logger = init_logger(__name__)
 
+# Packed NoPE, RoPE, and scales: these sizes cannot be derived from head_size.
+DS_MLA_STATE_CONTENT_BYTES = {"fp8_ds_mla": 656, "nvfp4_ds_mla": 352}
+
 _SpecT = TypeVar("_SpecT", bound="KVCacheSpec")
 
 

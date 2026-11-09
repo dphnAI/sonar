@@ -372,6 +372,14 @@ class AttentionBackend(ABC):
         return None
 
     @classmethod
+    def writes_kv_cache_from_block_table(cls) -> bool:
+        """Whether token caches are written using metadata block-table slots.
+
+        Such caches can be split into kernel blocks within a packed group.
+        """
+        return False
+
+    @classmethod
     def is_ssm(cls) -> bool:
         return False
 

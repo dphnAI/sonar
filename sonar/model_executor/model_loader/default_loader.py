@@ -22,6 +22,11 @@ from sonar.model_executor.model_loader.base_loader import BaseModelLoader
 from sonar.model_executor.model_loader.ep_weight_filter import (
     compute_local_expert_ids,
 )
+from sonar.model_executor.model_loader.nf12_checkpoint import (
+    is_nf12_checkpoint,
+    nf12_logical_name,
+    nf12_weights_iterator,
+)
 from sonar.model_executor.model_loader.weight_utils import (
     _get_checkpoints_size_bytes,
     download_safetensors_index_file_from_hf,
@@ -254,6 +259,20 @@ class DefaultModelLoader(BaseModelLoader):
             source.fall_back_to_pt,
             source.allow_patterns_overrides,
         )
+        nf12_checkpoint = is_nf12_checkpoint(
+            source.model_or_path,
+            hf_folder,
+            source.subfolder,
+            source.revision,
+            self.load_config.download_dir,
+        )
+        if nf12_checkpoint:
+            if not use_safetensors or self.load_config.load_format not in ("auto", "hf", "safetensors"):
+                raise ValueError("NF12 checkpoints require load_format='auto', 'hf', or 'safetensors'")
+            if extra_config.get("enable_multithread_load"):
+                raise ValueError("NF12 checkpoints do not support enable_multithread_load")
+            if self.load_config.safetensors_load_strategy not in (None, "lazy"):
+                raise ValueError("NF12 checkpoints require the default or 'lazy' safetensors_load_strategy")
         if self._encoder_only_lm_prefixes is not None and use_safetensors and hf_weights_files:
             hf_weights_files = filter_mm_encoder_only_safetensors_files(
                 hf_weights_files,
@@ -269,10 +288,22 @@ class DefaultModelLoader(BaseModelLoader):
                     f"{self._encoder_only_lm_prefixes}"
                 )
         if source.is_unused_weight is not None and use_safetensors:
-            hf_weights_files = filter_safetensors_files_by_weight_name(hf_weights_files, source.is_unused_weight)
+            unused_weight = source.is_unused_weight
+            if nf12_checkpoint:
+                hf_weights_files = filter_safetensors_files_by_weight_name(
+                    hf_weights_files, lambda name: unused_weight(nf12_logical_name(name))
+                )
+            else:
+                hf_weights_files = filter_safetensors_files_by_weight_name(hf_weights_files, unused_weight)
         total_bytes = _get_checkpoints_size_bytes(hf_weights_files)
 
-        if self.load_config.load_format == "npcache":
+        if nf12_checkpoint:
+            weights_iterator = nf12_weights_iterator(
+                hf_weights_files,
+                local_expert_ids=self.local_expert_ids,
+                is_unused_weight=source.is_unused_weight,
+            )
+        elif self.load_config.load_format == "npcache":
             # Currently np_cache only support *.bin checkpoints
             assert use_safetensors is False
             weights_iterator = np_cache_weights_iterator(

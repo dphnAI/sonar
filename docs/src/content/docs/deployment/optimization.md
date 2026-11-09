@@ -213,6 +213,29 @@ experts, LoRA, and specialized all-to-all backends.
 NF12-encoded linear layers do not support checkpoint weight reloads. Restart
 the engine to load new weights.
 
+#### Saved NF12 checkpoints
+
+From a Sonar checkout, convert a local safetensors checkpoint into a new directory:
+
+```bash
+uv run --no-sync python tools/convert_nf12_checkpoint.py \
+  --model /models/bf16-model --output /models/nf12-model --devices 0
+sonar run /models/nf12-model --dtype bfloat16 --quantization nf12
+```
+
+The converter keeps an encoded BF16 matrix only when it saves space and verifies
+that decoding recovers the original values. Other tensor dtypes and existing
+quantization metadata are preserved. Pass multiple GPU indices, such as
+`--devices 0,1,2,3,4,5,6,7`, to convert shards concurrently.
+
+Loading uses the default or lazy safetensors loader. Sonar decodes each tensor
+before tensor-parallel slicing, then applies the requested runtime quantization.
+For mixed checkpoints such as Kimi-K3.1-Pro, use
+`--quantization-config '{"linear":"nf12"}'` to encode linear layers while retaining
+the checkpoint's MXFP4 routed experts.
+The published Kimi-K3.1-Pro checkpoint has no MTP prediction layers and cannot
+use `--spec-method mtp`.
+
 ### FP4 MoE on SM120 GPUs
 
 On SM120 GPUs, use `--moe-backend b12x` for supported FP4 MoE checkpoints.

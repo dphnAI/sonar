@@ -98,6 +98,8 @@ from sonar.models.common.ops.sequence_parallel import (
     sp_reduce_scatter,
     sp_shard,
 )
+from sonar.models.kimi_k3.common.dsa_cache import packed_dsa_block_size
+from sonar.models.kimi_k3.nvidia.dsa import KimiK3DSAAttention
 from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
 from sonar.models.kimi_k3.nvidia.latent_moe_runner import (
     LatentMoERunner,
@@ -641,6 +643,7 @@ class KimiDecoderLayer(nn.Module):
         prefix: str = "",
         aux_stream: torch.cuda.Stream | None = None,
         run_gemm_rs_ar: bool = False,
+        topk_indices_buffer: torch.Tensor | None = None,
     ) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -695,24 +698,40 @@ class KimiDecoderLayer(nn.Module):
             assert v_head_dim is not None
             assert kv_lora_rank is not None
             assert mla_use_nope, "Kimi-K3 MLA (MultiHeadLatentAttention) is NoPE-only"
-            # q_lora_rank may be None (Kimi-Linear): the MLA layer then uses an
-            # uncompressed q_proj instead of the fused q-LoRA front-end.
-            self.self_attn = MultiHeadLatentAttention(
-                config=config,
-                hidden_size=self.hidden_size,
-                num_heads=config.num_attention_heads,
-                qk_nope_head_dim=qk_nope_head_dim,
-                qk_rope_head_dim=qk_rope_head_dim,
-                v_head_dim=v_head_dim,
-                q_lora_rank=config.q_lora_rank,
-                kv_lora_rank=kv_lora_rank,
-                use_output_gate=bool(config.mla_use_output_gate),
-                cache_config=cache_config,
-                quant_config=quant_config,
-                prefix=f"{prefix}.self_attn",
-                aux_stream=aux_stream,
-                run_gemm_rs_ar=run_gemm_rs_ar,
-            )
+            if config.is_dsa_layer(layer_idx):
+                self.self_attn = KimiK3DSAAttention(
+                    config=config,
+                    hidden_size=self.hidden_size,
+                    num_heads=config.num_attention_heads,
+                    qk_nope_head_dim=qk_nope_head_dim,
+                    qk_rope_head_dim=qk_rope_head_dim,
+                    v_head_dim=v_head_dim,
+                    q_lora_rank=config.q_lora_rank,
+                    kv_lora_rank=kv_lora_rank,
+                    cache_config=cache_config,
+                    quant_config=quant_config,
+                    prefix=f"{prefix}.self_attn",
+                    topk_indices_buffer=topk_indices_buffer,
+                    aux_stream=aux_stream,
+                )
+            else:
+                # Kimi-Linear may use an uncompressed q_proj (no q-LoRA).
+                self.self_attn = MultiHeadLatentAttention(
+                    config=config,
+                    hidden_size=self.hidden_size,
+                    num_heads=config.num_attention_heads,
+                    qk_nope_head_dim=qk_nope_head_dim,
+                    qk_rope_head_dim=qk_rope_head_dim,
+                    v_head_dim=v_head_dim,
+                    q_lora_rank=config.q_lora_rank,
+                    kv_lora_rank=kv_lora_rank,
+                    use_output_gate=bool(config.mla_use_output_gate),
+                    cache_config=cache_config,
+                    quant_config=quant_config,
+                    prefix=f"{prefix}.self_attn",
+                    aux_stream=aux_stream,
+                    run_gemm_rs_ar=run_gemm_rs_ar,
+                )
 
         if self.use_sequence_parallel:
             self.self_attn.o_proj.reduce_results = False
@@ -874,6 +893,18 @@ class KimiDecoderLayer(nn.Module):
         return hidden_states, prefix_sum, residual
 
 
+# Checkpoint indexer names differ from the serving module tree.
+_DSA_STACKED_PARAMS_MAPPING = [
+    (".self_attn.dsa_indexer.wkv_index.", ".self_attn.indexer.wk.", 0),
+    (".self_attn.dsa_indexer.wkv_index.", ".self_attn.indexer.weights_proj.", 1),
+]
+_DSA_RENAME_PARAMS_MAPPING = [
+    (".self_attn.dsa_indexer.wq_index.", ".self_attn.indexer.wq_b."),
+    (".self_attn.dsa_indexer.k_index_norm.", ".self_attn.indexer.k_norm."),
+    (".self_attn.dsa_indexer.", ".self_attn.indexer."),
+]
+
+
 class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
     packed_modules_mapping = {
         "gate_up_proj": ["gate_proj", "up_proj"],
@@ -921,6 +952,16 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
         # level and threaded into each attention layer).
         aux_stream = torch.cuda.Stream()
 
+        self.topk_indices_buffer: torch.Tensor | None = None
+        if config.dsa_config is not None and any(
+            config.is_dsa_layer(layer_idx) for layer_idx in range(config.num_hidden_layers)
+        ):
+            self.topk_indices_buffer = torch.empty(
+                (sonar_config.scheduler_config.max_num_batched_tokens, config.dsa_config.index_topk),
+                dtype=torch.int32,
+                device="cuda" if torch.cuda.is_available() else "cpu",
+            )
+
         def get_layer(prefix: str):
             return KimiDecoderLayer(
                 config,
@@ -928,6 +969,7 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
                 prefix,
                 aux_stream=aux_stream,
                 run_gemm_rs_ar=self.run_gemm_rs_ar,
+                topk_indices_buffer=self.topk_indices_buffer,
             )
 
         self.start_layer, self.end_layer, self.layers = make_layers(
@@ -935,6 +977,17 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
             get_layer,
             prefix=f"{prefix}.layers",
         )
+        if config.dsa_config is not None:
+            n_dsa_built = sum(
+                isinstance(layer.self_attn, KimiK3DSAAttention)
+                for layer in self.layers[self.start_layer : self.end_layer]
+            )
+            n_dsa_expected = sum(
+                config.is_dsa_layer(layer_idx) for layer_idx in range(self.start_layer, self.end_layer)
+            )
+            assert n_dsa_built == n_dsa_expected, (
+                f"DSA wiring broken: built {n_dsa_built} layers but dsa_config expects {n_dsa_expected}."
+            )
         self.num_attn_res_blocks = (
             cdiv(self.end_layer, self.attn_res_block_size) if self.attn_res_block_size is not None else 0
         )
@@ -1196,6 +1249,14 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
                     (".fused_qkv_a_proj", ".q_a_proj", 0),
                     (".fused_qkv_a_proj", ".kv_a_proj_with_mqa", 1),
                 ]
+            if self.config.dsa_config is not None and self.config.mla_use_output_gate:
+                # DSA keeps its output gate separate from the input projection.
+                stacked_params_mapping += [
+                    (".fused_qkv_a_proj", ".q_a_proj", 0),
+                    (".fused_qkv_a_proj", ".kv_a_proj_with_mqa", 1),
+                ]
+        if self.config.dsa_config is not None:
+            stacked_params_mapping += _DSA_STACKED_PARAMS_MAPPING
         use_mega_moe = any(module.use_mega_moe for module in self.modules() if isinstance(module, KimiMoE))
         if self.config.is_moe and use_mega_moe:
             expert_params_mapping = make_kimi_k3_mega_moe_expert_params_mapping(self.config.num_experts)
@@ -1282,6 +1343,11 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
                     )
                     break
                 else:
+                    if self.config.dsa_config is not None:
+                        for param_name, weight_name in _DSA_RENAME_PARAMS_MAPPING:
+                            if weight_name in name:
+                                name = name.replace(weight_name, param_name)
+                                break
                     # Skip loading extra bias for GPTQ models.
                     if name.endswith(".bias") and name not in params_dict and not self.config.is_linear_attn:  # noqa: E501
                         continue
@@ -1429,6 +1495,12 @@ class KimiLinearForCausalLM(
         loader = AutoWeightsLoader(self)
         return loader.load_weights(weights)
 
+    def process_weights_after_loading(self) -> None:
+        if self.specialized_decode_config is None:
+            for module in self.model.modules():
+                if isinstance(module, KimiK3DSAAttention):
+                    module.pack_projections()
+
 
 def get_spec_layer_idx_from_weight_name(config: KimiLinearConfig, weight_name: str) -> int | None:
     if hasattr(config, "num_nextn_predict_layers") and (config.num_nextn_predict_layers > 0):
@@ -1556,6 +1628,9 @@ class KimiK3ForConditionalGeneration(
             self.language_model.make_empty_intermediate_tensors
         )
         self.media_placeholder: int = self.config.media_placeholder_token_id
+
+    def process_weights_after_loading(self) -> None:
+        self.language_model.process_weights_after_loading()
 
     # -- SupportsEncoderCudaGraph protocol methods --
 
@@ -1825,6 +1900,16 @@ class KimiK3ForConditionalGeneration(
     @classmethod
     def get_mamba_state_copy_func(cls):
         return KimiLinearForCausalLM.get_mamba_state_copy_func()
+
+    @classmethod
+    def get_packed_hybrid_block_size(
+        cls,
+        sonar_config: SonarConfig,
+        attn_page_size_1_token: int,
+        mamba_page_size: int,
+        alignment: int,
+    ) -> int | None:
+        return packed_dsa_block_size(sonar_config, attn_page_size_1_token, mamba_page_size, alignment)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(self)

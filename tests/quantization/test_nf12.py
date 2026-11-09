@@ -113,6 +113,34 @@ def test_nf12_rejects_fp16(nf12_backend, default_sonar_config, linear_layer, rng
         linear_layer(weight)
 
 
+def test_nf12_multimodal_projector_uses_activation_dtype(nf12_backend, dist_init, rng):
+    from sonar.config.quantization import QuantizationConfigArgs
+    from sonar.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+    from sonar.model_executor.models.kimi_k25_vit import KimiK25MultiModalProjector, mm_projector_forward
+    from sonar.utils.torch_utils import set_default_torch_dtype
+
+    config = SimpleNamespace(
+        hidden_size=64,
+        merge_kernel_size=(1, 1),
+        mm_projector_type="patchmergerv2",
+        projector_ln_eps=1e-6,
+    )
+    quant_config = OnlineQuantizationConfig(QuantizationConfigArgs(linear="nf12"))
+    with set_default_torch_dtype(torch.bfloat16), torch.device("cuda"):
+        projector = KimiK25MultiModalProjector(config, out_hidden_size=64, quant_config=quant_config)
+    weights = [_randn((64, 64), rng) for _ in range(2)]
+    for linear, weight in zip((projector.linear_1, projector.linear_2), weights):
+        replace_parameter(linear, "weight", weight)
+        linear.quant_method.process_weights_after_loading(linear)
+    features = _randn((5, 1, 64), rng).float()
+    actual = mm_projector_forward(projector, [features[:2], features[2:]])
+    expected = F.linear(features.reshape(5, 64).to(torch.bfloat16), weights[0])
+    expected = F.linear(projector.act(expected), weights[1])
+    expected = projector.post_norm(expected)
+    assert [part.shape for part in actual] == [(2, 64), (3, 64)]
+    torch.testing.assert_close(torch.cat(actual), expected, rtol=0.02, atol=0.01)
+
+
 def test_nf12_moe_preserves_weighted_routes(nf12_backend, rng):
     moe = FusedMoEConfig(
         num_experts=3,

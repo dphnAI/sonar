@@ -823,7 +823,7 @@ _SONAR_CONFIG = SimpleNamespace(
 )
 
 
-def _packed_group(tokens_per_state, row_bytes, supported_sizes):
+def _packed_group(tokens_per_state, row_bytes, supported_sizes, *, writes_from_block_table=False):
     spec = MLAAttentionSpec(
         block_size=1024,
         num_kv_heads=1,
@@ -837,6 +837,7 @@ def _packed_group(tokens_per_state, row_bytes, supported_sizes):
         get_supported_kernel_block_sizes=lambda _=None: supported_sizes,
         get_name=lambda: "FAKE",
         customize_spec=lambda spec: spec,
+        writes_kv_cache_from_block_table=lambda: writes_from_block_table,
     )
     return AttentionGroup(backend, ["layer.0"], spec, 0)
 
@@ -890,6 +891,22 @@ def test_packed_token_cache_cannot_be_split():
     packed = torch.zeros(3, 1, 2048, 1152, dtype=torch.uint8)[:, :, :1024]
     with pytest.raises(ValueError, match="cannot be split"):
         map_kv_caches_to_kernel_blocks({"layer.0": packed}, [group])
+
+
+def test_packed_token_cache_block_table_writes_address_original_storage():
+    row, stride_rows = 132, 2048
+    group = _packed_group(1, row, [64], writes_from_block_table=True)
+    group.create_metadata_builders(_SONAR_CONFIG, "cpu", kernel_block_size=1024)
+    backing = torch.arange(3 * stride_rows).repeat_interleave(row)
+    manager = backing.view(3, 1, stride_rows, row)[:, :, :1024]
+    pages = map_kv_caches_to_kernel_blocks({"layer.0": manager}, [group])["layer.0"]
+    metadata = create_common_attn_metadata(BatchSpec([2048], [1]), 1024, "cpu")
+    metadata.block_table_tensor = torch.tensor([[0, 2]], dtype=torch.int32)
+    table = group.build_metadata(metadata)
+    assert table.tolist() == [list(range(16)) + list(range(64, 80))]
+    torch.testing.assert_close(pages[table[0, 16:], 0].flatten(0, 1), manager[2, 0])
+    pages[table[0, 16], 0, 7, 0] = -1
+    assert manager[2, 0, 7, 0] == -1
 
 
 def test_copy_kv_cache_blocks_overlaid_views_copy_whole_block():

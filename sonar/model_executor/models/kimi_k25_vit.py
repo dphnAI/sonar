@@ -763,7 +763,7 @@ def mm_projector_forward(mm_projector: torch.nn.Module, vt_output: list[torch.Te
     """Apply MM projector to vision tower outputs."""
     num_embedding_list = [x.shape[0] for x in vt_output]
     batched = torch.cat(vt_output, dim=0)
-    projector_dtype = next(mm_projector.parameters()).dtype
+    projector_dtype = mm_projector.linear_1.params_dtype
     if batched.dtype != projector_dtype:
         batched = batched.to(projector_dtype)
     proj_out = mm_projector(batched)
