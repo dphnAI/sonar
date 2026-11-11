@@ -31,14 +31,12 @@ from sonar.v1.kv_cache_interface import (
     KVCacheGroupSpec,
     KVCacheLayout,
     KVCacheTensor,
-    KVQuantMode,
     MLAAttentionSpec,
 )
 from sonar.v1.worker.utils import (
     AttentionGroup,
     allocate_kv_cache,
     prepare_kernel_block_sizes,
-    select_common_block_size,
 )
 
 SM90 = DeviceCapability(major=9, minor=0)
@@ -126,29 +124,6 @@ def test_flashmla_bf16_nope_accepts_packed_manager_blocks():
 
     assert kernel_block_sizes == [1152]
     assert caches["layer.0"].shape == (num_blocks, 1, 1152, 512)
-
-
-@pytest.mark.parametrize("sm100", [False, True])
-def test_flashmla_quantized_cache_kernel_pages(monkeypatch, sm100):
-    """Quantized blocks are read as 64-token pages; SM100 only row-aligns them
-    (TMA) and keeps 64-token blocks."""
-    monkeypatch.setattr(
-        current_platform,
-        "is_device_capability_family",
-        lambda family, device_id=0: sm100 and family == 100,
-    )
-    spec = MLAAttentionSpec(
-        block_size=1152,
-        num_kv_heads=1,
-        head_size=576,
-        dtype=torch.float8_e4m3fn,
-        cache_dtype_str="fp8_ds_mla",
-        kv_quant_mode=KVQuantMode.FP8_PER_TENSOR,
-        state_content_bytes=656,
-    )
-
-    kernel_block_size = 64 if sm100 else 1152
-    assert select_common_block_size(1152, [FlashMLASparseBackend], [spec]) == kernel_block_size
 
 
 def test_fp8_kv_pages_address_packed_blocks():

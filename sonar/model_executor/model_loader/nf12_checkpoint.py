@@ -94,7 +94,7 @@ def _validate_escape_indices(packed: torch.Tensor, num_escapes: int, name: str) 
         raise ValueError(f"NF12 {name}: escape count {count} does not match escapes tensor ({num_escapes})")
 
 
-def _decode_weight(file, name: str) -> torch.Tensor:
+def _decode_weight(file, name: str, device_packed: torch.Tensor | None = None) -> torch.Tensor:
     packed, escapes, exp_base = (file.get_tensor(f"{name}.{component}") for component in _COMPONENTS)
     base = int(exp_base.item())
     if not 0 <= base <= 120:
@@ -106,36 +106,94 @@ def _decode_weight(file, name: str) -> torch.Tensor:
     from nf12 import NF12Weight
 
     device = torch.device("cuda", torch.accelerator.current_device_index())
-    encoded = NF12Weight(packed.to(device), escapes.to(device), base)
+    cuda_packed = packed.to(device) if device_packed is None else device_packed
+    # Fast shard views can start at arbitrary byte offsets. NF12's vector loads
+    # require 16-byte alignment even when the tensor is contiguous.
+    if cuda_packed.data_ptr() % 16 or not cuda_packed.is_contiguous():
+        cuda_packed = cuda_packed.clone(memory_format=torch.contiguous_format)
+    encoded = NF12Weight(cuda_packed, escapes.to(device), base)
     # Decode the entire logical tensor before the existing model loader does TP
-    # slicing/fusion/online quantization. Returning releases CUDA temporaries
-    # before the caller receives the CPU tensor, with no shard-sized staging.
-    return encoded.decode().cpu()
+    # slicing/fusion/online quantization. Only one decoded tensor is staged.
+    # fastsafetensors already owns the device packed tensor; validate against
+    # its CPU mmap instead of copying the packed payload back from CUDA.
+    decoded = encoded.decode()
+    return decoded.cpu() if device_packed is None else decoded
+
+
+def _validate_shard(file, path: str, seen: set[str]) -> tuple[list[str], set[str]]:
+    keys = set(file.keys())
+    logical_names = sorted({nf12_logical_name(key) for key in keys})
+    encoded_names: set[str] = set()
+    # Validate headers before reading any payload, including skipped EP
+    # tensors. All three components must live in this same shard.
+    for name in logical_names:
+        components = {f"{name}.{component}" for component in _COMPONENTS}
+        if components & keys:
+            if not components <= keys or name in keys:
+                raise ValueError(f"NF12 {name}: missing components or conflicting unencoded tensor in {path}")
+            _validate_shapes(file, name)
+            encoded_names.add(name)
+        if name in seen:
+            raise ValueError(f"NF12 checkpoint has duplicate logical tensor {name!r}")
+        seen.add(name)
+    return logical_names, encoded_names
+
+
+def _fastsafetensors_weights_iterator(
+    hf_weights_files: list[str],
+    use_tqdm_on_load: bool,
+    local_expert_ids: set[int] | None,
+    is_unused_weight: Callable[[str], bool] | None,
+) -> Generator[tuple[str, torch.Tensor], None, None]:
+    from sonar.model_executor.model_loader.weight_utils import fastsafetensors_weights_iterator
+
+    if not hf_weights_files:
+        return
+
+    seen: set[str] = set()
+    encoded_files: dict[str, str] = {}
+    for path in hf_weights_files:
+        with safe_open(path, framework="pt", device="cpu") as file:
+            _, encoded_names = _validate_shard(file, path, seen)
+            encoded_files.update((name, path) for name in encoded_names)
+
+    weights = fastsafetensors_weights_iterator(hf_weights_files, use_tqdm_on_load)
+    try:
+        for physical_name, tensor in weights:
+            name = nf12_logical_name(physical_name)
+            if should_skip_weight(name, local_expert_ids) or (is_unused_weight is not None and is_unused_weight(name)):
+                continue
+            if name not in encoded_files:
+                yield name, tensor
+            elif physical_name == f"{name}.nf12_packed":
+                # Physical components need not be adjacent in the stream. Read
+                # auxiliary tensors through the mmap, not a pending component
+                # dictionary that could retain entire CUDA shards.
+                with safe_open(encoded_files[name], framework="pt", device="cpu") as file:
+                    yield name, _decode_weight(file, name, device_packed=tensor)
+            # Consume every physical tensor on every rank: the underlying
+            # iterator broadcasts collectively even when this rank skips it.
+    finally:
+        weights.close()
 
 
 def nf12_weights_iterator(
     hf_weights_files: list[str],
     local_expert_ids: set[int] | None = None,
     is_unused_weight: Callable[[str], bool] | None = None,
+    *,
+    use_fastsafetensors: bool = False,
+    use_tqdm_on_load: bool = True,
 ) -> Generator[tuple[str, torch.Tensor], None, None]:
+    if use_fastsafetensors:
+        yield from _fastsafetensors_weights_iterator(
+            hf_weights_files, use_tqdm_on_load, local_expert_ids, is_unused_weight
+        )
+        return
     seen: set[str] = set()
     for path in sorted(hf_weights_files):
         with safe_open(path, framework="pt", device="cpu") as file:
-            keys = set(file.keys())
-            logical_names = sorted({nf12_logical_name(key) for key in keys})
-            encoded_names = set()
-            # Validate headers before reading any payload, including skipped EP
-            # tensors. All three components must live in this same shard.
-            for name in logical_names:
-                components = {f"{name}.{component}" for component in _COMPONENTS}
-                if components & keys:
-                    if not components <= keys or name in keys:
-                        raise ValueError(f"NF12 {name}: missing components or conflicting unencoded tensor in {path}")
-                    _validate_shapes(file, name)
-                    encoded_names.add(name)
-                if name in seen:
-                    raise ValueError(f"NF12 checkpoint has duplicate logical tensor {name!r}")
-                seen.add(name)
+            logical_names, encoded_names = _validate_shard(file, path, seen)
             for name in logical_names:
                 if should_skip_weight(name, local_expert_ids) or (
                     is_unused_weight is not None and is_unused_weight(name)

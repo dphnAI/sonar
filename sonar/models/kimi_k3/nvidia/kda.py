@@ -621,6 +621,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         self._projection_aux_stream = aux_stream
         self._projection_events = (torch.cuda.Event(), torch.cuda.Event()) if aux_stream is not None else None
         self._projection_overlap_max_tokens = 0
+        self._projection_overlap_nf12 = False
 
         # Keep f_a before the narrow beta shard, then align each TP-local row.
         qkvg_output_sizes = [self.projection_size] * 4
@@ -900,17 +901,30 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             and projection_aux_stream is not None
             and torch.cuda.is_current_stream_capturing()
         ):
-            from sonar.models.kimi_k3.nvidia.low_latency_gemm import (
-                run_kda_projection_overlap,
-            )
+            if self._projection_overlap_nf12:
+                from sonar.models.kimi_k3.nvidia.low_latency_gemm import (
+                    run_kda_nf12_projection_overlap,
+                )
 
-            projected_qkvg, g1, beta = run_kda_projection_overlap(
-                hidden_states,
-                self.in_proj_qkvgfab.weight,
-                self.f_b_proj.weight,
-                projection_aux_stream,
-                projection_events,
-            )
+                projected_qkvg, g1, beta = run_kda_nf12_projection_overlap(
+                    hidden_states,
+                    self.in_proj_qkvgfab,
+                    self.f_b_proj,
+                    projection_aux_stream,
+                    projection_events,
+                )
+            else:
+                from sonar.models.kimi_k3.nvidia.low_latency_gemm import (
+                    run_kda_projection_overlap,
+                )
+
+                projected_qkvg, g1, beta = run_kda_projection_overlap(
+                    hidden_states,
+                    self.in_proj_qkvgfab.weight,
+                    self.f_b_proj.weight,
+                    projection_aux_stream,
+                    projection_events,
+                )
             mixed_qkv, g_proj_states = projected_qkvg.split(
                 [3 * self.local_projection_size, self.local_projection_size],
                 dim=-1,
@@ -944,10 +958,10 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             beta=beta,
             core_attn_out=core_attn_out,
         )
-        core_attn_out = rearrange(core_attn_out, "1 n h d -> n (h d)")
-        if self.gemm_rs_ar is not None and self.gemm_rs_ar.should_run(core_attn_out):
-            return self.gemm_rs_ar.apply(core_attn_out, self.o_proj)
-        return self.o_proj(core_attn_out)[0]
+        output_input = core_attn_out.view(num_tokens, self.local_projection_size)
+        if self.gemm_rs_ar is not None and self.gemm_rs_ar.should_run(output_input):
+            return self.gemm_rs_ar.apply(output_input, self.o_proj)
+        return self.o_proj(output_input)[0]
 
     def _recoverssm_verify(
         self,

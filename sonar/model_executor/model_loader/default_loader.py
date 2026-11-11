@@ -267,8 +267,15 @@ class DefaultModelLoader(BaseModelLoader):
             self.load_config.download_dir,
         )
         if nf12_checkpoint:
-            if not use_safetensors or self.load_config.load_format not in ("auto", "hf", "safetensors"):
-                raise ValueError("NF12 checkpoints require load_format='auto', 'hf', or 'safetensors'")
+            if not use_safetensors or self.load_config.load_format not in (
+                "auto",
+                "hf",
+                "safetensors",
+                "fastsafetensors",
+            ):
+                raise ValueError(
+                    "NF12 checkpoints require load_format='auto', 'hf', 'safetensors', or 'fastsafetensors'"
+                )
             if extra_config.get("enable_multithread_load"):
                 raise ValueError("NF12 checkpoints do not support enable_multithread_load")
             if self.load_config.safetensors_load_strategy not in (None, "lazy"):
@@ -302,6 +309,8 @@ class DefaultModelLoader(BaseModelLoader):
                 hf_weights_files,
                 local_expert_ids=self.local_expert_ids,
                 is_unused_weight=source.is_unused_weight,
+                use_fastsafetensors=self.load_config.load_format == "fastsafetensors",
+                use_tqdm_on_load=self.load_config.use_tqdm_on_load,
             )
         elif self.load_config.load_format == "npcache":
             # Currently np_cache only support *.bin checkpoints

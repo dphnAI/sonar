@@ -61,4 +61,7 @@ class Nf12OnlineLinearMethod(OnlineLinearBase):
     def apply(self, layer: Module, x: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         if self.fallback:
             return self.unquantized.apply(layer, x, bias)
-        return torch.ops.nf12.linear(x, layer.weight, layer.weight_escapes, layer.weight_exp_base, bias)
+        # Model weights stay unchanged throughout inference.
+        return torch.ops.nf12.linear(
+            x, layer.weight, layer.weight_escapes, layer.weight_exp_base, bias, static_weights=True
+        )

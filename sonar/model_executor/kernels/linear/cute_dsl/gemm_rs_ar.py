@@ -883,9 +883,10 @@ class GemmRsAr:
             FlashInferCutedslMxfp8LinearKernel,
             FlashInferCutlassMxfp8LinearKernel,
         )
+        from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
 
         # Called before weight loading; online quantization starts on meta.
-        if isinstance(linear.quant_method, UnquantizedLinearMethod):
+        if isinstance(linear.quant_method, (UnquantizedLinearMethod, Nf12OnlineLinearMethod)):
             dtype, k_alignment = "bf16", 64
             if linear.weight.dtype != torch.bfloat16:
                 return False
@@ -929,9 +930,12 @@ class GemmRsAr:
         from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
             FlashInferCutedslMxfp8LinearKernel,
         )
+        from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
 
         method = getattr(linear, "scheme", linear.quant_method)
         w = linear.weight
+        if isinstance(method, Nf12OnlineLinearMethod) and not method.fallback:
+            w = torch.ops.nf12.decode(w, linear.weight_escapes, linear.weight_exp_base)
         if isinstance(getattr(method, "kernel", None), FlashInferCutedslMxfp8LinearKernel):
             # This backend stores a column-major [K, N] view after loading.
             w = w.t()

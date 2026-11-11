@@ -989,6 +989,22 @@ def test_sparse_backend_decode_correctness(
             (64, 256, 0, 256),
             id="FlashMLA-fp8_ds_mla",
         ),
+        pytest.param(
+            FlashMLASparseBackend,
+            "nvfp4_ds_mla",
+            1792,
+            1856,
+            (12, 128, 64, 128),
+            id="FlashMLA-nvfp4-kimi",
+        ),
+        pytest.param(
+            FlashMLASparseBackend,
+            "fp8_ds_mla",
+            128,
+            192,
+            (12, 128, 64, 128),
+            id="FlashMLA-fp8-kimi",
+        ),
     ],
 )
 def test_sparse_mla_packed_stride(

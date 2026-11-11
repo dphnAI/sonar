@@ -356,6 +356,8 @@ class SkinnyKernel:
             fused_add_multicast_skinny_gemm._as_cute(weight),
             fused_add_multicast_skinny_gemm._as_cute(shared_shard),
             cutlass.Int64(mailbox.data_ptr()),
+            cutlass.Int64(0),
+            cutlass.Int32(0),
             cuda.CUstream(torch.cuda.current_stream().cuda_stream),
         )
 
@@ -704,6 +706,7 @@ def benchmark_whole_tail(args: argparse.Namespace) -> None:
         )
         / LATENT_SIZE**0.5
     )
+    local_up_weight = up_weight.narrow(0, rank * (HIDDEN_SIZE // world_size), HIDDEN_SIZE // world_size)
 
     use_reference = args.backend in ("reference", "both")
     use_fused = args.backend in ("fused", "both")
@@ -774,7 +777,7 @@ def benchmark_whole_tail(args: argparse.Namespace) -> None:
                 shared: torch.Tensor = shared,
                 fused_op: latent_moe_tail.KimiK3LatentMoETailOp = fused_op,
             ) -> torch.Tensor:
-                return fused_op(routed_input, shared, rms_weight, up_weight)
+                return fused_op(routed_input, shared, rms_weight, local_up_weight)
 
             fused_graph, fused_output = capture_tail_graph(fused, cpu_group)
             fused_key_parts = ["fused"]

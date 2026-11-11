@@ -75,6 +75,11 @@ def unsupported(sonar_config) -> str | None:
     compilation = sonar_config.compilation_config
     graphs = compilation.cudagraph_mode
     checks = (
+        (
+            getattr(text, "dsa_config", None) is not None
+            and sonar_config.additional_config.get("mla_core", "auto") != "auto",
+            "dense mla_core overrides for K3.1 DSA; select its sparse attention backend instead",
+        ),
         (not current_platform.is_device_capability_family(100), "this GPU (SM100/103)"),
         (
             moe != ("situ", 4.0, 25.0, 896, 16, 1, 1, "sigmoid"),

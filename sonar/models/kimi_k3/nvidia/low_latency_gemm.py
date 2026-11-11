@@ -16,6 +16,10 @@ genuinely differ between the parts, so the tables must not be merged. SM107
 (Rubin) reuses the SM103 table: the plan was validated end-to-end on SM107
 hardware, but the per-M crossovers have not been re-measured there and may
 deserve their own table once retuned.
+
+NF12 uses a separate TP8 KDA overlap path on SM103 through M=8. Its packed
+row views retain the original escape table and opt into static-weight staging;
+the BF16 projection tables and implementation remain independent.
 """
 
 from __future__ import annotations
@@ -58,6 +62,7 @@ KDA_QKVG_CONFIGS = {
 # The captured end-to-end projection sweep wins through M=14 and regresses at
 # M=15 and M=16, where the original packed projection remains selected.
 KDA_PROJECTION_OVERLAP_MAX_TOKENS = 14
+KDA_NF12_PROJECTION_OVERLAP_MAX_TOKENS = min(8, KDA_PROJECTION_OVERLAP_MAX_TOKENS)
 KDA_SKINNY_N_MAX_TOKENS = KDA_PROJECTION_OVERLAP_MAX_TOKENS
 KDA_SKINNY_K_MAX_TOKENS = KDA_PROJECTION_OVERLAP_MAX_TOKENS
 _KDA_QKVG_SIZE = 4 * 1536
@@ -806,6 +811,89 @@ def run_kda_projection_overlap(
     return projected_qkvg, g1, beta
 
 
+def run_kda_nf12_projection_overlap(
+    hidden_states: torch.Tensor,
+    packed_proj: nn.Module,
+    f_b_proj: nn.Module,
+    aux_stream: torch.cuda.Stream,
+    events: tuple[torch.cuda.Event, torch.cuda.Event],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Overlap NF12 TP8 projections without copying or decoding weights.
+
+    The 6144-row split is tile aligned. Escape IDs in both packed views index
+    the original table. Keep all 144 auxiliary rows (128 FA, 12 beta, 4 pad)
+    to satisfy NF12's 16-row alignment; only FA feeds F_B.
+
+    These loaded weights are immutable, so static staging is safe. Activation
+    dependencies still use NF12's normal waits and the stream fork/join.
+    """
+
+    def run_qkvg() -> torch.Tensor:
+        return torch.ops.nf12.linear(
+            hidden_states,
+            packed_proj.weight[:_KDA_QKVG_SIZE],
+            packed_proj.weight_escapes,
+            packed_proj.weight_exp_base,
+            None,
+            static_weights=True,
+        )
+
+    def run_fab_fb() -> tuple[torch.Tensor, torch.Tensor]:
+        projected_fab = torch.ops.nf12.linear(
+            hidden_states,
+            packed_proj.weight[_KDA_QKVG_SIZE:],
+            packed_proj.weight_escapes,
+            packed_proj.weight_exp_base,
+            None,
+            static_weights=True,
+        )
+        g1 = torch.ops.nf12.linear(
+            projected_fab[:, :128],
+            f_b_proj.weight,
+            f_b_proj.weight_escapes,
+            f_b_proj.weight_exp_base,
+            None,
+            static_weights=True,
+        )
+        return g1, projected_fab[:, 128:_KDA_FAB_SIZE]
+
+    projected_qkvg, (g1, beta) = maybe_execute_in_parallel(
+        run_qkvg,
+        run_fab_fb,
+        events[0],
+        events[1],
+        aux_stream,
+    )
+    return projected_qkvg, g1, beta
+
+
+def _enable_kda_nf12_projection_overlap(child: nn.Module) -> bool:
+    from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
+
+    if envs.SONAR_BATCH_INVARIANT or not _is_sm103() or child.tp_size != _KDA_TP_SIZE:
+        return False
+    if child._projection_aux_stream is None or child._projection_events is None:
+        return False
+    for proj, n, k in (
+        (child.in_proj_qkvgfab, _KDA_PACKED_SIZE, 7168),
+        (child.f_b_proj, 1536, 128),
+    ):
+        if (
+            type(proj.quant_method) is not Nf12OnlineLinearMethod
+            or proj.quant_method.fallback
+            # Installation precedes materialization and encoding. These
+            # aligned shapes cannot fall back to BF16 in Nf12OnlineLinearMethod.
+            or proj.weight.dtype not in (torch.bfloat16, torch.uint8)
+            or proj.weight.shape != (n, k * 3 // 2 if proj.weight.dtype == torch.uint8 else k)
+            or not (proj.weight.is_cuda or (proj.weight.is_meta and proj.weight.dtype == torch.bfloat16))
+            or not proj.weight.is_contiguous()
+        ):
+            return False
+    child._projection_overlap_nf12 = True
+    child._projection_overlap_max_tokens = KDA_NF12_PROJECTION_OVERLAP_MAX_TOKENS
+    return True
+
+
 def autotune_kda_qkvg(model: nn.Module) -> None:
     """Autotune the supported QKVG GEMM before CUDA graph capture."""
     from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
@@ -815,6 +903,10 @@ def autotune_kda_qkvg(model: nn.Module) -> None:
     weights_by_shape: dict[tuple[int, int, int, torch.dtype, torch.device], torch.Tensor] = {}
     for child in model.modules():
         if not isinstance(child, KimiK3DeltaAttention):
+            continue
+        # Never interpret NF12 bytes as BF16 or widen NF12 to the BF16 M limit.
+        if child.in_proj_qkvgfab.weight.dtype == torch.uint8:
+            _enable_kda_nf12_projection_overlap(child)
             continue
         if child._projection_overlap_max_tokens <= 0:
             continue
@@ -958,6 +1050,8 @@ def _enable_kda_projection_overlap(module: nn.Module) -> bool:
         if not isinstance(child, KimiK3DeltaAttention):
             continue
         if child.tp_size != _KDA_TP_SIZE:
+            continue
+        if _enable_kda_nf12_projection_overlap(child):
             continue
         packed_weight = child.in_proj_qkvgfab.weight
         f_b_weight = child.f_b_proj.weight
