@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+from collections.abc import Callable
 from enum import IntEnum
 from typing import cast
 
 import torch
 
 import sonar.envs as envs
+from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 from sonar.config import get_current_sonar_config
 from sonar.distributed import (
     get_tensor_model_parallel_rank,
@@ -14,8 +16,10 @@ from sonar.distributed import (
 from sonar.logger import init_logger
 from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
 from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner, _unpack
+from sonar.model_executor.layers.fused_moe.runner.shared_experts import SharedExpertsOrder
 from sonar.model_executor.layers.layernorm import RMSNorm
 from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
 from sonar.platforms import current_platform
 from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
 from sonar.utils.torch_utils import aux_stream
@@ -78,6 +82,7 @@ class LatentMoERunner(MoERunner):
         )
         # Overlap the shared-expert all-reduce with the tier-1 up-projection.
         self._shared_ar_events = (torch.cuda.Event(), torch.cuda.Event())
+        self._up_proj_decode_events = (torch.cuda.Event(), torch.cuda.Event())
         use_fused_path = self._use_fused_path()
         if self.enable_k3_latent_moe_tail_fusion and use_fused_path and self.moe_config.tp_size not in (8, 16):
             logger.warning_once(
@@ -124,6 +129,7 @@ class LatentMoERunner(MoERunner):
                 dtype=norm.weight.dtype,
                 device=current_platform.current_device(),
                 rms_eps=norm.variance_epsilon,
+                nf12_weights=isinstance(transform.up_proj.quant_method, Nf12OnlineLinearMethod),
             )
             self._k3_latent_moe_tail_op = op
             if self.moe_config.use_deferred_moe_finalize:
@@ -167,11 +173,14 @@ class LatentMoERunner(MoERunner):
             and self._shared_experts is not None
             and not self._fused_output_is_reduced
             and not self.moe_config.is_sequence_parallel
-            # Tail kernels multiply by the raw up_proj.weight (no scales): BF16 only.
             and self.routed_output_transform is not None
-            and isinstance(
-                self.routed_output_transform.up_proj.quant_method,
-                UnquantizedLinearMethod,
+            and (
+                isinstance(self.routed_output_transform.up_proj.quant_method, UnquantizedLinearMethod)
+                or (
+                    isinstance(self.routed_output_transform.up_proj.quant_method, Nf12OnlineLinearMethod)
+                    and self.routed_output_transform.up_proj.output_size % (16 * self.moe_config.tp_size) == 0
+                    and self.routed_output_transform.up_proj.input_size % 64 == 0
+                )
             )
         )
 
@@ -198,23 +207,42 @@ class LatentMoERunner(MoERunner):
         # tier 2
         return LatentTailTier.COLUMN_PARALLEL
 
+    def _up_proj_weight_shard(self, *, decode_nf12: bool = True) -> torch.Tensor:
+        transform = self.routed_output_transform
+        assert transform is not None
+        layer = transform.up_proj
+        shard_size = layer.weight.shape[0] // self.moe_config.tp_size
+        shard = layer.weight.narrow(0, get_tensor_model_parallel_rank() * shard_size, shard_size)
+        if decode_nf12 and isinstance(layer.quant_method, Nf12OnlineLinearMethod) and not layer.quant_method.fallback:
+            # The column-parallel fallback needs BF16. The native tail accepts
+            # packed rows and chooses direct loads or a transient local decode.
+            return torch.ops.nf12.decode(shard, layer.weight_escapes, layer.weight_exp_base)
+        return shard
+
     def _small_batch_tail(
         self,
         fused_output: torch.Tensor | UnfinalizedMoEOutput,
         shared_output: torch.Tensor,
         trunc_size: int | None,
+        *,
+        local_up_weight: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Tier 0: the CuTeDSL operator fuses the whole tail."""
         transform = self.routed_output_transform
         assert transform is not None
         norm = transform.norm
         assert norm is not None
+        if local_up_weight is None:
+            local_up_weight = self._up_proj_weight_shard(decode_nf12=False)
+        nf12 = local_up_weight.dtype == torch.uint8
 
         result = self._k3_latent_moe_tail_op(
             fused_output,
             shared_output,
             norm.weight,
-            transform.up_proj.weight,
+            local_up_weight,
+            weight_escapes=transform.up_proj.weight_escapes if nf12 else None,
+            weight_exp_base=transform.up_proj.weight_exp_base if nf12 else None,
         )
         # The operator already reduced; this only strips padding.
         return self._maybe_reduce_final_output(result, trunc_size, output_is_reduced=True)
@@ -242,7 +270,7 @@ class LatentMoERunner(MoERunner):
         # Overlap the shared-expert all-reduce with the up-projection GEMM while
         # the batch is small enough for it to pay off.
         result, shared_output = maybe_execute_in_parallel(
-            lambda: torch.mm(fused_latent, transform.up_proj.weight.t()),
+            lambda: transform.up_proj.quant_method.apply(transform.up_proj, fused_latent),
             lambda: tensor_model_parallel_all_reduce(shared_output),
             self._shared_ar_events[0],
             self._shared_ar_events[1],
@@ -268,12 +296,11 @@ class LatentMoERunner(MoERunner):
         else:
             latent = tensor_model_parallel_all_reduce(fused_output)
 
-        weight = transform.up_proj.weight
-        shard_size = weight.shape[0] // self.moe_config.tp_size
+        shard_size = shared_output.shape[-1] // self.moe_config.tp_size
         shard_start = get_tensor_model_parallel_rank() * shard_size
 
         # column-parallel
-        up_proj_shard = weight.narrow(0, shard_start, shard_size)
+        up_proj_shard = self._up_proj_weight_shard()
         hidden_shard = shared_output.narrow(-1, shard_start, shard_size)
 
         # hidden_shard += latent @ up_proj_shard.T, accumulated in the GEMM's
@@ -321,7 +348,31 @@ class LatentMoERunner(MoERunner):
             shared_output, fused_output = _unpack(unfinalized)
             assert shared_output is not None
             assert isinstance(fused_output, UnfinalizedMoEOutput)
-            result = self._small_batch_tail(fused_output, shared_output, None)
+            local_up_weight = None
+            decode_stream = None
+            transform = self.routed_output_transform
+            if (
+                hidden_states.shape[0] == 8
+                and self.moe_config.tp_size == 8
+                and current_platform.is_device_capability(103)
+                and transform is not None
+                and transform.up_proj.weight.dtype == torch.uint8
+                and self._shared_experts is not None
+                and self._shared_experts._determine_shared_experts_order(shared_experts_input)
+                == SharedExpertsOrder.MULTI_STREAM_OVERLAPPED
+                and not BreakableCUDAGraphCapture.is_active()
+            ):
+                decode_stream = self._shared_experts._stream
+                assert decode_stream is not None
+                # Queue behind shared experts without waiting for routed experts.
+                with torch.cuda.stream(decode_stream):
+                    local_up_weight = self._up_proj_weight_shard()
+                    self._up_proj_decode_events[0].record(decode_stream)
+                self._up_proj_decode_events[0].wait()
+            result = self._small_batch_tail(fused_output, shared_output, None, local_up_weight=local_up_weight)
+            if decode_stream is not None:
+                self._up_proj_decode_events[1].record()
+                self._up_proj_decode_events[1].wait(decode_stream)
             return self._maybe_add_zero_expert_output(result)
 
         result = self._forward_entry(
@@ -339,6 +390,7 @@ class LatentMoERunner(MoERunner):
             fused_output = fused_output[..., :og_hidden_dim_pre_xform]
 
         tier = self._select_tail_tier(fused_output, shared_output)
+        latent_tail: Callable[[torch.Tensor, torch.Tensor, int | None], torch.Tensor]
         if tier is LatentTailTier.TAIL_FUSION:
             latent_tail = self._small_batch_tail
         elif tier is LatentTailTier.ALLREDUCE_OVERLAP:

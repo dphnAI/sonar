@@ -1125,6 +1125,114 @@ def test_kda_projection_overlap_cuda_graph(num_tokens: int) -> None:
         assert cosine > 0.999
 
 
+@pytest.mark.parametrize("num_tokens", [1, 2, 8])
+@pytest.mark.parametrize("with_escapes", [False, True])
+def test_kda_nf12_projection_overlap_cuda_graph(num_tokens: int, with_escapes: bool) -> None:
+    """Static packed branch views preserve escapes, padding, and replay inputs."""
+    if not current_platform.is_device_capability((10, 3)):
+        pytest.skip("NF12 KDA overlap targets SM103")
+    nf12 = pytest.importorskip("nf12")
+    from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
+    from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
+
+    torch.manual_seed(43)
+    hidden_states = torch.randn(num_tokens, 7168, dtype=torch.bfloat16, device="cuda")
+    # A narrow exponent interval gives an escape-free control. Keep padding
+    # nonzero so accidentally including it in FA or beta is observable.
+    weight = (torch.rand(6288, 7168, device="cuda") * 0.5 + 0.5).to(torch.bfloat16)
+    weight[1::2].neg_()
+    weight.mul_(1 / 128)
+    weight[6284:].fill_(-1 / 128)
+    f_b_weight = (torch.rand(1536, 128, device="cuda") * 0.5 + 0.5).to(torch.bfloat16)
+    f_b_weight[1::2].neg_()
+    f_b_weight.mul_(1 / 16)
+    if with_escapes:
+        # Force escapes on both sides of the split, across FA/beta, and inside
+        # padding. The exponent span cannot fit any NF12 exponent base.
+        for row in (0, 6143, 6144, 6271, 6272, 6283, 6284, 6287):
+            weight[row, 0] = 2**-30
+            weight[row, 1] = 1 / 128
+        for row in (0, 1535):
+            f_b_weight[row, 0] = 2**-30
+            f_b_weight[row, 1] = 1 / 16
+
+    kda = KimiK3DeltaAttention.__new__(KimiK3DeltaAttention)
+    nn.Module.__init__(kda)
+    kda.tp_size = 8
+    kda._projection_aux_stream = torch.cuda.Stream()
+    kda._projection_events = (torch.cuda.Event(), torch.cuda.Event())
+    kda._projection_overlap_max_tokens = 0
+    kda._projection_overlap_nf12 = False
+    kda.in_proj_qkvgfab = nn.Module()
+    kda.f_b_proj = nn.Module()
+    for proj, dense in ((kda.in_proj_qkvgfab, weight), (kda.f_b_proj, f_b_weight)):
+        method = object.__new__(Nf12OnlineLinearMethod)
+        method.fallback = False
+        proj.quant_method = method
+        proj.weight = nn.Parameter(torch.empty(dense.shape, dtype=torch.bfloat16, device="meta"), requires_grad=False)
+    # Online weights start on meta; enablement must not require post-load
+    # FlashInfer autotuning to repair it after materialization.
+    k3_gemm._enable_kda_projection_overlap(kda)
+    assert kda._projection_overlap_nf12
+    assert kda._projection_overlap_max_tokens == 8
+    for proj, dense in ((kda.in_proj_qkvgfab, weight), (kda.f_b_proj, f_b_weight)):
+        proj.weight = nn.Parameter(dense, requires_grad=False)
+        encoded = nf12.encode(proj.weight)
+        assert (encoded.escapes.shape[0] > 0) == with_escapes
+        proj.weight = nn.Parameter(encoded.packed, requires_grad=False)
+        proj.weight_escapes = encoded.escapes
+        proj.weight_exp_base = encoded.exp_base
+        assert torch.equal(nf12.decode(encoded).view(torch.int16), dense.view(torch.int16))
+    packed_proj = kda.in_proj_qkvgfab
+    for first, last in ((0, 6144), (6144, 6288)):
+        packed_view = packed_proj.weight[first:last]
+        assert packed_view.untyped_storage().data_ptr() == packed_proj.weight.untyped_storage().data_ptr()
+        recovered = torch.ops.nf12.decode(packed_view, packed_proj.weight_escapes, packed_proj.weight_exp_base)
+        assert torch.equal(recovered.view(torch.int16), weight[first:last].view(torch.int16))
+
+    def project() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return k3_gemm.run_kda_nf12_projection_overlap(
+            hidden_states,
+            packed_proj,
+            kda.f_b_proj,
+            kda._projection_aux_stream,
+            kda._projection_events,
+        )
+
+    # Complete weight production before the first static-weight operation.
+    torch.cuda.synchronize()
+    project()
+    torch.cuda.synchronize()
+    capture_stream = torch.cuda.Stream()
+    capture_stream.wait_stream(torch.cuda.current_stream())
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph, stream=capture_stream):
+        projected_qkvg, g1, beta = project()
+    torch.cuda.current_stream().wait_stream(capture_stream)
+    assert projected_qkvg.shape == (num_tokens, 6144)
+    assert g1.shape == (num_tokens, 1536)
+    assert beta.shape == (num_tokens, 12)
+    assert beta.stride() == (144, 1)
+    for _ in range(2):
+        hidden_states.normal_()
+        graph.replay()
+        torch.cuda.synchronize()
+        expected_qkvg = torch.nn.functional.linear(hidden_states.float(), weight[:6144].float())
+        expected_fab = torch.nn.functional.linear(hidden_states.float(), weight[6144:6284].float())
+        expected_g1 = torch.nn.functional.linear(expected_fab[:, :128].to(torch.bfloat16).float(), f_b_weight.float())
+        for actual, expected in (
+            (projected_qkvg, expected_qkvg),
+            (g1, expected_g1),
+            (beta, expected_fab[:, 128:]),
+        ):
+            torch.testing.assert_close(actual.float(), expected, rtol=0.02, atol=0.005)
+
+    # Only after successful replay: autotuning must preserve NF12's M limit.
+    k3_gemm.autotune_kda_qkvg(kda)
+    assert kda._projection_overlap_nf12
+    assert kda._projection_overlap_max_tokens == 8
+
+
 def _dsv3_probe_tokens(tokens: frozenset[int]) -> set[int]:
     """Extremes, plus both sides of the kernel's num_tokens<=8 tile_n branch."""
     if not tokens:

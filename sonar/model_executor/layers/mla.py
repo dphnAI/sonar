@@ -11,6 +11,7 @@ from sonar.model_executor.layers.attention import MLAAttention
 from sonar.model_executor.layers.quantization import QuantizationConfig
 from sonar.models.common.ops import fused_q_kv_rmsnorm
 from sonar.platforms import current_platform
+from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
 
 if TYPE_CHECKING:
     from sonar.v1.attention.backends.mla.index_group import (
@@ -78,6 +79,7 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
         non_causal_multi_token_decode: bool = False,
         allow_short_prefill_indexer_scoring_skip: bool = False,
         fuse_qkv_rmsnorm: bool = False,
+        aux_stream: torch.cuda.Stream | None = None,
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
@@ -92,6 +94,7 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
         self.kv_a_proj_with_mqa = mla_modules.kv_a_proj_with_mqa
         self.q_a_layernorm = mla_modules.q_a_layernorm
         self.q_b_proj = mla_modules.q_b_proj
+        self.q_b_indexer_proj: torch.nn.Module | None = None
         self.q_proj = mla_modules.q_proj
         self.kv_a_layernorm = mla_modules.kv_a_layernorm
         self.kv_b_proj = mla_modules.kv_b_proj
@@ -101,6 +104,10 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
         self.indexer_rope_emb = mla_modules.indexer_rotary_emb
         self.is_sparse = mla_modules.is_sparse
         self.g_proj = mla_modules.g_proj
+        self.aux_stream = aux_stream
+        self._gate_events = (
+            (torch.cuda.Event(), torch.cuda.Event()) if aux_stream is not None and self.g_proj is not None else None
+        )
 
         # Whether to skip top-k token selection computation in this layer.
         # When True, the indexer will not be called, and the layer will reuse
@@ -165,6 +172,28 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
         hidden_states: torch.Tensor,
         llama_4_scaling: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if self._gate_events is not None and hidden_states.shape[0] <= 8:
+            g_proj = self.g_proj
+            assert g_proj is not None
+            attn_out, gate = maybe_execute_in_parallel(
+                lambda: self._forward_attention(positions, hidden_states, llama_4_scaling),
+                lambda: g_proj(hidden_states)[0],
+                *self._gate_events,
+                self.aux_stream,
+            )
+        else:
+            attn_out = self._forward_attention(positions, hidden_states, llama_4_scaling)
+            gate = self.g_proj(hidden_states)[0] if self.g_proj is not None else None
+        if gate is not None:
+            attn_out = attn_out * gate.sigmoid()
+        return self.o_proj(attn_out)[0]
+
+    def _forward_attention(
+        self,
+        positions: torch.Tensor,
+        hidden_states: torch.Tensor,
+        llama_4_scaling: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         q_c = None
         kv_lora = None
 
@@ -207,7 +236,11 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
         # Add head dim of 1 to k_pe
         k_pe = k_pe.unsqueeze(1)
 
-        q = q_proj_layer(q_proj_input)[0]
+        index_q = None
+        if self.q_b_indexer_proj is not None and not self.skip_topk and q_proj_input.shape[0] <= 8:
+            q, index_q = self.q_b_indexer_proj(q_proj_input)
+        else:
+            q = q_proj_layer(q_proj_input)[0]
         heads = self.num_heads
         if self.dcp_q_replicate:
             heads *= q_proj_layer.group_size
@@ -217,7 +250,10 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
             q[..., self.qk_nope_head_dim :], k_pe = self.rotary_emb(positions, q[..., self.qk_nope_head_dim :], k_pe)
 
         if self.indexer and self.is_sparse and not self.skip_topk:
-            self.indexer(hidden_states, q_c, positions, self.indexer_rope_emb)
+            if index_q is None:
+                self.indexer(hidden_states, q_c, positions, self.indexer_rope_emb)
+            else:
+                self.indexer(hidden_states, q_c, positions, self.indexer_rope_emb, index_q=index_q)
         if self.is_sparse:
             self.mla_attn.impl.record_logical_topk_ready()  # type: ignore[attr-defined]
 
@@ -236,7 +272,4 @@ class MultiHeadLatentAttentionWrapper(PluggableLayer):
             q_dcp_replicated=q_dcp_replicated,
         )
 
-        if self.g_proj is not None:
-            attn_out = attn_out * self.g_proj(hidden_states)[0].sigmoid()
-
-        return self.o_proj(attn_out)[0]
+        return attn_out

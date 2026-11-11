@@ -201,7 +201,7 @@ sonar run Qwen/Qwen3-0.6B --dtype bfloat16 --quantization nf12
 ```
 
 NF12 requires an NVIDIA GPU with compute capability 8.0 or newer. It stores
-BF16 weights losslessly; kernel accumulation can still differ from the
+BF16 weights losslessly. Kernel accumulation can still differ from the
 unquantized implementation.
 
 Sonar encodes linear layers and supported gated-SiLU MoE experts one layer at a
@@ -209,6 +209,9 @@ time. Embeddings and the LM head remain unquantized. Unsupported local linear
 weight shapes remain unquantized. Unsupported MoE layers retain their checkpoint
 format, with a warning. MoE support excludes expert load balancing, fused shared
 experts, LoRA, and specialized all-to-all backends.
+
+Compatible models can use fused GEMM/reduce-scatter and GEMM/all-reduce with
+NF12 linear layers on SM100-family GPUs.
 
 NF12-encoded linear layers do not support checkpoint weight reloads. Restart
 the engine to load new weights.
@@ -228,13 +231,49 @@ that decoding recovers the original values. Other tensor dtypes and existing
 quantization metadata are preserved. Pass multiple GPU indices, such as
 `--devices 0,1,2,3,4,5,6,7`, to convert shards concurrently.
 
-Loading uses the default or lazy safetensors loader. Sonar decodes each tensor
-before tensor-parallel slicing, then applies the requested runtime quantization.
+Saved checkpoints support the default or lazy safetensors loader and
+`--load-format fastsafetensors`. Sonar decodes each tensor before tensor-parallel
+slicing, then applies the requested runtime quantization.
 For mixed checkpoints such as Kimi-K3.1-Pro, use
 `--quantization-config '{"linear":"nf12"}'` to encode linear layers while retaining
 the checkpoint's MXFP4 routed experts.
 The published Kimi-K3.1-Pro checkpoint has no MTP prediction layers and cannot
 use `--spec-method mtp`.
+
+##### Kimi-K3.1-Pro on eight B300 GPUs
+
+This text-serving configuration uses CUDA graphs and a separate DSpark draft
+model. NF12 compresses the BF16 linear weights while the routed experts remain
+MXFP4. The NVFP4 target cache and FP8 draft cache use lossy quantization.
+
+```bash
+SONAR_USE_RUST_FRONTEND=1 SONAR_ENGINE_READY_TIMEOUT_S=7200 \
+sonar serve dphn/Kimi-K3.1-Pro-NF12 \
+  --trust-remote-code --tokenizer-mode kimi_k3 --dtype bfloat16 \
+  --tensor-parallel-size 8 \
+  --quantization-config '{"linear":"nf12"}' \
+  --load-format fastsafetensors \
+  --gpu-memory-utilization 0.96 \
+  --max-num-batched-tokens 8192 --max-num-seqs 512 \
+  --max-cudagraph-capture-size 64 \
+  --enable-auto-tool-choice --tool-call-parser kimi_k3 --reasoning-parser kimi_k3 \
+  --speculative-config '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"method":"dspark","draft_sample_method":"probabilistic","kv_cache_dtype":"fp8_e4m3"}' \
+  --additional-config '{"decode_backend":"latency_specialized"}' \
+  --kv-cache-dtype nvfp4_ds_mla
+```
+
+Set `--tokenizer-mode kimi_k3` explicitly for the Rust chat renderer. The draft
+model uses FP8 because its dense MLA backend does not support `nvfp4_ds_mla`.
+For K3.1, `latency_specialized` uses fused AttnRes and a fused latent-MoE tail
+for supported decode batches. On B300, sparse-attention output gates also
+overlap attention work for batches of up to eight tokens.
+NF12 combines the attention and indexer query projections for these batches.
+The latent-MoE tail reads compressed weights directly for supported shapes
+and otherwise decodes a rank-local temporary. Neither path retains decoded
+BF16 weights between calls.
+
+For non-speculative serving, omit `--speculative-config` and use
+`--gpu-memory-utilization 0.95`.
 
 ### FP4 MoE on SM120 GPUs
 

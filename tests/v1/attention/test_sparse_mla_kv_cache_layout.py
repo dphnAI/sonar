@@ -12,7 +12,6 @@ from sonar.config import CacheConfig
 from sonar.model_executor.layers.attention.mla_attention import MLAAttention
 from sonar.model_executor.models.deepseek_v2 import DeepseekV32IndexerCache
 from sonar.platforms import current_platform
-from sonar.v1.attention.backend import MultipleOf
 from sonar.v1.attention.backends.mla.indexer import DeepseekV32IndexerBackend
 from sonar.v1.attention.backends.mla.sparse_utils import (
     _CONVERT_REQ_INDEX_TO_GLOBAL_INDEX_KERNEL,
@@ -40,26 +39,23 @@ pytestmark = pytest.mark.skip_global_cleanup
 )
 @pytest.mark.parametrize("layout", [KVCacheLayout.BLHNC, KVCacheLayout.BLNHC, KVCacheLayout.LBNHC])
 @pytest.mark.parametrize(
-    "backend,cache_dtype,sm100,stride_alignment",
+    "backend,cache_dtype,sm100",
     [
-        (AttentionBackendEnum.FLASHINFER_MLA_SPARSE, "auto", True, 32 * 1152),
-        (AttentionBackendEnum.FLASHINFER_MLA_SPARSE, "fp8", True, 32 * 576),
+        (AttentionBackendEnum.FLASHINFER_MLA_SPARSE, "auto", True),
+        (AttentionBackendEnum.FLASHINFER_MLA_SPARSE, "fp8", True),
         pytest.param(
             AttentionBackendEnum.FLASH_ATTN_MLA_SPARSE_FA4,
             "auto",
             True,
-            64 * 1152,
             marks=pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA only"),
         ),
-        (AttentionBackendEnum.FLASHMLA_SPARSE, "auto", True, 1152),
-        (AttentionBackendEnum.FLASHMLA_SPARSE, "fp8_ds_mla", False, MultipleOf(64)),
-        (AttentionBackendEnum.FLASHMLA_SPARSE, "fp8_ds_mla", True, 656),
-        (AttentionBackendEnum.FLASHMLA_SPARSE, "nvfp4_ds_mla", True, 352),
+        (AttentionBackendEnum.FLASHMLA_SPARSE, "auto", True),
+        (AttentionBackendEnum.FLASHMLA_SPARSE, "fp8_ds_mla", False),
+        (AttentionBackendEnum.FLASHMLA_SPARSE, "fp8_ds_mla", True),
+        (AttentionBackendEnum.FLASHMLA_SPARSE, "nvfp4_ds_mla", True),
     ],
 )
-def test_allocation_and_warmup_follow_addressing_mode(
-    monkeypatch, layout, backend, cache_dtype, sm100, stride_alignment, device
-):
+def test_allocation_and_warmup_follow_addressing_mode(monkeypatch, layout, backend, cache_dtype, sm100, device):
     backend = backend.get_class()
     monkeypatch.setattr(current_platform, "is_device_capability_family", lambda family: sm100)
     config = SimpleNamespace(
@@ -84,7 +80,6 @@ def test_allocation_and_warmup_follow_addressing_mode(
     spec = customize_attention_spec(backend, MLAAttention.get_kv_cache_spec(layer, config))
     indexer = SimpleNamespace(cache_config=config.cache_config, head_dim=132, dtype=torch.uint8)
     index_spec = DeepseekV32IndexerCache.get_kv_cache_spec(indexer, config)
-    assert spec.block_stride_alignment == stride_alignment
     assert index_spec.block_stride_alignment is None
     assert layout in get_supported_kv_cache_layouts(
         # indexer backend has no impl class

@@ -121,7 +121,8 @@ def _run_mode(
         OnlineQuantizationConfig,
     )
 
-    quant_config = None if backend == "bf16" else OnlineQuantizationConfig(QuantizationConfigArgs(linear="mxfp8"))
+    quantization = "nf12" if backend == "nf12" else "mxfp8"
+    quant_config = None if backend == "bf16" else OnlineQuantizationConfig(QuantizationConfigArgs(linear=quantization))
     projections = {}
     operands = {}
     for K, w in weights.items():
@@ -138,7 +139,7 @@ def _run_mode(
         linear.weight = torch.nn.Parameter(w.clone(), requires_grad=False)
         linear.quant_method.process_weights_after_loading(linear)
         projections[K] = linear
-        weight = linear.weight
+        weight = w if backend == "nf12" else linear.weight
         if backend == "flashinfer_cutedsl":
             weight = weight.t()
         operands[K] = (weight, getattr(linear, "weight_scale", None))
@@ -246,7 +247,7 @@ def _worker(local_rank: int, world_size: int, master_port: int, backend: str) ->
     init_distributed_environment()
     config = SonarConfig()
     config.model_config = ModelConfig(dtype="bfloat16")
-    config.kernel_config.linear_backend = "auto" if backend == "bf16" else backend
+    config.kernel_config.linear_backend = "auto" if backend in ("bf16", "nf12") else backend
     with set_current_sonar_config(config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
@@ -281,7 +282,7 @@ def _worker(local_rank: int, world_size: int, master_port: int, backend: str) ->
     cleanup_dist_env_and_memory()
 
 
-@pytest.mark.parametrize("backend", ["bf16", "flashinfer_cutlass", "flashinfer_cutedsl"])
+@pytest.mark.parametrize("backend", ["bf16", "nf12", "flashinfer_cutlass", "flashinfer_cutedsl"])
 @pytest.mark.distributed(num_gpus=2)
 @pytest.mark.skipif(
     not current_platform.is_device_capability_family(100),

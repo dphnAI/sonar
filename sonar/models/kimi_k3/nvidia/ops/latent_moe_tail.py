@@ -8,12 +8,14 @@ from typing import ClassVar
 import torch
 import torch.distributed as dist
 
+from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 from sonar.distributed import get_tp_group
 from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
 from sonar.model_executor.warmup.cutedsl_warmup import (
     CuTeDSLCompileUnit,
     register_cutedsl_warmup_provider,
 )
+from sonar.utils.torch_utils import aux_stream
 
 _MAX_NUM_TOKENS = 128
 _SKINNY_MAX_NUM_TOKENS = 5
@@ -37,6 +39,7 @@ class KimiK3LatentMoETailContract:
     max_num_tokens: int
     rms_eps: float
     experts_per_token: int
+    nf12_weights: bool = False
 
 
 class KimiK3LatentMoETailOp:
@@ -54,6 +57,7 @@ class KimiK3LatentMoETailOp:
         device: torch.device,
         rms_eps: float,
         experts_per_token: int = 0,
+        nf12_weights: bool = False,
     ) -> tuple[KimiK3LatentMoETailContract, dist.ProcessGroup]:
         tp = get_tp_group()
         group = tp.device_group
@@ -72,6 +76,7 @@ class KimiK3LatentMoETailOp:
                 max_num_tokens=_MAX_NUM_TOKENS,
                 rms_eps=float(rms_eps),
                 experts_per_token=experts_per_token,
+                nf12_weights=nf12_weights,
             ),
             group,
         )
@@ -86,6 +91,7 @@ class KimiK3LatentMoETailOp:
         device: torch.device,
         rms_eps: float,
         experts_per_token: int = 0,
+        nf12_weights: bool = False,
     ) -> "KimiK3LatentMoETailOp":
         contract, group = cls._contract_and_group(
             hidden_size=hidden_size,
@@ -94,6 +100,7 @@ class KimiK3LatentMoETailOp:
             dtype=dtype,
             device=device,
             rms_eps=rms_eps,
+            nf12_weights=nf12_weights,
         )
         op = cls._instances.get(contract)
         if op is None:
@@ -119,6 +126,10 @@ class KimiK3LatentMoETailOp:
 
         self.contract = contract
         self.rank = dist.get_rank(group)
+        self._overlap_nf12_decode = (
+            torch.cuda.get_device_capability(contract.device) == (10, 3) and contract.tp_size == 8
+        )
+        self._decode_events = (torch.cuda.Event(), torch.cuda.Event())
         from .cute_dsl.latent_moe_tail import (
             AdaptiveUpProjectionKernel,
             CollectiveKernel,
@@ -167,10 +178,13 @@ class KimiK3LatentMoETailOp:
                     "k3-latent-moe-tail-skinny-up-projection",
                     contract,
                     m,
+                    nf12,
                 ),
-                compile=partial(self._up_projection.compile_skinny, m),
+                compile=partial(self._up_projection.compile_skinny, m, nf12=nf12),
             )
             for m in range(1, self._up_projection.skinny_max_m + 1)
+            for nf12 in ((False, True) if contract.nf12_weights else (False,))
+            if not nf12 or self._up_projection.supports_nf12(m)
         )
         return skinny_units + (
             CuTeDSLCompileUnit(
@@ -191,36 +205,60 @@ class KimiK3LatentMoETailOp:
         routed_output: torch.Tensor | UnfinalizedMoEOutput,
         shared_output: torch.Tensor,
         rms_weight: torch.Tensor,
-        up_weight: torch.Tensor,
+        local_up_weight: torch.Tensor,
+        *,
+        weight_escapes: torch.Tensor | None = None,
+        weight_exp_base: int | None = None,
     ) -> torch.Tensor:
         self._validate_inputs(
             routed_output,
             shared_output,
             rms_weight,
-            up_weight,
+            local_up_weight,
+            weight_escapes,
+            weight_exp_base,
         )
         num_tokens = (
             routed_output.expanded_idx_to_permuted_idx.shape[0]
             if isinstance(routed_output, UnfinalizedMoEOutput)
             else routed_output.shape[0]
         )
-        self._up_projection.ensure_compiled(num_tokens)
+        nf12 = local_up_weight.dtype == torch.uint8
+        decode_stream = None
+        if nf12 and not self._up_projection.supports_nf12(num_tokens):
+            # Decode the rank-local weight while the collective prepares its input.
+            if self._overlap_nf12_decode and not BreakableCUDAGraphCapture.is_active():
+                decode_stream = aux_stream()
+            if decode_stream is None:
+                local_up_weight = torch.ops.nf12.decode(local_up_weight, weight_escapes, weight_exp_base)
+            else:
+                self._decode_events[0].record()
+                with torch.cuda.stream(decode_stream):
+                    self._decode_events[0].wait()
+                    local_up_weight = torch.ops.nf12.decode(local_up_weight, weight_escapes, weight_exp_base)
+                    self._decode_events[1].record()
+            weight_escapes = weight_exp_base = None
+            nf12 = False
+        self._up_projection.ensure_compiled(num_tokens, nf12=nf12)
         latent, shared_shard = self._collective(
             routed_output,
             shared_output,
             rms_weight,
         )
-        local_hidden_size = self.contract.hidden_size // self.contract.tp_size
-        local_up_weight = up_weight.narrow(
-            0,
-            self.rank * local_hidden_size,
-            local_hidden_size,
-        )
+        if decode_stream is not None:
+            self._decode_events[1].wait()
         mailbox = self._up_projection(
             latent,
             local_up_weight,
             shared_shard,
+            weight_escapes=weight_escapes,
+            weight_exp_base=weight_exp_base,
         )
+        if decode_stream is not None:
+            # Return the temporary allocation to its stream after the last read.
+            # This permits reuse across layers during graph capture.
+            self._decode_events[0].record()
+            self._decode_events[0].wait(decode_stream)
         return self._lamport_copy(
             mailbox,
             m=num_tokens,
@@ -231,7 +269,9 @@ class KimiK3LatentMoETailOp:
         routed_output: torch.Tensor | UnfinalizedMoEOutput,
         shared_output: torch.Tensor,
         rms_weight: torch.Tensor,
-        up_weight: torch.Tensor,
+        local_up_weight: torch.Tensor,
+        weight_escapes: torch.Tensor | None,
+        weight_exp_base: int | None,
     ) -> None:
         contract = self.contract
         if isinstance(routed_output, UnfinalizedMoEOutput):
@@ -246,15 +286,37 @@ class KimiK3LatentMoETailOp:
             raise ValueError(f"shared_output must have shape [M, {contract.hidden_size}].")
         if rms_weight.shape != (contract.latent_size,):
             raise ValueError(f"rms_weight must have shape [{contract.latent_size}].")
-        if up_weight.shape != (contract.hidden_size, contract.latent_size):
-            raise ValueError(f"up_weight must have shape [{contract.hidden_size}, {contract.latent_size}].")
+        local_hidden_size = contract.hidden_size // contract.tp_size
+        nf12 = local_up_weight.dtype == torch.uint8
+        weight_columns = contract.latent_size * 3 // 2 if nf12 else contract.latent_size
+        if local_up_weight.shape != (local_hidden_size, weight_columns):
+            raise ValueError(f"local_up_weight must have shape [{local_hidden_size}, {weight_columns}].")
+        if nf12:
+            if weight_escapes is None or weight_exp_base is None:
+                raise ValueError("NF12 weights require the original escape table and exponent base.")
+            if (
+                weight_escapes.dtype != torch.int16
+                or weight_escapes.ndim != 2
+                or weight_escapes.shape[1] != 8
+                or not isinstance(weight_exp_base, int)
+                or not 0 <= weight_exp_base <= 120
+                or weight_escapes.device != contract.device
+                or not weight_escapes.is_contiguous()
+            ):
+                raise ValueError("NF12 metadata requires contiguous CUDA int16 [E, 8] and an integer base in [0, 120].")
+        elif weight_escapes is not None or weight_exp_base is not None:
+            raise ValueError("BF16 weights must not supply NF12 metadata.")
         if not 1 <= num_tokens <= contract.max_num_tokens:
             raise ValueError(f"K3 latent-MoE tail fusion requires between 1 and {contract.max_num_tokens} tokens.")
 
-        tensors = (shared_output, rms_weight, up_weight)
+        tensors = (shared_output, rms_weight, local_up_weight)
         if any(tensor.device != contract.device for tensor in tensors):
             raise ValueError("All inputs must be on the contract device.")
-        if any(tensor.dtype != contract.dtype for tensor in tensors):
-            raise ValueError("All inputs must use the contract dtype.")
+        if (
+            shared_output.dtype != contract.dtype
+            or rms_weight.dtype != contract.dtype
+            or local_up_weight.dtype != (torch.uint8 if nf12 else contract.dtype)
+        ):
+            raise ValueError("Inputs must use the contract dtype, except packed NF12 weights.")
         if any(not tensor.is_contiguous() for tensor in tensors):
             raise ValueError("All inputs must be contiguous.")
