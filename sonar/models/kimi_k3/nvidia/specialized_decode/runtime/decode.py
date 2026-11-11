@@ -12,6 +12,7 @@ from sonar.config import CUDAGraphMode
 from sonar.distributed import get_tp_group
 from sonar.distributed import tensor_model_parallel_all_reduce as all_reduce
 from sonar.forward_context import get_forward_context, is_forward_context_available
+from sonar.logger import init_logger
 from sonar.platforms import current_platform
 from sonar.utils.math_utils import round_up
 
@@ -28,14 +29,19 @@ from ..cutedsl.oproj.prepared import OprojMailbox
 from .prefetch import PrefetchController
 from .providers import BATCHES, PREPARED_MAX, Attention, pack_front
 
+logger = init_logger(__name__)
+
 
 class Step(NamedTuple):
     q: int  # tokens per request
     metadata: list  # per layer
     slot_mapping: Any
+    positions: torch.Tensor
 
 
 def layer_name(module):
+    if hasattr(module, "dsa_indexer"):
+        module = module.mla_attn.mla_attn
     return getattr(module, "prefix", getattr(module, "layer_name", None))
 
 
@@ -124,6 +130,35 @@ class SpecializedDecode:
         and the prefetch side stream. All collective allocations, weight packing and
         kernel compiles finish here, before KV binding and CUDA graph capture."""
         config, layers = self.backbone.config, self.layers
+        self.attention: dict[int, Any] = {}
+        self.feed_forward: dict[int, Any] = {}
+        # K3.1's sparse MLA backend owns its cache and indexer. Its projections
+        # (and NF12 KDA/MLP projections) must dispatch through quant_method.apply,
+        # not the dense K3 executor's BF16/MXFP4 weight layouts.
+        self.native_providers = any(hasattr(d.self_attn, "dsa_indexer") for d in layers)
+        self.prefetch: PrefetchController | None = None
+        if self.native_providers:
+            self.attention = {d.layer_idx: d.self_attn for d in layers}
+            self.feed_forward = {d.layer_idx: d.mlp for d in layers}
+            self.after = {}
+            for layer in layers:
+                norm, out_norm = layer.mlp_res_norm, layer.post_attention_layernorm
+                attn_res_weights = (norm.weight, layer.mlp_res_proj.weight, out_norm.weight)
+                key = (
+                    layer.prev_valid_blocks + layer.is_block_write_layer,
+                    not layer.is_block_write_layer,
+                    -1,
+                    False,
+                )
+                eps = (norm.variance_epsilon, out_norm.variance_epsilon)
+                self.after[layer.layer_idx] = PreparedAttnRes(attn_res_weights, key, eps)
+            logger.info_once(
+                "Kimi K3.1 latency_specialized uses prepared embedding and fused "
+                "AttnRes with native attention and MLP providers, preserving "
+                "weight and KV cache formats. Dense K3 projection and expert "
+                "fusions are disabled."
+            )
+            return
         beta = config.activation_situ_beta
         linear_beta = config.activation_situ_linear_beta
         tp, rank, device, batches = self.tp, self.rank, self.device, self.batches
@@ -139,8 +174,6 @@ class SpecializedDecode:
         twoshot = TwoShot(*owner)
         front_box = OprojMailbox(*owner, (1, 64, 3584 + 2 * 896))
         small_batch = small_batch_chain.SmallBatchBox(*owner)
-        self.attention: dict[int, Attention] = {}
-        self.feed_forward: dict[int, Any] = {}
         for layer in layers:
             index, module = layer.layer_idx, layer.mlp
             boxes = (mailbox, small_batch, twoshot)
@@ -171,8 +204,9 @@ class SpecializedDecode:
         """Compile each layer's cores for its bound KV cache layout (the profiling
         cache, then the real one)."""
         for layer in self.layers:
-            caches = caches_of(layer.self_attn)
-            self.attention[layer.layer_idx].prepare_layout(caches)
+            provider = self.attention[layer.layer_idx]
+            if isinstance(provider, Attention):
+                provider.prepare_layout(caches_of(layer.self_attn))
 
     def embed_input_ids(self, ids):
         rows = ids.shape[0] if ids.ndim == 1 and ids.is_contiguous() else 0
@@ -215,7 +249,7 @@ class SpecializedDecode:
         metadata = [decode_metadata(d.self_attn, context, q, b) for d in self.layers]
         if any(md is None for md in metadata):
             return None
-        return Step(q, metadata, context.slot_mapping)
+        return Step(q, metadata, context.slot_mapping, positions)
 
     def run(self, step, input_ids, inputs_embeds):
         """Normalized hidden states (and the aux streams) of a planned step."""
@@ -234,7 +268,11 @@ class SpecializedDecode:
             index, caches = layer.layer_idx, caches_of(layer.self_attn)
             if not pre_ready:
                 self.before[index].run(hidden, prefix, blocks, first, aux.get(index))
-            self.attention[index].run(first, second, prefix, blocks, caches, md, slots, q)
+            if self.native_providers:
+                delta = self.attention[index](hidden_states=first, positions=step.positions)
+                self.after[index].run(delta, prefix, blocks, second)
+            else:
+                self.attention[index].run(first, second, prefix, blocks, caches, md, slots, q)
             consumer = self.fused_before.get(index)
             pre_ready = consumer is not None
             if consumer is not None:
@@ -242,12 +280,15 @@ class SpecializedDecode:
                 stream = aux.get(index + 1)
                 consume = partial(consumer.run_ring, prefix, blocks, aux=stream)
                 hidden = self.feed_forward[index].run(second, target, consume=consume)
+            elif self.native_providers:
+                hidden = self.feed_forward[index](second)
             else:
                 hidden = self.feed_forward[index].run(second, first)
                 first, second = second, first
         if not pre_ready:
             self.final.run(hidden, prefix, blocks, out, aux.get(index + 1))
-        self.prefetch.join()
+        if self.prefetch is not None:
+            self.prefetch.join()
         return (out, aux_out) if aux_out else out
 
     def normalize(self, output):

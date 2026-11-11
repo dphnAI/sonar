@@ -1126,7 +1126,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                 # attention over the sharded cache and a collective reduction.
                 mqa_output_slice = mqa_output_slice[:num_dcp_decode_tokens]
 
-            if mqa_q.shape[0] > 0:
+            if mqa_output_slice.shape[0] > 0:
                 attn_out, lse = cast(MLAAttentionImpl, self.impl).forward_mqa(mqa_q, kv_cache, attn_metadata, self)
             else:
                 attn_out, lse = None, None

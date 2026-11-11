@@ -445,12 +445,17 @@ class KimiMoE(nn.Module):
         self.routed_expert_up_proj: ReplicatedLinear | None
         self.routed_output_transform: KimiRoutedOutputTransform | None
         if self.use_latent_moe:
+            from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
+
             self.routed_expert_down_proj = ReplicatedLinear(
                 hidden_size,
                 self.moe_hidden_size,
                 bias=False,
                 quant_config=quant_config,
                 prefix=f"{prefix}.routed_expert_down_proj",
+            )
+            self._nf12_down_proj_first = current_platform.is_device_capability((10, 3)) and isinstance(
+                self.routed_expert_down_proj.quant_method, Nf12OnlineLinearMethod
             )
             self.routed_expert_norm = (
                 RMSNorm(self.moe_hidden_size, eps=config.rms_norm_eps) if self.latent_moe_use_norm else None
@@ -558,11 +563,10 @@ class KimiMoE(nn.Module):
         """Compute the routed-expert down projection alongside the router,
         overlapping them on separate CUDA streams when latent MoE is enabled.
 
-        The router gate and the down projection both read ``hidden_states``, so
-        the gate runs on the default stream and the down projection on the aux
-        stream, joined via ``maybe_execute_in_parallel``. For MegaMoE the
-        grouped top-k selection consumes only the gate logits, so it also runs
-        on the default stream and overlaps the down projection.
+        The gate normally runs on the main stream and the down projection on
+        the auxiliary stream. Small NF12 batches reverse this order on SM103
+        so weight loads can overlap the preceding activation producer.
+        For MegaMoE, grouped top-k selection stays with the gate.
 
         Returns:
             ``(routed_hidden_states, router_output, topk_ids)``.
@@ -597,13 +601,22 @@ class KimiMoE(nn.Module):
             router_output, topk_ids = _router(hidden_states)
             return hidden_states, router_output, topk_ids
         num_tokens = hidden_states.shape[0]
-        (router_output, topk_ids), (routed_hidden_states, _) = maybe_execute_in_parallel(
-            lambda: _router(hidden_states),
-            lambda: down_proj(hidden_states),
-            self._down_proj_events[0],
-            self._down_proj_events[1],
-            self._down_proj_stream if num_tokens <= _ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD else None,
-        )
+        if self._nf12_down_proj_first and num_tokens <= 8 and not cast(Any, down_proj.quant_method).fallback:
+            (routed_hidden_states, _), (router_output, topk_ids) = maybe_execute_in_parallel(
+                lambda: down_proj(hidden_states),
+                lambda: _router(hidden_states),
+                self._down_proj_events[0],
+                self._down_proj_events[1],
+                self._down_proj_stream,
+            )
+        else:
+            (router_output, topk_ids), (routed_hidden_states, _) = maybe_execute_in_parallel(
+                lambda: _router(hidden_states),
+                lambda: down_proj(hidden_states),
+                self._down_proj_events[0],
+                self._down_proj_events[1],
+                self._down_proj_stream if num_tokens <= _ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD else None,
+            )
         return routed_hidden_states, router_output, topk_ids
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -1496,9 +1509,10 @@ class KimiLinearForCausalLM(
         return loader.load_weights(weights)
 
     def process_weights_after_loading(self) -> None:
-        if self.specialized_decode_config is None:
-            for module in self.model.modules():
-                if isinstance(module, KimiK3DSAAttention):
+        for module in self.model.modules():
+            if isinstance(module, KimiK3DSAAttention):
+                module.pack_nf12_queries()
+                if self.specialized_decode_config is None:
                     module.pack_projections()
 
 

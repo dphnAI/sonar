@@ -1017,7 +1017,7 @@ def compile_kernel(
 
 
 class AdaptiveUpProjectionKernel:
-    """Dispatch static-M Skinny or dynamic-M WGMMA into one mailbox."""
+    """Dispatch skinny or WGMMA projections into one mailbox."""
 
     def __init__(
         self,
@@ -1050,7 +1050,7 @@ class AdaptiveUpProjectionKernel:
         device = torch.device("cuda", torch.accelerator.current_device_index())
         self._device = device
         self._dynamic: Any | None = None
-        self._skinny_by_m: dict[int, FusedAddMulticastSkinnyGemmKernel] = {}
+        self._skinny_by_m: dict[tuple[int, bool], FusedAddMulticastSkinnyGemmKernel] = {}
         validate_configuration(
             latent_dim=latent_dim,
             shard_dim=self.shard_dim,
@@ -1118,25 +1118,34 @@ class AdaptiveUpProjectionKernel:
                 self.b_prime_stages,
             )
 
-    def compile_skinny(self, m: int) -> None:
+    def supports_nf12(self, m: int) -> bool:
+        # N896 M5 loses to transient decode.
+        return (
+            self.latent_dim == 3584
+            and self.shard_dim in (448, 896)
+            and 1 <= m <= min(self.skinny_max_m, 4 if self.shard_dim == 896 else 5)
+        )
+
+    def compile_skinny(self, m: int, *, nf12: bool = False) -> None:
         if not 1 <= m <= self.skinny_max_m:
             raise ValueError(f"Skinny up-projection requires M in [1, {self.skinny_max_m}].")
-        if m in self._skinny_by_m:
+        if (m, nf12) in self._skinny_by_m:
             return
         with torch.accelerator.device_index(self._device.index):
-            self._skinny_by_m[m] = FusedAddMulticastSkinnyGemmKernel(
+            self._skinny_by_m[m, nf12] = FusedAddMulticastSkinnyGemmKernel(
                 rank=self.rank,
                 tp_size=self.tp_size,
                 latent_dim=self.latent_dim,
                 hidden_dim=self.hidden_dim,
                 num_rows=m,
+                nf12=nf12,
             )
 
-    def ensure_compiled(self, m: int) -> None:
+    def ensure_compiled(self, m: int, *, nf12: bool = False) -> None:
         if not 1 <= m <= self.max_m:
             raise ValueError(f"runtime M={m} must be in [1, {self.max_m}]")
         if m <= self.skinny_max_m:
-            self.compile_skinny(m)
+            self.compile_skinny(m, nf12=nf12)
         else:
             self.compile_dynamic()
 
@@ -1145,16 +1154,20 @@ class AdaptiveUpProjectionKernel:
         latent: torch.Tensor,
         weight: torch.Tensor,
         shared_shard: torch.Tensor,
+        *,
+        weight_escapes: torch.Tensor | None = None,
+        weight_exp_base: int | None = None,
     ) -> torch.Tensor:
         if latent.ndim != 2:
             raise ValueError("latent must be rank-2")
         m = latent.shape[0]
         device = self._mailbox.device
+        nf12 = weight.dtype == torch.uint8
         expected = (
             (latent, (m, self.latent_dim), "latent"),
             (
                 weight,
-                (self.shard_dim, self.latent_dim),
+                (self.shard_dim, self.latent_dim * 3 // 2 if nf12 else self.latent_dim),
                 "weight",
             ),
             (
@@ -1164,15 +1177,18 @@ class AdaptiveUpProjectionKernel:
             ),
         )
         for tensor, shape, name in expected:
-            if tensor.shape != shape or tensor.dtype != torch.bfloat16 or tensor.device != device:
-                raise ValueError(f"{name} must be CUDA torch.bfloat16 {list(shape)}")
+            dtype = torch.uint8 if name == "weight" and nf12 else torch.bfloat16
+            if tensor.shape != shape or tensor.dtype != dtype or tensor.device != device:
+                raise ValueError(f"{name} must be CUDA {dtype} {list(shape)}")
         if not latent.is_contiguous() or not weight.is_contiguous() or shared_shard.stride() != (self.hidden_dim, 1):
             raise ValueError("up-projection inputs have unsupported strides")
         if not 1 <= m <= self.max_m:
             raise ValueError(f"runtime M={m} must be in [1, {self.max_m}]")
+        if nf12 and not self.supports_nf12(m):
+            raise ValueError("Packed NF12 weights require a supported direct projection backend")
 
         if m <= self.skinny_max_m:
-            skinny = self._skinny_by_m.get(m)
+            skinny = self._skinny_by_m.get((m, nf12))
             if skinny is None:
                 raise RuntimeError(f"Skinny up-projection M={m} was not compiled before launch.")
             return skinny(
@@ -1181,6 +1197,8 @@ class AdaptiveUpProjectionKernel:
                 shared_shard,
                 self._mailbox,
                 self._mailbox_multicast_ptr,
+                weight_escapes=weight_escapes,
+                weight_exp_base=weight_exp_base,
             )
 
         if self._dynamic is None:

@@ -94,6 +94,53 @@ def test_nf12_linear_matches_bf16(linear_layer, rng, shape, with_bias):
     torch.testing.assert_close(actual, expected, rtol=0.02, atol=0.004)
 
 
+@pytest.mark.parametrize("num_tokens", [1, 2, 8])
+def test_nf12_packed_queries_preserve_independent_escape_tables(nf12_backend, linear_layer, rng, num_tokens):
+    from nf12 import reference
+
+    from sonar.models.kimi_k3.nvidia.dsa import _PackedNf12Queries
+
+    weights = [_randn((16, 128), rng), _randn((32, 128), rng, scale=32)]
+    weights[0].view(torch.int16)[0, :8] = torch.tensor(
+        [0, -32768, 1, -32767, 32640, -128, 32705, -63], dtype=torch.int16, device="cuda"
+    )
+    methods, linears = [], []
+    for weight, base in zip(weights, (56, 64)):
+        method, linear = linear_layer(weight)
+        packed, escapes, _ = reference.encode(weight.cpu(), exp_base=base)
+        replace_parameter(linear, "weight", packed.cuda())
+        replace_parameter(linear, "weight_escapes", escapes.cuda())
+        linear.weight_exp_base = base
+        methods.append(method)
+        linears.append(linear)
+
+    merged = _PackedNf12Queries(tuple(linears))
+    assert not merged.state_dict()
+    for linear, original in zip(linears, weights):
+        recovered = nf12_backend.NF12Weight(linear.weight, linear.weight_escapes, linear.weight_exp_base).decode()
+        torch.testing.assert_close(recovered.view(torch.int16), original.view(torch.int16), rtol=0, atol=0)
+
+    x = _randn((num_tokens, 128), rng, scale=0.5)
+    for output, original in zip(merged(x), weights):
+        torch.testing.assert_close(output, F.linear(x, original), rtol=0.02, atol=0.004, equal_nan=True)
+
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        graph_outputs = merged(x)
+    for _ in range(2):
+        x.copy_(_randn(x.shape, rng, scale=0.5))
+        graph.replay()
+        for output, original in zip(graph_outputs, weights):
+            torch.testing.assert_close(output, F.linear(x, original), rtol=0.02, atol=0.004, equal_nan=True)
+
+    # Larger batches still call the two original linears after their storage changes.
+    x = _randn((16, 128), rng, scale=0.5)
+    for method, linear, original in zip(methods, linears, weights):
+        torch.testing.assert_close(
+            method.apply(linear, x), F.linear(x, original), rtol=0.02, atol=0.004, equal_nan=True
+        )
+
+
 @pytest.mark.parametrize("n,k", [(31, 128), (32, 96)])
 def test_nf12_unsupported_local_shape_computes_unquantized(linear_layer, rng, n, k):
     weight = _randn((n, k), rng)

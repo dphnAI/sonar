@@ -35,6 +35,7 @@ from sonar.model_executor.layers.mla import (
     MultiHeadLatentAttentionWrapper,
 )
 from sonar.model_executor.layers.quantization import QuantizationConfig
+from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
 from sonar.model_executor.layers.rotary_embedding import get_rope
 from sonar.model_executor.utils import is_weights_pre_processed
 from sonar.models.kimi_k3.common.dsa_cache import (
@@ -74,6 +75,33 @@ def yarn_get_mscale(scale: float = 1, mscale: float = 1) -> float:
     if scale <= 1:
         return 1.0
     return 0.1 * mscale * math.log(scale) + 1.0
+
+
+class _PackedNf12Queries(nn.Module):
+    def __init__(self, linears: tuple[nn.Module, nn.Module]) -> None:
+        super().__init__()
+        import nf12
+
+        dense = [
+            nf12.decode(nf12.NF12Weight(linear.weight, linear.weight_escapes, linear.weight_exp_base))
+            for linear in linears
+        ]
+        self.rows = [weight.shape[0] for weight in dense]
+        encoded = nf12.encode(torch.cat(dense))
+        # The original linears own the serialized weights and escape table.
+        self.register_buffer("packed", encoded.packed, persistent=False)
+        self.register_buffer("escapes", encoded.escapes, persistent=False)
+        self.exp_base = encoded.exp_base
+        # Separate forwards share the merged storage for larger batches.
+        for linear, view in zip(linears, encoded.packed.split(self.rows)):
+            linear.weight.data = view
+            linear.weight_escapes.data = encoded.escapes
+            linear.weight_exp_base = encoded.exp_base
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        output = torch.ops.nf12.linear(x, self.packed, self.escapes, self.exp_base, None, static_weights=True)
+        query, index_query = output.split(self.rows, dim=-1)
+        return query, index_query
 
 
 class KimiK3DSAIndexerKNorm(nn.Module):
@@ -285,12 +313,14 @@ class KimiK3DSAIndexer(nn.Module):
         index_q_input: torch.Tensor | None,
         positions: torch.Tensor | None = None,
         rotary_emb: nn.Module | None = None,
+        index_q: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if index_q_input is None:
-            # q_lora_rank is None: MultiHeadLatentAttention.forward_native
-            # passes q_c=None, so the indexer query reads hidden_states.
-            index_q_input = hidden_states
-        index_q = self.wq_index(index_q_input)[0].view(-1, self.index_num_heads, self.index_head_dim)
+        if index_q is None:
+            if index_q_input is None:
+                # With no query LoRA, the indexer reads hidden_states.
+                index_q_input = hidden_states
+            index_q = self.wq_index(index_q_input)[0]
+        index_q = index_q.view(-1, self.index_num_heads, self.index_head_dim)
         index_k, index_weights = self.wkv_index(hidden_states)[0].split(
             [self.index_head_dim, self.index_num_heads], dim=-1
         )
@@ -568,6 +598,8 @@ class KimiK3DSAAttention(nn.Module):
         # before the model is built; changing it inside the model would make
         # the spec dtype (bf16) inconsistent with the fp8_ds_mla page size.
 
+        offload = sonar_config.offload_config
+        self.weights_offloaded = offload.uva.cpu_offload_gb > 0 or offload.prefetch.offload_group_size > 0
         mla_modules = MLAModules(
             kv_a_layernorm=self.kv_a_layernorm,
             kv_b_proj=self.kv_b_proj,
@@ -597,6 +629,9 @@ class KimiK3DSAAttention(nn.Module):
             cache_config,
             quant_config,
             prefix,
+            aux_stream=(
+                aux_stream if not self.weights_offloaded and current_platform.is_device_capability(103) else None
+            ),
         )
 
         # Dense-MHA prefills never read the top-k indices (PCP excluded, as
@@ -604,12 +639,29 @@ class KimiK3DSAAttention(nn.Module):
         indexer = self.dsa_indexer
         if not indexer.use_pcp:
             indexer.dense_mha_metadata_layer_name = self.mla_attn.mla_attn.layer_name
-        offload = sonar_config.offload_config
-        self.weights_offloaded = offload.uva.cpu_offload_gb > 0 or offload.prefetch.offload_group_size > 0
         self.aux_stream = aux_stream
         self._gate_events: tuple[torch.cuda.Event, torch.cuda.Event] | None = None
         # Set by pack_projections(): the packed input and query weights.
         self._packed: list[torch.Tensor] | None = None
+
+    def pack_nf12_queries(self) -> None:
+        indexer = cast(Any, self.dsa_indexer)
+        query_linears = (self.mla_attn.q_b_proj, indexer.wq_index)
+        if (
+            current_platform.is_device_capability(103)
+            and not self.weights_offloaded
+            and not indexer.use_pcp
+            and indexer.dcp_world_size == 1
+            and self.q_lora_rank is not None
+            and self.mla_attn.q_b_indexer_proj is None
+            and all(
+                linear is not None
+                and isinstance(linear.quant_method, Nf12OnlineLinearMethod)
+                and not linear.quant_method.fallback
+                for linear in query_linears
+            )
+        ):
+            self.mla_attn.q_b_indexer_proj = _PackedNf12Queries(query_linears)
 
     def pack_projections(self) -> None:
         """Enable the fused forward (as DeepseekV32Attention): pack

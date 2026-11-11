@@ -152,12 +152,6 @@ class FlashMLASparseBackend(AttentionBackend):
 
     @staticmethod
     def get_supported_kernel_block_sizes(kv_cache_spec=None) -> list[int | MultipleOf]:
-        if (
-            isinstance(kv_cache_spec, AttentionSpec)
-            and kv_cache_spec.kv_quant_mode != KVQuantMode.NONE
-            and current_platform.is_device_capability_family(100)
-        ):
-            return [64]
         return [MultipleOf(64)]
 
     @classmethod
@@ -166,7 +160,7 @@ class FlashMLASparseBackend(AttentionBackend):
         # when blocks span several.
         if spec.kv_quant_mode != KVQuantMode.NONE and (not current_platform.is_device_capability_family(100)):
             return replace(spec, block_stride_alignment=MultipleOf(64))
-        return align_blocks_to_rows(spec)
+        return align_blocks_to_rows(spec, 64 if spec.kv_quant_mode != KVQuantMode.NONE else 1)
 
     @staticmethod
     def get_name() -> str:
