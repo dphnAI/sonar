@@ -113,11 +113,10 @@ class ActiveKVConnector(KVConnector):
         load_kwargs = self._pending_load_kwargs
         assert load_kwargs is not None
         self._pending_load_kwargs = None
-        # TODO: sort out KV Connectors' use of forward_context
         if is_forward_context_available():
             self.kv_connector.start_load_kv(get_forward_context(), **load_kwargs)
         else:
-            with set_forward_context(None, self.sonar_config):
+            with set_forward_context(load_kwargs.get("attn_metadata"), self.sonar_config):
                 self.kv_connector.start_load_kv(get_forward_context(), **load_kwargs)
 
     def finish_forward(self) -> None:

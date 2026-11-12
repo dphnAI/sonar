@@ -1,11 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# NOTE: if your PR has broken one of the tests here (sorry),
-# kindly patch the corresponding integration in
-# /sonar/distributed/kv_transfer/kv_connector/v1/lmcache_integration/sonar_v1_adapter.py
-# or reach out to @aposataC for assistance
-
 # Assumption vs. Correctness Tests:
 # these unit tests do *not* test correctness of LMCache-side or Sonar-side logic
 # it is to ensure that assumptions LMCache makes about Sonar's interface are stable

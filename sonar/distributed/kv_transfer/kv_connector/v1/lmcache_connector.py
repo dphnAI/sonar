@@ -83,25 +83,9 @@ class LMCacheConnectorV1(KVConnectorBase_V1):
     ):
         super().__init__(sonar_config=sonar_config, role=role, kv_cache_config=kv_cache_config)
         assert sonar_config.kv_transfer_config is not None
-        use_native = sonar_config.kv_transfer_config.get_from_extra_config("use_native", False)
-        if use_native:
-            logger.info("Initializing native LMCache connector")
-            # lazy import
-            from sonar.distributed.kv_transfer.kv_connector.v1 import lmcache_integration
+        from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_integration import get_lmcache_adapter
 
-            _adapter = lmcache_integration.sonar_v1_adapter
-
-            cls = _adapter.LMCacheConnectorV1Impl
-        else:
-            logger.info("Initializing latest dev LMCache connector")
-            # lazy import
-            from lmcache.integration.vllm.vllm_v1_adapter import (
-                LMCacheConnectorV1Impl as LMCacheConnectorLatestImpl,
-            )
-
-            cls = LMCacheConnectorLatestImpl
-
-        self._lmcache_engine = cls(sonar_config, role, self)
+        self._lmcache_engine = get_lmcache_adapter().LMCacheConnectorV1Impl(sonar_config, role, self)
 
         self._kv_cache_events: LMCacheKVEvents | None = None
 

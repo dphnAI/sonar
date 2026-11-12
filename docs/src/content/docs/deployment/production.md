@@ -217,6 +217,46 @@ and the
 Sonar's local code and examples define the supported configuration for your
 installed Sonar commit.
 
+## Reuse an external KV cache
+
+Install the optional dependencies with `tools/install_kv_connectors.sh` from
+the source checkout.
+
+### LMCache
+
+For CPU offloading within each engine:
+
+```bash
+PYTHONHASHSEED=0 \
+LMCACHE_CHUNK_SIZE=256 \
+LMCACHE_LOCAL_CPU=True \
+LMCACHE_MAX_LOCAL_CPU_SIZE=5 \
+sonar serve Qwen/Qwen3-0.6B \
+  --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
+```
+
+For a separate cache process, start the server and select `LMCacheMPConnector`:
+
+```bash
+lmcache server --l1-size-gb 5 --l1-init-size-gb 5 --eviction-policy LRU
+```
+
+Set `lmcache.mp.host` and `lmcache.mp.port` in `kv_connector_extra_config`
+when the server is not at `tcp://localhost:5555`.
+
+Use the same LMCache version for the engine and cache server.
+
+### Mooncake
+
+Select `MooncakeConnector` for prefill/decode transfers or
+`MooncakeStoreConnector` for a shared Mooncake Store. The Store connector reads
+its configuration from `MOONCAKE_CONFIG_PATH`. Start a Mooncake master before
+the engine.
+
+For TCP-only transfers, set `MC_FORCE_TCP=1` in addition to
+`"mooncake_protocol": "tcp"` in the transfer connector's extra configuration,
+or `"protocol": "tcp"` in the Store configuration.
+
 ## Configure the proxy
 
 Permit streaming responses and disable response buffering. Set the upstream
