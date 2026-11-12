@@ -399,6 +399,9 @@ jobs:
     name: Build documentation with release indexes
     needs: publish-platform-wheels
     runs-on: ubuntu-24.04
+    outputs:
+      # Deployment-only retries must reuse the producing build's artifact name.
+      pages-artifact: github-pages-${{ github.run_attempt }}
     steps:
       - name: Check out release tag
         uses: actions/checkout@v4
@@ -414,12 +417,29 @@ jobs:
           name: platform-wheel-indexes
           path: docs/public
 
-      - name: Build and upload site
-        uses: withastro/action@v3
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          path: ./docs
+          version: 9.15.8
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
           node-version: 22
-          package-manager: pnpm@9.15.8
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+
+      - name: Build site
+        working-directory: docs
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          name: github-pages-${{ github.run_attempt }}
+          path: docs/dist
 
   deploy-pages:
     name: Deploy documentation with release indexes
@@ -435,3 +455,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ needs.build-pages.outputs.pages-artifact }}

@@ -17,6 +17,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      # Deployment-only retries must reuse the producing build's artifact name.
+      pages-artifact: github-pages-${{ github.run_attempt }}
     steps:
       - name: Checkout your repository using git
         uses: actions/checkout@v4
@@ -36,12 +39,26 @@ jobs:
           cp \
             docs/public/nightly/sonar/index.html \
             docs/public/simple/sonar/index.html
-      - name: Install, build, and upload your site
-        uses: withastro/action@v3
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          path: ./docs # The root location of your Astro project inside the repository. (optional)
-          node-version: 22 # The specific version of Node that should be used to build your site. Defaults to 20. (optional)
-          package-manager: pnpm@9.15.8 # The Node package manager that should be used to install dependencies and build your site. Automatically detected based on your lockfile. (optional)
+          version: 9.15.8
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+      - name: Build site
+        working-directory: docs
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          name: github-pages-${{ github.run_attempt }}
+          path: docs/dist
 
   deploy:
     needs: build
@@ -53,3 +70,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ needs.build.outputs.pages-artifact }}
