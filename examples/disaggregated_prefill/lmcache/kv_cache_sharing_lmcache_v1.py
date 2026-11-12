@@ -14,31 +14,16 @@ Learn more about LMCache in https://github.com/LMCache/LMCache.
 
 import os
 import subprocess
+import sys
 import time
 from multiprocessing import Event, Process
 
-from lmcache.v1.cache_engine import LMCacheEngineBuilder
-
 from sonar import LLM, SamplingParams
 from sonar.config import KVTransferConfig
-from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_integration.sonar_v1_adapter import ENGINE_NAME
 
 # LMCache-related environment variables
 # The port to start LMCache server
 port = 8100
-# Use experimental features in LMCache
-os.environ["LMCACHE_USE_EXPERIMENTAL"] = "True"
-# LMCache is set to use 256 tokens per chunk
-os.environ["LMCACHE_CHUNK_SIZE"] = "256"
-# Disable local CPU backend in LMCache
-os.environ["LMCACHE_LOCAL_CPU"] = "False"
-# Set local CPU memory buffer limit to 5.0 GB
-os.environ["LMCACHE_MAX_LOCAL_CPU_SIZE"] = "5.0"
-# Set the remote URL for LMCache server
-os.environ["LMCACHE_REMOTE_URL"] = f"lm://localhost:{port}"
-# Set the serializer/deserializer between sonar and LMCache server
-# `naive` indicates using raw bytes of the tensor without any compression
-os.environ["LMCACHE_REMOTE_SERDE"] = "naive"
 
 prompts = [
     "Hello, how are you?" * 1000,
@@ -51,7 +36,11 @@ def run_store(store_done, prompts):
 
     sampling_params = SamplingParams(temperature=0, top_p=0.95, max_tokens=10)
 
-    ktc = KVTransferConfig(kv_connector="LMCacheConnectorV1", kv_role="kv_both")
+    ktc = KVTransferConfig(
+        kv_connector="LMCacheMPConnector",
+        kv_role="kv_both",
+        kv_connector_extra_config={"lmcache.mp.port": port},
+    )
     # Set GPU memory utilization to 0.8 for an A40 GPU with 40GB
     # memory. Reduce the value if your GPU has less memory.
     llm = LLM(
@@ -69,8 +58,7 @@ def run_store(store_done, prompts):
     print("KV cache store is finished.")
     store_done.set()
 
-    # Clean up lmcache backend
-    LMCacheEngineBuilder.destroy(ENGINE_NAME)
+    llm.llm_engine.engine_core.shutdown()
 
 
 def run_retrieve(store_done, prompts, timeout=1):
@@ -79,7 +67,11 @@ def run_retrieve(store_done, prompts, timeout=1):
 
     sampling_params = SamplingParams(temperature=0, top_p=0.95, max_tokens=10)
 
-    ktc = KVTransferConfig(kv_connector="LMCacheConnectorV1", kv_role="kv_both")
+    ktc = KVTransferConfig(
+        kv_connector="LMCacheMPConnector",
+        kv_role="kv_both",
+        kv_connector_extra_config={"lmcache.mp.port": port},
+    )
     # Set GPU memory utilization to 0.8 for an A40 GPU with 40GB
     # of memory. Reduce the value if your GPU has less memory.
     llm = LLM(
@@ -99,13 +91,28 @@ def run_retrieve(store_done, prompts, timeout=1):
         generated_text = output.outputs[0].text
         print(f"Generated text: {generated_text!r}")
 
-    # Clean up lmcache backend
-    LMCacheEngineBuilder.destroy(ENGINE_NAME)
+    llm.llm_engine.engine_core.shutdown()
 
 
 def run_lmcache_server(port):
-    server_proc = subprocess.Popen(["python", "-m", "lmcache.v1.server", "localhost", str(port)])
-    return server_proc
+    return subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "lmcache.cli.main",
+            "server",
+            "--host",
+            "localhost",
+            "--port",
+            str(port),
+            "--l1-size-gb",
+            "5",
+            "--l1-init-size-gb",
+            "5",
+            "--eviction-policy",
+            "LRU",
+        ]
+    )
 
 
 def main():

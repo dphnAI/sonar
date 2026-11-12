@@ -1,152 +1,62 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""
-This file demonstrates the example usage of cpu offloading
-with LMCache in Sonar v1 or v0.
+"""Offload KV cache to CPU with LMCache and reuse a shared prompt prefix.
 
-Usage:
-
-    Specify Sonar version
-
-    -v v0 : Use LMCacheConnector
-            model = mistralai/Mistral-7B-Instruct-v0.2
-            (Includes enable_chunked_prefill = True)
-
-    -v v1 : Use LMCacheConnectorV1 (default)
-            model = meta-llama/Meta-Llama-3.1-8B-Instruct
-            (Without enable_chunked_prefill)
-
-Note that `lmcache` is needed to run this example.
-Requirements:
-https://docs.lmcache.ai/getting_started/installation.html#prerequisites
-Learn more about LMCache environment setup, please refer to:
-https://docs.lmcache.ai/getting_started/installation.html
+Install dependencies with tools/install_kv_connectors.sh, then run with
+PYTHONHASHSEED=0.
 """
 
 import argparse
 import contextlib
 import os
 import time
-from dataclasses import asdict
-
-from lmcache.v1.cache_engine import LMCacheEngineBuilder
 
 from sonar import LLM, SamplingParams
 from sonar.config import KVTransferConfig
-from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_integration.sonar_v1_adapter import ENGINE_NAME
-from sonar.engine.arg_utils import EngineArgs
 
 
-def setup_environment_variables(sonar_version: str):
-    # LMCache-related environment variables
-    # Use experimental features in LMCache
-    os.environ["LMCACHE_USE_EXPERIMENTAL"] = "True"
-    # LMCache is set to use 256 tokens per chunk
+def setup_environment_variables():
     os.environ["LMCACHE_CHUNK_SIZE"] = "256"
-    # Enable local CPU backend in LMCache
     os.environ["LMCACHE_LOCAL_CPU"] = "True"
-    # Set local CPU memory limit to 5.0 GB
     os.environ["LMCACHE_MAX_LOCAL_CPU_SIZE"] = "5.0"
-    if sonar_version == "v0":
-        os.environ["SONAR_USE_V1"] = "0"
 
 
 @contextlib.contextmanager
-def build_llm_with_lmcache(lmcache_connector: str, model: str, sonar_version: str):
-    ktc = KVTransferConfig(
-        kv_connector=lmcache_connector,
-        kv_role="kv_both",
+def build_llm_with_lmcache(model: str):
+    llm = LLM(
+        model=model,
+        kv_transfer_config=KVTransferConfig(kv_connector="LMCacheConnectorV1", kv_role="kv_both"),
+        max_model_len=8000,
+        gpu_memory_utilization=0.8,
+        # Attribute reuse to LMCache rather than Sonar's local prefix cache.
+        enable_prefix_caching=False,
     )
-    # Set GPU memory utilization to 0.8 for an A40 GPU with 40GB
-    # memory. Reduce the value if your GPU has less memory.
-    # Note: LMCache supports chunked prefill (see Sonar#14505, LMCache#392).
-    if sonar_version == "v0":
-        llm_args = EngineArgs(
-            model=model,
-            kv_transfer_config=ktc,
-            max_model_len=8000,
-            gpu_memory_utilization=0.8,
-            enable_chunked_prefill=True,  # Only in v0
-        )
-    else:
-        llm_args = EngineArgs(
-            model=model,
-            kv_transfer_config=ktc,
-            max_model_len=8000,
-            gpu_memory_utilization=0.8,
-        )
-
-    llm = LLM(**asdict(llm_args))
     try:
         yield llm
     finally:
-        # Clean up lmcache backend
-        LMCacheEngineBuilder.destroy(ENGINE_NAME)
+        llm.llm_engine.engine_core.shutdown()
 
 
-def print_output(
-    llm: LLM,
-    prompt: list[str],
-    sampling_params: SamplingParams,
-    req_str: str,
-):
-    # Should be able to see logs like the following:
-    # `LMCache INFO: Storing KV cache for 6006 out of 6006 tokens for request 0`
-    # This indicates that the KV cache has been stored in LMCache.
+def print_output(llm: LLM, prompt: list[str], sampling_params: SamplingParams, req_str: str):
     start = time.time()
     outputs = llm.generate(prompt, sampling_params)
-    print("-" * 50)
     for output in outputs:
-        generated_text = output.outputs[0].text
-        print(f"Generated text: {generated_text!r}")
+        print(f"Generated text: {output.outputs[0].text!r}")
+        print(f"Cached prompt tokens: {output.num_cached_tokens}")
     print(f"Generation took {time.time() - start:.2f} seconds, {req_str} request done.")
-    print("-" * 50)
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-v",
-        "--version",
-        choices=["v0", "v1"],
-        default="v1",
-        help="Specify Sonar version (default: v1)",
-    )
-    return parser.parse_args()
 
 
 def main():
-    args = parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", default="Qwen/Qwen3-0.6B")
+    args = parser.parse_args()
+    setup_environment_variables()
 
-    if args.version == "v0":
-        lmcache_connector = "LMCacheConnector"
-        model = "mistralai/Mistral-7B-Instruct-v0.2"
-    else:
-        lmcache_connector = "LMCacheConnectorV1"
-        model = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-
-    setup_environment_variables(args.version)
-
-    with build_llm_with_lmcache(lmcache_connector, model, args.version) as llm:
-        # This example script runs two requests with a shared prefix.
-        # Define the shared prompt and specific prompts
+    with build_llm_with_lmcache(args.model) as llm:
         shared_prompt = "Hello, how are you?" * 1000
-        first_prompt = [
-            shared_prompt + "Hello, my name is",
-        ]
-        second_prompt = [
-            shared_prompt + "Tell me a very long story",
-        ]
-
-        sampling_params = SamplingParams(temperature=0, top_p=0.95, max_tokens=10)
-
-        # Print the first output
-        print_output(llm, first_prompt, sampling_params, "first")
-
-        time.sleep(1)
-
-        # print the second output
-        print_output(llm, second_prompt, sampling_params, "second")
+        sampling_params = SamplingParams(temperature=0, max_tokens=10)
+        print_output(llm, [shared_prompt + "Hello, my name is"], sampling_params, "first")
+        print_output(llm, [shared_prompt + "Tell me a very long story"], sampling_params, "second")
 
 
 if __name__ == "__main__":
