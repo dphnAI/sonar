@@ -376,19 +376,67 @@ def _flashinfer_deferred_moe_token_counts(
     return tuple(dict.fromkeys(token_counts))
 
 
+def _flashinfer_compressed_moe_token_counts(
+    runner: "GPUModelRunner",
+) -> tuple[int, ...]:
+    """Exercise the routed operation used only by compressed small batches."""
+    if not envs.SONAR_MXFP4_COMPRESS_SCALES:
+        return ()
+
+    from sonar.model_executor.layers.fused_moe import MoERunner
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+        TrtLlmMxfp4ExpertsMonolithic,
+    )
+    from sonar.model_executor.layers.quantization.utils.mxfp4_scale_compression import (
+        MAX_SELECTED_EXPERTS,
+    )
+
+    max_tokens = runner.scheduler_config.max_num_batched_tokens
+    token_counts: list[int] = []
+    for module in runner.get_model().modules():
+        if not isinstance(module, MoERunner):
+            continue
+        kernel = module.routed_experts.quant_method.moe_kernel
+        if kernel is None:
+            continue
+        experts = kernel.fused_experts
+        if not isinstance(experts, TrtLlmMxfp4ExpertsMonolithic) or experts._compressed_scales is None:
+            continue
+
+        max_routed_tokens = min(max_tokens, MAX_SELECTED_EXPERTS // experts.topk)
+        if max_routed_tokens < 1:
+            continue
+        token_counts.append(max_routed_tokens)
+        moe_config = module.moe_config
+        max_deferred_tokens = moe_config.defer_moe_finalize_max_num_tokens
+        if moe_config.use_deferred_moe_finalize and max_deferred_tokens > 0:
+            # A finalized routed pass cannot tune the deferred routed op.
+            token_counts.append(min(max_routed_tokens, max_deferred_tokens))
+
+    return tuple(dict.fromkeys(token_counts))
+
+
 def _flashinfer_autotune_token_counts(runner: "GPUModelRunner") -> tuple[int, ...]:
     max_tokens = runner.scheduler_config.max_num_batched_tokens
     # Tune the widest bucket set first so bounded passes reuse its configs.
     token_counts = [max_tokens]
     token_counts.extend(_flashinfer_deferred_moe_token_counts(runner))
+    token_counts.extend(_flashinfer_compressed_moe_token_counts(runner))
     return tuple(dict.fromkeys(token_counts))
 
 
-def _run_flashinfer_autotune_dummy_runs(runner: "GPUModelRunner", *, skip_attn: bool = False) -> None:
+def _run_flashinfer_autotune_dummy_runs(
+    runner: "GPUModelRunner",
+    *,
+    skip_attn: bool = False,
+    token_counts: tuple[int, ...] | None = None,
+) -> None:
     import sonar.utils.flashinfer as fi_utils
 
     dummy_run_kwargs = {"skip_attn": True} if skip_attn else {}
-    for num_tokens in _flashinfer_autotune_token_counts(runner):
+    if token_counts is None:
+        token_counts = _flashinfer_autotune_token_counts(runner)
+    for num_tokens in token_counts:
         # The drafter may use more tokens than this pass in the same dummy run.
         # Include its max M when building the autotune buckets.
         max_tuning_tokens = num_tokens
@@ -544,6 +592,10 @@ def flashinfer_autotune(runner: "GPUModelRunner", *, skip_attn: bool = False) ->
                 autotune_hisparse_flashinfer_attention(runner)
             if not cache_hit:
                 _run_flashinfer_autotune_dummy_runs(runner, skip_attn=skip_attn)
+            elif token_counts := _flashinfer_compressed_moe_token_counts(runner):
+                # Baseline caches predate the compressed small-batch routed op.
+                # Keep their tactics and let FlashInfer tune only missing keys.
+                _run_flashinfer_autotune_dummy_runs(runner, skip_attn=skip_attn, token_counts=token_counts)
             replayssm_autotune_warmup(runner)
             _autotune_kimi_k3_kda_qkvg(runner.get_model())
     finally:
