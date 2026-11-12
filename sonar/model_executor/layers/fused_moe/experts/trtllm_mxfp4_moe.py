@@ -69,13 +69,15 @@ def _run_prepared_mxfp4(canonical: "TRTLLMCanonicalRouting", **kwargs: Any) -> l
     )
 
     tuner = AutoTuner.get()
-    if tuner.is_tuning_mode:
+    manager = current_workspace_manager()
+    # Graphs retain their prepared body. Eager calls after locking can use
+    # token counts that were never captured.
+    if tuner.is_tuning_mode or manager.is_locked():
         return trtllm_fp4_block_scale_routed_moe(**kwargs)
     x, x_scale = kwargs["hidden_states"], kwargs["hidden_states_scale"]
     num_tokens, hidden_size = x.shape
     top_k = kwargs["top_k"]
     output = kwargs["output"]
-    manager = current_workspace_manager()
     stream = current_stream().cuda_stream
     if output is None:
         output = manager.get_persistent(("mxfp4_prepared_output", stream, num_tokens), (num_tokens, 0), torch.bfloat16)

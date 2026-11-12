@@ -281,6 +281,7 @@ checkpoint files are unchanged. Scales are restored into shared scratch before
 each expert call. This option is independent of NF12 linear-layer compression
 and is off by default because decoding adds latency.
 Keep FlashInfer autotuning enabled for the optimized small-batch path.
+Eager batches after graph capture use the native routed operation.
 Weight reloads and expert load balancing are not supported with this option.
 
 ### FP4 MoE on SM120 GPUs

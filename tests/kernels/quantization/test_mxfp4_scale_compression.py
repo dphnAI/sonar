@@ -222,16 +222,16 @@ def test_compressed_native_experts(monkeypatch, tokens, defer, logits_dtype, bia
     groups = 8 if bias_dtype == torch.bfloat16 else 1
     ids = [torch.empty((tokens, k), dtype=torch.int16, device="cuda") for _ in range(2)]
 
-    def call(expert, replay):
+    def call(expert, replay, count=tokens):
         return expert.apply(
-            q,
+            q[:count],
             w13,
             w2,
-            logits,
+            logits[:count],
             MoEActivation.SITU,
             e,
             None,
-            sf,
+            sf[:count],
             False,
             num_expert_group=groups,
             topk_group=min(groups, 2),
@@ -282,6 +282,7 @@ def test_compressed_native_experts(monkeypatch, tokens, defer, logits_dtype, bia
             captured = call(compressed, ids[1])
         if tokens <= 8:
             assert prepared_calls == before_capture + 1
+    workspace.current_workspace_manager().lock()
     for scale in (1.0, 0.0, 1e-5):
         logits.normal_(generator=generator).mul_(scale)
         if bias is not None:
@@ -292,3 +293,13 @@ def test_compressed_native_experts(monkeypatch, tokens, defer, logits_dtype, bia
         assert torch.equal(ids[0], ids[1])
         for reference, result in zip(expected, actual):
             assert torch.equal(reference, result)
+
+    if tokens == 8:
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for count in (3, 5):
+                expected = materialize(call(ordinary, ids[0][:count], count))
+                actual = materialize(call(compressed, ids[1][:count], count))
+                assert torch.equal(ids[0][:count], ids[1][:count])
+                for reference, result in zip(expected, actual):
+                    assert torch.equal(reference, result)
