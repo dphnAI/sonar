@@ -275,6 +275,14 @@ BF16 weights between calls.
 For non-speculative serving, omit `--speculative-config` and use
 `--gpu-memory-utilization 0.95`.
 
+Set `SONAR_MXFP4_COMPRESS_SCALES=1` to losslessly compress the resident expert
+scales with the TRTLLM MXFP4 backend on SM100-family GPUs. The FP4 weights and
+checkpoint files are unchanged. Scales are restored into shared scratch before
+each expert call. This option is independent of NF12 linear-layer compression
+and is off by default because decoding adds latency.
+Keep FlashInfer autotuning enabled for the optimized small-batch path.
+Weight reloads and expert load balancing are not supported with this option.
+
 ### FP4 MoE on SM120 GPUs
 
 On SM120 GPUs, use `--moe-backend b12x` for supported FP4 MoE checkpoints.

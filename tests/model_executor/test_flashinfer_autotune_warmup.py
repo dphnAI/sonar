@@ -29,6 +29,7 @@ class _FakeMoERunner:
     """Minimal MoERunner stand-in for token-count discovery tests."""
 
     moe_config: Any
+    routed_experts: SimpleNamespace
 
 
 def _make_moe(*, max_deferred_tokens: int = 128, enabled: bool = True):
@@ -38,6 +39,22 @@ def _make_moe(*, max_deferred_tokens: int = 128, enabled: bool = True):
         use_deferred_moe_finalize=enabled,
         defer_moe_finalize_max_num_tokens=max_deferred_tokens,
     )
+    moe.routed_experts = SimpleNamespace(quant_method=SimpleNamespace(moe_kernel=None))
+    return moe
+
+
+def _make_compressed_moe(*, topk=16, compressed=True, monolithic=True, **kwargs):
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
+        TrtLlmMxfp4ExpertsModular,
+        TrtLlmMxfp4ExpertsMonolithic,
+    )
+
+    moe = _make_moe(**kwargs)
+    experts_cls = TrtLlmMxfp4ExpertsMonolithic if monolithic else TrtLlmMxfp4ExpertsModular
+    experts: Any = object.__new__(experts_cls)
+    experts.topk = topk
+    experts._compressed_scales = object() if compressed else None
+    moe.routed_experts.quant_method.moe_kernel = SimpleNamespace(fused_experts=experts)
     return moe
 
 
@@ -86,6 +103,37 @@ def test_flashinfer_autotune_token_counts_are_bounded_and_deduplicated():
         token_counts = _flashinfer_autotune_token_counts(runner)
 
     assert token_counts == (32,)
+
+
+@pytest.mark.parametrize(
+    "max_tokens,topk,deferred,enabled,expected",
+    [
+        (8192, 16, 128, True, (8192, 128, 8)),
+        (8192, 8, 4, True, (8192, 4, 16)),
+        (8192, 8, 0, True, (8192, 16)),
+        (8192, 8, -1, True, (8192, 16)),
+        (8192, 8, 128, False, (8192, 16)),
+        (7, 16, 128, True, (7,)),
+        (128, 256, 128, True, (128,)),
+        (8192, 3, 128, True, (8192, 128, 42)),
+    ],
+)
+def test_compressed_moe_covers_routed_finalize_branches(monkeypatch, max_tokens, topk, deferred, enabled, expected):
+    monkeypatch.setattr(warmup.envs, "SONAR_MXFP4_COMPRESS_SCALES", True)
+    moe = _make_compressed_moe(topk=topk, max_deferred_tokens=deferred, enabled=enabled)
+    runner = _make_runner([moe, moe], max_tokens=max_tokens)
+    with patch("sonar.model_executor.layers.fused_moe.MoERunner", _FakeMoERunner):
+        assert _flashinfer_autotune_token_counts(runner) == expected
+
+
+@pytest.mark.parametrize(
+    "enabled,compressed,monolithic", [(False, True, True), (True, False, True), (True, True, False)]
+)
+def test_compressed_moe_extra_warmup_requires_active_monolithic_backend(monkeypatch, enabled, compressed, monolithic):
+    monkeypatch.setattr(warmup.envs, "SONAR_MXFP4_COMPRESS_SCALES", enabled)
+    runner = _make_runner([_make_compressed_moe(compressed=compressed, monolithic=monolithic)])
+    with patch("sonar.model_executor.layers.fused_moe.MoERunner", _FakeMoERunner):
+        assert _flashinfer_autotune_token_counts(runner) == (8192, 128)
 
 
 @pytest.mark.parametrize("skip_attn", [False, True])
@@ -467,6 +515,7 @@ class _AutotuneRun:
         self.tuners = {}
         self.saves = []
         self.profile_groups = defaultdict(list)
+        self.make_runner = lambda: _make_runner([])
 
     def cache_path(self, rank):
         return self.cache_dir / f"autotune_configs_dp0_rank{rank}.json"
@@ -493,7 +542,7 @@ class _AutotuneRun:
         for rank in range(self.pp * self.tp):
             self.rank = rank
             self.tuners[rank] = _AutotuneTuner(self)
-            runner = _make_runner([])
+            runner = self.make_runner()
             runner.sonar_config.parallel_config.pipeline_parallel_size = self.pp
             flashinfer_autotune(runner)
         return self
@@ -605,6 +654,78 @@ def test_rejected_cache_retunes_every_rank_in_its_tuning_group(autotune_run, pp,
     rerun.assert_collectives_match()
     assert set(rerun.profile_groups) == set(range(tp))
     assert {rank for rank, _, _ in rerun.saves} == set(range(tp))
+
+
+@pytest.mark.parametrize("pp,tp", [(1, 1), (1, 4), (2, 4)])
+@pytest.mark.parametrize("deferred", [4, 128])
+def test_compressed_moe_extends_baseline_cache_without_retuning(monkeypatch, autotune_run, pp, tp, deferred):
+    """Each routed finalize branch gets its own buckets, even on cache hits."""
+    monkeypatch.setattr("sonar.model_executor.layers.fused_moe.MoERunner", _FakeMoERunner)
+    moe = _make_compressed_moe(compressed=False, max_deferred_tokens=deferred)
+    buckets: tuple[int, ...] = ()
+
+    @contextmanager
+    def autotune_context(*, tuning_buckets=None, **kwargs):
+        nonlocal buckets
+        previous = buckets
+        if tuning_buckets is not None:
+            buckets = tuning_buckets
+        try:
+            yield
+        finally:
+            buckets = previous
+
+    def execute():
+        run = autotune_run(pp=pp, tp=tp)
+        passes = defaultdict(list)
+
+        def dummy_run(*, num_tokens, **kwargs):
+            passes[run.rank].append(num_tokens)
+            experts = moe.routed_experts.quant_method.moe_kernel.fused_experts
+            routed = experts._compressed_scales is not None and num_tokens * experts.topk <= 128
+            finalized = num_tokens > deferred
+            operation = "routed" if routed else "monolithic"
+            for bucket in buckets:
+                run.tuners[run.rank].profile(f"{operation}:{finalized}:{bucket}")
+
+        def make_runner():
+            runner = _make_runner([moe], max_tokens=256)
+            runner._dummy_run = dummy_run
+            return runner
+
+        run.make_runner = make_runner
+        monkeypatch.setattr(warmup, "_run_flashinfer_autotune_dummy_runs", _run_flashinfer_autotune_dummy_runs)
+        monkeypatch.setattr(fi_utils, "autotune", autotune_context)
+        monkeypatch.setattr(
+            fi_utils,
+            "flashinfer_get_hybrid_num_tokens_buckets",
+            lambda maximum: tuple(2**i for i in range(maximum.bit_length())),
+        )
+        run.execute()
+        run.assert_collectives_match()
+        return run, passes
+
+    monkeypatch.setattr(warmup.envs, "SONAR_MXFP4_COMPRESS_SCALES", False)
+    baseline, _ = execute()
+    baseline_caches = {rank: dict(tuner.cache) for rank, tuner in baseline.tuners.items()}
+    moe.routed_experts.quant_method.moe_kernel.fused_experts._compressed_scales = object()
+    monkeypatch.setattr(warmup.envs, "SONAR_MXFP4_COMPRESS_SCALES", True)
+    compressed, passes = execute()
+    expected_passes = [8, 4] if deferred == 4 else [8]
+    assert all(counts == expected_passes for counts in passes.values())
+    for rank, tuner in compressed.tuners.items():
+        assert tuner.loaded == baseline_caches[rank]
+        assert tuner.cache.items() >= baseline_caches[rank].items()
+        assert "routed:False:1" in tuner.cache
+        assert f"routed:{deferred < 8}:8" in tuner.cache
+        assert all(key.startswith("routed:") for key in tuner.cache.keys() - tuner.loaded.keys())
+    for traces in compressed.collectives.values():
+        for trace in traces.values():
+            assert all(event[1].startswith("routed:") for event in trace if event[0] == "all_reduce")
+    assert len(compressed.saves) == pp * tp
+    warm, passes = execute()
+    assert all(counts == expected_passes for counts in passes.values())
+    assert not warm.profile_groups and not warm.saves
 
 
 def test_autotune_cache_key_normalizes_kv_init_fields():

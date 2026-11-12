@@ -139,6 +139,7 @@ if TYPE_CHECKING:
     SONAR_DISABLE_PYNCCL: bool = False
     SONAR_USE_OINK_OPS: bool = False
     SONAR_MXFP4_EMULATION_DEQUANT_AT_LOAD: bool = False
+    SONAR_MXFP4_COMPRESS_SCALES: bool = False
     SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD: bool = True
     SONAR_ROCM_USE_AITER: bool = False
     SONAR_ROCM_USE_AITER_CUSTOM_AR: bool = True
@@ -1152,6 +1153,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "SONAR_MXFP4_EMULATION_DEQUANT_AT_LOAD": lambda: (
         os.getenv("SONAR_MXFP4_EMULATION_DEQUANT_AT_LOAD", "False").lower() in ("true", "1")
     ),
+    # Keep TRTLLM MXFP4 expert scales compressed and decode into shared scratch.
+    "SONAR_MXFP4_COMPRESS_SCALES": lambda: bool(int(os.getenv("SONAR_MXFP4_COMPRESS_SCALES", "0"))),
     # On hardware without a native MXFP8 kernel (e.g. ROCm gfx942 / MI300), the
     # MXFP8 emulation path dequantizes weights MXFP8->BF16 once at load time and
     # runs as a BF16 checkpoint (no per-step dequant). Set to 0 to fall back to

@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from functools import partial
+from typing import TYPE_CHECKING, Any
+
 import torch
 
+import sonar.envs as envs
 import sonar.model_executor.layers.fused_moe.modular_kernel as mk
 from sonar.model_executor.layers.fused_moe.activation import MoEActivation
 from sonar.model_executor.layers.fused_moe.config import (
@@ -25,6 +29,9 @@ from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     activation_to_flashinfer_int,
     has_flashinfer_situ_activation,
 )
+from sonar.model_executor.layers.quantization.utils.mxfp4_scale_compression import (
+    MAX_SELECTED_EXPERTS,
+)
 from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp4Static,
@@ -32,6 +39,143 @@ from sonar.model_executor.layers.quantization.utils.quant_utils import (
 )
 from sonar.platforms import current_platform
 from sonar.utils.flashinfer import has_flashinfer
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.worker.workspace import current_workspace_manager
+
+if TYPE_CHECKING:
+    from flashinfer.fused_moe.core import TRTLLMCanonicalRouting
+
+    from sonar.model_executor.layers.quantization.utils.mxfp4_scale_compression import (
+        CompressedMXFP4Scales,
+    )
+
+
+def _run_prepared_mxfp4(canonical: "TRTLLMCanonicalRouting", **kwargs: Any) -> list[torch.Tensor]:
+    """Reuse canonical routing when the tuned body uses the same routing tile."""
+    from flashinfer import trtllm_fp4_block_scale_routed_moe
+    from flashinfer.autotuner import AutoTuner
+    from flashinfer.fused_moe.core import (
+        TrtllmMoERoutingMetadataSlot,
+        get_trtllm_moe_sm100_module,
+    )
+    from flashinfer.fused_moe.da_moe import DABody
+    from flashinfer.fused_moe.shared.inputs import MoeRunnerInputs
+    from flashinfer.tllm_enums import (
+        Fp8QuantizationType,
+        RoutingInputMode,
+        SfLayout,
+        WeightLayout,
+        deduce_trtllm_gen_tensor_dtype,
+    )
+
+    tuner = AutoTuner.get()
+    if tuner.is_tuning_mode:
+        return trtllm_fp4_block_scale_routed_moe(**kwargs)
+    x, x_scale = kwargs["hidden_states"], kwargs["hidden_states_scale"]
+    num_tokens, hidden_size = x.shape
+    top_k = kwargs["top_k"]
+    output = kwargs["output"]
+    manager = current_workspace_manager()
+    stream = current_stream().cuda_stream
+    if output is None:
+        output = manager.get_persistent(("mxfp4_prepared_output", stream, num_tokens), (num_tokens, 0), torch.bfloat16)
+    ids, weights = kwargs["topk_ids"]
+    inputs = MoeRunnerInputs(
+        output=output,
+        routing_logits=None,
+        topk_ids=ids,
+        expert_weights=weights,
+        hidden_states=x,
+        hidden_states_scale=x_scale,
+        gemm1_lora_delta=None,
+        per_token_scale=None,
+    )
+    module = get_trtllm_moe_sm100_module()
+    runner = module.MoERunner(
+        module.moe_op,
+        top_k=top_k,
+        num_local_experts=kwargs["local_num_experts"],
+        dtype_act=deduce_trtllm_gen_tensor_dtype(x, x_scale),
+        dtype_weights=deduce_trtllm_gen_tensor_dtype(kwargs["gemm1_weights"], kwargs["gemm1_weights_scale"]),
+        fp8_quantization_type=Fp8QuantizationType.NoneFp8,
+        hidden_size=hidden_size,
+        hidden_size_output=hidden_size,
+        intermediate_size=kwargs["intermediate_size"],
+        activation_type=kwargs["activation_type"],
+        weight_layout=WeightLayout.MajorK,
+        use_shuffled_weight=True,
+        use_per_token_scaling=False,
+        num_experts=kwargs["num_experts"],
+        num_fused_shared_experts=0,
+    )
+    tuning_config = runner._make_tuning_config(
+        inputs,
+        tune_max_num_tokens=kwargs["tune_max_num_tokens"],
+        routing_input_mode=RoutingInputMode.UnpackedPrecomputed,
+        hidden_states_scale_layout=SfLayout.layout_linear,
+        use_cold_l2_cache=True,
+        use_cuda_graph=True,
+    )
+    native_kwargs = dict(
+        kwargs,
+        routing_input_mode=RoutingInputMode.UnpackedPrecomputed,
+        num_fused_shared_experts=0,
+        enable_pdl=True,
+        norm_topk_prob=True,
+    )
+    flat_inputs = inputs.to_list()
+    _, tactic = tuner.choose_one(
+        "flashinfer::trtllm_fp4_block_scale_moe", [runner], tuning_config, flat_inputs, **native_kwargs
+    )
+    if tactic == -1 or tactic[0] != canonical.tile_n:
+        return trtllm_fp4_block_scale_routed_moe(**kwargs)
+
+    # CanonicalRoutingBuffers exposes the same native routing maps as the body ABI.
+    counts, total, expanded, permuted, histogram, cta_batch, cta_limit, cta_count = canonical.scratch
+    metadata = TrtllmMoERoutingMetadataSlot(
+        tile_n=canonical.tile_n,
+        total_num_padded_tokens=total,
+        expanded_idx_to_permuted_idx=expanded[: num_tokens * top_k],
+        permuted_idx_to_token_idx=permuted,
+        expert_weights=weights,
+        expert_count_histogram=histogram,
+        num_tokens_per_expert=counts,
+        cta_idx_xy_to_batch_idx=cta_batch,
+        cta_idx_xy_to_mn_limit=cta_limit,
+        num_non_exiting_ctas=cta_count,
+    )
+    body = DABody(tactic=tactic[1], tile_n=tactic[0])
+    adapter = module.DABodyRunner(runner)
+
+    def allocate_workspace():
+        return tuple(
+            tensor if isinstance(tensor, torch.Tensor) else torch.from_dlpack(tensor)
+            for tensor in adapter.prepare_body(flat_inputs, body, metadata, **native_kwargs)
+        )
+
+    body_workspace = manager.get_persistent_resource(
+        (
+            "mxfp4_prepared_body",
+            stream,
+            num_tokens,
+            hidden_size,
+            kwargs["num_experts"],
+            kwargs["local_num_experts"],
+            kwargs["intermediate_size"],
+            top_k,
+            runner.dtype_act,
+            runner.dtype_weights,
+            kwargs["activation_type"],
+            kwargs["do_finalize"],
+            tuple(tactic),
+        ),
+        allocate_workspace,
+    )
+    adapter.forward_from_metadata(flat_inputs, body, metadata, body_workspace, **native_kwargs)
+    if kwargs["do_finalize"]:
+        return [output]
+    # FP4DABodyBuffers stores the unfinalized GEMM2 output in its fifth field.
+    return [body_workspace[4], weights, expanded[: num_tokens * top_k]]
 
 
 class TrtLlmMxfp4ExpertsBase:
@@ -45,6 +189,7 @@ class TrtLlmMxfp4ExpertsBase:
     ):
         self.moe_config = moe_config
         self.quant_config = quant_config
+        self._compressed_scales: CompressedMXFP4Scales | None = None
 
         self.routing_method_type = moe_config.routing_method
         self.topk = moe_config.experts_per_token
@@ -109,6 +254,66 @@ class TrtLlmMxfp4ExpertsBase:
                 device=device,
             )
             self.gemm1_clamp_limit = None
+
+    def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        if getattr(layer, "_mxfp4_scales_compressed", False):
+            raise NotImplementedError("Compressed MXFP4 scales do not support weight reloads. Restart the engine.")
+        if not envs.SONAR_MXFP4_COMPRESS_SCALES:
+            return
+        if self.moe_config.moe_parallel_config.enable_eplb:
+            raise ValueError("MXFP4 scale compression does not support expert load balancing.")
+        from sonar.model_executor.layers.quantization.utils.mxfp4_scale_compression import (
+            encode_mxfp4_scales,
+        )
+
+        w1_scale, w2_scale = self.quant_config.w1_scale, self.quant_config.w2_scale
+        assert w1_scale is not None and w2_scale is not None
+        self._scale_dtypes = (w1_scale.dtype, w2_scale.dtype)
+        codec = encode_mxfp4_scales(w1_scale, w2_scale)
+        if codec.encoded_nbytes >= codec.raw_nbytes:
+            return
+        for name in ("packed", "offsets", "literals"):
+            layer.register_buffer(f"mxfp4_scale_{name}", getattr(codec, name))
+        self._compressed_scales = codec
+        layer._mxfp4_scales_compressed = True
+        self.quant_config._w1.scale = None
+        self.quant_config._w2.scale = None
+        layer.w13_weight_scale = None
+        layer.w2_weight_scale = None
+
+    def _weight_scales(
+        self,
+        expert_ids: torch.Tensor | None = None,
+        expert_ids_out: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        codec = self._compressed_scales
+        if codec is None:
+            w1_scale, w2_scale = self.quant_config.w1_scale, self.quant_config.w2_scale
+            assert w1_scale is not None and w2_scale is not None
+            return w1_scale, w2_scale
+        from flashinfer.autotuner import AutoTuner
+
+        scratch = current_workspace_manager().get_persistent(
+            ("mxfp4_scales", current_stream().cuda_stream, codec.w13_shape, codec.w2_shape),
+            (codec.raw_nbytes,),
+            torch.uint8,
+        )
+        if AutoTuner.get().is_tuning_mode:
+            # Profiling synthesizes routes that can select any local expert.
+            if expert_ids_out is not None:
+                assert expert_ids is not None
+                expert_ids_out.copy_(expert_ids)
+            expert_ids = expert_ids_out = None
+        elif expert_ids is not None and expert_ids.numel() > MAX_SELECTED_EXPERTS:
+            expert_ids = None
+        codec.decode_into(
+            scratch,
+            expert_ids,
+            expert_offset=self.ep_rank * self.local_num_experts,
+            expert_ids_out=expert_ids_out,
+        )
+        w1_scale, w2_scale = codec.destination_views(scratch)
+        return w1_scale.view(self._scale_dtypes[0]), w2_scale.view(self._scale_dtypes[1])
 
     @staticmethod
     def _supports_current_device() -> bool:
@@ -212,6 +417,7 @@ class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMon
         routing_replay_out: torch.Tensor | None = None,
     ) -> torch.Tensor | UnfinalizedMoEOutput:
         from flashinfer import trtllm_fp4_block_scale_moe
+        from flashinfer.tllm_enums import SfLayout
 
         if a1q_scale is not None:
             x_quant = hidden_states
@@ -231,19 +437,75 @@ class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMon
                 device=hidden_states.device,
             )
 
-        flashinfer_output = trtllm_fp4_block_scale_moe(
-            routing_logits=router_logits,
-            routing_bias=e_score_correction_bias,
+        moe = trtllm_fp4_block_scale_moe
+        routing: dict[str, Any] = {
+            "routing_logits": router_logits,
+            "routing_bias": e_score_correction_bias,
+            "routing_replay_out": routing_replay_out,
+        }
+        if self._compressed_scales is not None and num_tokens * self.topk <= MAX_SELECTED_EXPERTS:
+            from flashinfer.fused_moe.core import (
+                allocate_trtllm_moe_canonical_routing,
+                canonicalize_trtllm_moe_routing_,
+            )
+
+            def allocate_routing():
+                capacity = MAX_SELECTED_EXPERTS // self.topk
+                canonical = allocate_trtllm_moe_canonical_routing(
+                    router_logits.new_empty((capacity, global_num_experts)),
+                    top_k=self.topk,
+                    tile_n=8,
+                )
+                ids = torch.empty((capacity, self.topk), dtype=torch.int32, device=router_logits.device)
+                return canonical, ids
+
+            canonical, ids = current_workspace_manager().get_persistent_resource(
+                ("mxfp4_routing", current_stream().cuda_stream, global_num_experts, self.topk),
+                allocate_routing,
+            )
+            canonicalize_trtllm_moe_routing_(
+                canonical,
+                router_logits,
+                e_score_correction_bias,
+                x_quant,
+                top_k=self.topk,
+                n_group=num_expert_group,
+                topk_group=topk_group,
+                local_expert_offset=self.ep_rank * self.local_num_experts,
+                local_num_experts=self.local_num_experts,
+                routed_scaling_factor=routed_scaling_factor,
+                routing_method_type=self.routing_method_type,
+                use_routing_scales_on_input=apply_router_weight_on_input,
+                use_deep_seek_fp8=False,
+                norm_topk_prob=True,
+                enable_pdl=True,
+            )
+            selected = canonical.routing_replay_ids[:num_tokens]
+            ids = ids[:num_tokens]
+            w1_scale, w2_scale = self._weight_scales(selected, ids)
+            if routing_replay_out is not None:
+                routing_replay_out.copy_(selected)
+            routing = {
+                "topk_ids": (ids, canonical.expert_weights[:num_tokens]),
+                "routing_bias": None,
+            }
+            moe = partial(_run_prepared_mxfp4, canonical)
+            routed_scaling_factor = None
+        else:
+            w1_scale, w2_scale = self._weight_scales()
+        flashinfer_output = moe(
+            **routing,
             hidden_states=x_quant,
             hidden_states_scale=x_scale,
+            hidden_states_scale_layout=SfLayout.layout_linear,
             gemm1_weights=w1,
-            gemm1_weights_scale=self.w1_scale,
+            gemm1_weights_scale=w1_scale,
             gemm1_bias=self.w1_bias,
             gemm1_alpha=self.gemm1_alpha,
             gemm1_beta=self.gemm1_beta,
             gemm1_clamp_limit=self.gemm1_clamp_limit,
             gemm2_weights=w2,
-            gemm2_weights_scale=self.w2_scale,
+            gemm2_weights_scale=w2_scale,
             gemm2_bias=self.w2_bias,
             output1_scale_scalar=None,
             output1_scale_gate_scalar=None,
@@ -261,7 +523,6 @@ class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMon
             activation_type=self._flashinfer_activation_type(activation),
             tune_max_num_tokens=fi_moe_largest_bucket(self.moe_config),
             output=finalized_output,
-            routing_replay_out=routing_replay_out,
         )
         routed_output = convert_flashinfer_moe_output(
             flashinfer_output,
@@ -358,20 +619,23 @@ class TrtLlmMxfp4ExpertsModular(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsModula
     ) -> UnfinalizedMoEOutput | None:
         """Finalize into ``output``, or stop after GEMM2 when it is None."""
         from flashinfer import trtllm_fp4_block_scale_routed_moe
+        from flashinfer.tllm_enums import SfLayout
 
+        w1_scale, w2_scale = self._weight_scales(topk_ids)
         flashinfer_output = trtllm_fp4_block_scale_routed_moe(
             topk_ids=(topk_ids, topk_weights),
             routing_bias=None,
             hidden_states=x_quant,
             hidden_states_scale=x_scale,
+            hidden_states_scale_layout=SfLayout.layout_linear,
             gemm1_weights=w1,
-            gemm1_weights_scale=self.w1_scale,
+            gemm1_weights_scale=w1_scale,
             gemm1_bias=self.w1_bias,
             gemm1_alpha=self.gemm1_alpha,
             gemm1_beta=self.gemm1_beta,
             gemm1_clamp_limit=self.gemm1_clamp_limit,
             gemm2_weights=w2,
-            gemm2_weights_scale=self.w2_scale,
+            gemm2_weights_scale=w2_scale,
             gemm2_bias=self.w2_bias,
             output1_scale_scalar=None,
             output1_scale_gate_scalar=None,
@@ -435,9 +699,6 @@ class TrtLlmMxfp4ExpertsModular(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsModula
             assert hidden_states.dtype == torch.bfloat16
             x_quant = hidden_states
             x_scale = None
-
-        assert self.w1_scale is not None
-        assert self.w2_scale is not None
 
         # Chunk tokens so the batched-GEMM grid stays within CUDA limits. Each
         # launch permutes into its own buffer, so only a run that fits in one
