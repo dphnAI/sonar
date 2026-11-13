@@ -47,7 +47,7 @@ class RustToolParser(ToolParser):
     rejection.
 
     This class keeps the Sonar-specific bridge work:
-    - convert Sonar tool definitions into the Rust ``Tool`` shape;
+    - convert Sonar tool definitions into the Rust `Tool` shape;
     - translate typed Rust parser outputs into Sonar protocol objects; and
     - maintain Sonar streaming bookkeeping used by finish-reason handling.
 
@@ -78,7 +78,7 @@ class RustToolParser(ToolParser):
         """Adjust request options without installing Python-side constraints.
 
         Rust-backed parsers are treated as source-of-truth opaque parsers.  The
-        bridge intentionally avoids ``super().adjust_request()`` so Python does
+        bridge intentionally avoids `super().adjust_request()` so Python does
         not install JSON schema guidance or structural-tag constraints that may
         conflict with the Rust parser's native grammar.
         """
@@ -87,7 +87,7 @@ class RustToolParser(ToolParser):
         return request
 
     def _rust_tools(self) -> list[Any]:
-        """Build Rust ``Tool`` objects from Sonar tool definitions."""
+        """Build Rust `Tool` objects from Sonar tool definitions."""
         if not self.tools:
             return []
 
@@ -131,7 +131,7 @@ class RustToolParser(ToolParser):
         self.current_tool_name_sent = False
 
     def _ensure_tool_state(self, index: int) -> None:
-        """Grow Sonar streaming state arrays to contain ``index``."""
+        """Grow Sonar streaming state arrays to contain `index`."""
         while len(self.prev_tool_call_arr) <= index:
             self.prev_tool_call_arr.append({})
         while len(self.streamed_args_for_tool) <= index:
@@ -140,8 +140,8 @@ class RustToolParser(ToolParser):
     def _record_delta(self, index: int, name: str | None, arguments: str | None) -> str | None:
         """Mirror a Rust parser delta into Sonar streaming bookkeeping.
 
-        ``prev_tool_call_arr`` and ``streamed_args_for_tool`` are read later by
-        the chat serving layer to decide the final ``tool_calls`` finish reason
+        `prev_tool_call_arr` and `streamed_args_for_tool` are read later by
+        the chat serving layer to decide the final `tool_calls` finish reason
         and to flush any remaining argument bytes.
         """
         tool_call_id = None
@@ -162,7 +162,7 @@ class RustToolParser(ToolParser):
         return tool_call_id
 
     def _delta_message_from_parser_output(self, parser_output: Any | None) -> DeltaMessage | None:
-        """Translate one Rust parser output into a Sonar ``DeltaMessage``."""
+        """Translate one Rust parser output into a Sonar `DeltaMessage`."""
         if parser_output is None:
             return None
 

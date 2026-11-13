@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-import sonar._custom_ops as ops
+import sonar._cpu_ops as ops
 from sonar.platforms import current_platform
 from sonar.utils.math_utils import cdiv
 

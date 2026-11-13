@@ -6,7 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sonar.compilation.compiler_interface import InductorStandaloneAdaptor
+from sonar.compilation.compiler_interface import (
+    CompilerInterface,
+    InductorStandaloneAdaptor,
+)
 
 
 @pytest.mark.parametrize("save_format", ["binary", "unpacked"])
@@ -125,3 +128,12 @@ def test_opt_out_ignores_existing_direct_cache_index(tmp_path, monkeypatch):
         assert manager.load(MagicMock(), [], 0, compile_range) is None
         load.assert_not_called()
     assert index.read_text() == "old index must not be read"
+
+
+def test_subclass_with_compute_hash_fails_loudly():
+    """A stale override would otherwise drop out of the compile cache key."""
+    with pytest.raises(TypeError, match="compile_factors"):
+
+        class StaleCompiler(CompilerInterface):
+            def compute_hash(self, sonar_config) -> str:
+                return "stale"

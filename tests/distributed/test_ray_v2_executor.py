@@ -88,9 +88,7 @@ def assert_executor(executor, tp_size, pp_size):
     assert executor._get_output_rank() == expected_output_rank
 
     if pp_size > 1:
-        expected_concurrent_batches = pp_size + int(
-            executor.sonar_config.scheduler_config.async_scheduling and executor.sonar_config.use_v2_model_runner
-        )
+        expected_concurrent_batches = pp_size + int(executor.sonar_config.scheduler_config.async_scheduling)
         assert executor.sonar_config.max_concurrent_batches == expected_concurrent_batches
 
     executor.check_health()

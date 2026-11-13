@@ -54,6 +54,9 @@ sonar serve /models/qwen3-8b
 Include tokenizer files and custom code. Test startup with network access
 disabled before you move the image into production.
 
+The Rust frontend can use cached tokenizer and configuration files when the Hub
+is unavailable. Set `HF_HUB_OFFLINE=1` to skip Hub requests.
+
 ## Choose a load format
 
 The default `auto` format selects a compatible loader from the checkpoint.
@@ -68,6 +71,28 @@ sonar serve MODEL --load-format safetensors
 
 Use the [server argument reference](/reference/server-arguments/) to inspect
 available loaders and their dependencies.
+
+## Share preload warmup caches
+
+`sonar preload` can reuse autotune tables through a trusted Mooncake Store:
+
+```bash
+MOONCAKE_CONFIG_PATH=/path/to/mooncake.json \
+sonar preload --model MODEL --tensor-parallel-size 4 \
+  --warmup-cache-stores mooncake
+```
+
+Start the Store first. A standalone Store avoids contributing host memory from
+every daemon. Local disk is checked first, then the configured stores. Cache
+misses fall back to peer seeding or local tuning.
+
+Compiled-cache reuse additionally needs a live authenticated D2D source and
+matching Store configuration on both sides. A Store alone cannot cold-start
+compiled caches. Only use trusted stores because writers can influence the
+artifacts loaded by other nodes.
+
+Preloaded shared weights count toward the engine's GPU memory budget. A disk
+fallback does not stop the daemon or release its cached weights.
 
 ## Diagnose slow loading
 

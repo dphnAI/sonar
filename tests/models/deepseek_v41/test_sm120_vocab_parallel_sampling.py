@@ -156,7 +156,7 @@ def _config(*, batch_sharded=False, watermark=None, return_sampling_mask=False):
     )
 
 
-def _speculator(**overrides):
+def _speculator(monkeypatch, **overrides):
     from sonar.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
     spec = DSparkSpeculator.__new__(DSparkSpeculator)
@@ -172,7 +172,7 @@ def _speculator(**overrides):
     spec.num_speculative_steps = STEPS
     spec.device = torch.device("cpu")
     spec.sonar_config = _config()
-    spec.draft_logits_spec = lambda config: (torch.float32, float("-inf"))
+    monkeypatch.setattr(spec, "draft_logits_spec", lambda config: (torch.float32, float("-inf")))
     for name, value in overrides.items():
         setattr(spec, name, value)
     return spec
@@ -182,9 +182,9 @@ def _model(shard):
     return SimpleNamespace(draft_vocab_shard=lambda: shard, sample_draft_markov_vocab_parallel=lambda *a, **k: None)
 
 
-def test_speculator_enables_vocab_parallel_draft():
+def test_speculator_enables_vocab_parallel_draft(monkeypatch):
     shard = _shards()[2]
-    spec = _speculator()
+    spec = _speculator(monkeypatch)
     spec._maybe_enable_vocab_parallel_draft(_model(shard))
     assert spec.draft_vocab_shard == shard
     spec._init_draft_logits(SimpleNamespace())
@@ -208,14 +208,14 @@ def test_speculator_enables_vocab_parallel_draft():
         {"speculative_config": SimpleNamespace(rejection_sample_method="synthetic")},
     ],
 )
-def test_speculator_keeps_gathered_path(overrides):
-    spec = _speculator(**overrides)
+def test_speculator_keeps_gathered_path(monkeypatch, overrides):
+    spec = _speculator(monkeypatch, **overrides)
     spec._maybe_enable_vocab_parallel_draft(_model(_shards()[0]))
     assert spec.draft_vocab_shard is None
 
 
-def test_speculator_needs_model_shard():
-    spec = _speculator()
+def test_speculator_needs_model_shard(monkeypatch):
+    spec = _speculator(monkeypatch)
     spec._maybe_enable_vocab_parallel_draft(_model(None))
     assert spec.draft_vocab_shard is None
     spec._maybe_enable_vocab_parallel_draft(SimpleNamespace())

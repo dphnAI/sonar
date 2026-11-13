@@ -28,7 +28,12 @@ from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
 from sonar.model_executor.parameter import ModelWeightParameter
-from sonar.utils.b12x import B12X_BLOCK_CODECS, B12xWarmupUnit, get_b12x_blockscaled
+from sonar.utils.b12x import (
+    B12X_BLOCK_CODECS,
+    B12xWarmupUnit,
+    get_b12x_blockscaled,
+    reuse_packed_weight_storage,
+)
 
 
 @torch.library.custom_op("sonar::modelopt_block_embedding_chunked", mutates_args=("out",))
@@ -329,7 +334,7 @@ class ModelOptBlockQuantLinearMethod(LinearMethodBase):
                 query,
                 exact_m=tuple(sorted({m for m in capture_sizes if 0 < m < capacity})),
             )
-            layer.b12x_block_weight = packed
+            layer.b12x_block_weight = reuse_packed_weight_storage(getattr(layer, "b12x_block_weight", None), packed)
             layer.b12x_block_plan = plan
         if not self.is_embedding:
             replace_parameter(layer, "weight", torch.empty(0, dtype=torch.uint8, device=weight.device))

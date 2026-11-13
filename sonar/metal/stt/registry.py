@@ -18,7 +18,7 @@ STTModelConstructor = Callable[[dict, mx.Dtype], STTModel]
 
 
 def get_stt_model_constructor(model_type: str) -> STTModelConstructor:
-    """Return the model constructor for an STT ``model_type``."""
+    """Return the model constructor for an STT `model_type`."""
     model_type = model_type.lower()
     try:
         return _STT_MODEL_CONSTRUCTORS[model_type]

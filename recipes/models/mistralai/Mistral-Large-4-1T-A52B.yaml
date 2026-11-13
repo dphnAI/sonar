@@ -58,8 +58,6 @@ model:
     - "8192"
     - "--max-num-seqs"
     - "128"
-    - "--gpu-memory-utilization"
-    - "0.85"
   base_env:
     # Cold starts (weight load + DeepGEMM warmup + CUDA graph capture) took
     # 1300-1800 s, past the 600 s default.
@@ -142,11 +140,11 @@ variants:
       mi350x:
         install:
           pip: false
-        docker_serve_command: "sonar serve"
+        docker_serve_command: "vllm serve"
       mi355x:
         install:
           pip: false
-        docker_serve_command: "sonar serve"
+        docker_serve_command: "vllm serve"
   mxfp4:
     model_id: "amd/Mistral-Large-4-1T-A52B-Quark-MXFP4"
     precision: mxfp4
@@ -159,11 +157,11 @@ variants:
       mi350x:
         install:
           pip: false
-        docker_serve_command: "sonar serve"
+        docker_serve_command: "vllm serve"
       mi355x:
         install:
           pip: false
-        docker_serve_command: "sonar serve"
+        docker_serve_command: "vllm serve"
     description: "AMD Quark OCP MXFP4 routed experts (static weight, dynamic activation scales); attention, shared experts, dense layers, router, head, vision encoder and the DSpark drafter keep the original precision. ~578 GB, fits four MI350 Series GPUs."
 
 # Only the validated layouts are offered:

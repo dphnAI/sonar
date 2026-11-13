@@ -23,6 +23,7 @@ tracing.workspace = true
 trait-set.workspace = true
 sonar-engine-core-client.workspace = true
 sonar-llm.workspace = true
+sonar-metrics.workspace = true
 sonar-tokenizer.workspace = true
 
 [dev-dependencies]

@@ -5,8 +5,6 @@
 2. test multi loras request
 """
 
-import os
-
 import pytest
 
 from sonar import LLM, SamplingParams
@@ -16,9 +14,9 @@ from tests.utils import multi_gpu_test
 
 MODEL_PATH = "Qwen/Qwen3-0.6B"
 LORA_NAME_PATH_MAP = {
-    "Alice": "charent/self_cognition_Alice",
-    "Bob": "charent/self_cognition_Bob",
-    "Cat": "charent/self_cognition_Bob",  # same as Bob
+    "Alice": "vllm-project/self_cognition_Alice",
+    "Bob": "vllm-project/self_cognition_Bob",
+    "Cat": "vllm-project/self_cognition_Bob",  # same as Bob
 }
 
 LORA_NAME_ID_MAP = {}
@@ -37,18 +35,6 @@ def format_chatml_messages(prompt: str, system_prompt: str = "You are a helpful 
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt},
     ]
-
-
-@pytest.fixture(autouse=True)
-def set_mrv2_env():
-    original = os.environ.get("SONAR_USE_V2_MODEL_RUNNER", "0")
-    os.environ["SONAR_USE_V2_MODEL_RUNNER"] = "1"
-    yield
-
-    if original is None:
-        os.environ.pop("SONAR_USE_V2_MODEL_RUNNER", None)
-    else:
-        os.environ["SONAR_USE_V2_MODEL_RUNNER"] = original
 
 
 def make_add_lora_request(name: str, path: str):

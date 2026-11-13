@@ -77,7 +77,7 @@ def _fused_post_pre_single_pass_supported() -> bool:
 
 
 def mhc_fused_post_pre_split_config(num_tokens: int, hidden_size: int, hc_mult: int) -> tuple[int, int, int] | None:
-    """Pick ``(tile_n, n_splits, n_thr)`` for the fused post + pre-norm GEMM.
+    """Pick `(tile_n, n_splits, n_thr)` for the fused post + pre-norm GEMM.
 
     Returns None when a separate post kernel followed by a split-k GEMM is the
     better choice, or when the hidden size does not divide evenly across the
@@ -1152,7 +1152,7 @@ class HcPrenormGemmTileLangKernel(SonarTileLangJitKernel["HcPrenormGemmTileLangK
             num_tokens=WarmupIntRange(
                 1,
                 max_tokens + 1,
-                advance=lambda value: (128 if value < 128 else 1024 if value < 1024 else max_tokens + 1),
+                advance=lambda value: 128 if value < 128 else 1024 if value < 1024 else max_tokens + 1,
             ),
             hc_hidden_size=hidden_size * hc_mult,
             hidden_size=hidden_size,
@@ -1411,7 +1411,7 @@ class MhcPreBigFuseTileLangKernel(SonarTileLangJitKernel["MhcPreBigFuseTileLangK
             sinkhorn_repeat=sinkhorn_repeat,
             norm_eps=norm_eps,
             broadcast_norm_eps=broadcast_norm_eps if broadcast_norm_eps is not None else norm_eps,
-            _when=lambda *, use_fused_tilelang, num_tokens: (not use_fused_tilelang or num_tokens <= 16),
+            _when=lambda *, use_fused_tilelang, num_tokens: not use_fused_tilelang or num_tokens <= 16,
         )
 
     def warmup_inputs(self, compile_key: CompileKey) -> dict[str, Any]:

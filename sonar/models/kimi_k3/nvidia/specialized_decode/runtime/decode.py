@@ -8,7 +8,7 @@ from typing import Any, NamedTuple
 
 import torch
 
-from sonar.config import CUDAGraphMode
+from sonar.config import CUDAGraphMode, get_current_sonar_config
 from sonar.distributed import get_tp_group
 from sonar.distributed import tensor_model_parallel_all_reduce as all_reduce
 from sonar.forward_context import get_forward_context, is_forward_context_available
@@ -16,32 +16,63 @@ from sonar.logger import init_logger
 from sonar.platforms import current_platform
 from sonar.utils.math_utils import round_up
 
-from ..cutedsl.attn_res.prepared import PreparedAttnRes
+from ...ops import attn_res
+from ..cutedsl.attn_res.prepared import (
+    PreparedAttnRes,
+    statistics_blocks,
+    statistics_rows,
+)
 from ..cutedsl.common.embedding import PreparedEmbedding
 from ..cutedsl.common.twoshot import TwoShot
+from ..cutedsl.kda.prepared import PreparedKda
 from ..cutedsl.moe.dense import PreparedDenseMLP
 from ..cutedsl.moe.experts_runtime import PersistentExperts
 from ..cutedsl.moe.front import SharedFront
 from ..cutedsl.moe.prepared import MoEScratch, PreparedMoE
 from ..cutedsl.moe.small_batch import chain as small_batch_chain
 from ..cutedsl.moe.tail_runtime import MoeTailBox, PreparedTail
+from ..cutedsl.moe.wide import WideMoE, WideScratch, wide_batches
 from ..cutedsl.oproj.prepared import OprojMailbox
+from ..recoverssm.state import install_layers as install_recoverssm_layers
+from ..recoverssm.state import install_model_state as install_recoverssm_model_state
+from .logits_gather import install_logits_gather
 from .prefetch import PrefetchController
-from .providers import BATCHES, PREPARED_MAX, Attention, pack_front
+from .providers import (
+    ATTENTION_MAX,
+    BATCHES,
+    PREPARED_MAX,
+    WIDE_ROWS,
+    Attention,
+    attention_kind,
+    pack_dsa_projection,
+    pack_front,
+    step_cap,
+    wide_caps,
+)
 
 logger = init_logger(__name__)
+
+# The attention layer kinds of the wide-step caps.
+WIDE = sorted({*(kind for kind, _ in WIDE_ROWS), "kda"})
 
 
 class Step(NamedTuple):
     q: int  # tokens per request
     metadata: list  # per layer
     slot_mapping: Any
-    positions: torch.Tensor
+    # A wide step: more rows than the specialized step serves (``run_wide``).
+    wide: bool = False
+    positions: Any = None
+
+
+def attention_layer(module):
+    """The registered attention layer of a decoder's attention: a K3.1 DSA layer's
+    inner sparse MLA layer, else the module itself."""
+    return module.mla_attn.mla_attn if hasattr(module, "dsa_indexer") else module
 
 
 def layer_name(module):
-    if hasattr(module, "dsa_indexer"):
-        module = module.mla_attn.mla_attn
+    module = attention_layer(module)
     return getattr(module, "prefix", getattr(module, "layer_name", None))
 
 
@@ -72,27 +103,78 @@ def is_uniform_verify(md, q, b):
 
 
 def caches_of(attention):
-    cache = getattr(attention, "kv_cache", ())
+    cache = getattr(attention_layer(attention), "kv_cache", ())
     return [cache] if isinstance(cache, torch.Tensor) else list(cache)
 
 
 class SpecializedDecode:
     """Built once the weights are loaded; owns every prepared provider, the
-    mailboxes and the decode buffers. Reads the backbone, never modifies it."""
+    mailboxes and the decode buffers. Reads the backbone, never modifies it (but
+    for the deferred RecoverSSM's per-instance KDA verify, `recoverssm.state`)."""
+
+    attention: dict[int, Any]
+    feed_forward: dict[int, Any]
+    wide_moe: dict[int, Any]
+
+    @staticmethod
+    def needs_native_providers(layers):
+        """Keep quantized K3.1 linears on their native quant_method dispatch."""
+        from sonar.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+
+        return any(hasattr(layer.self_attn, "dsa_indexer") for layer in layers) and any(
+            isinstance(module, LinearBase) and not isinstance(module.quant_method, UnquantizedLinearMethod)
+            for layer in layers
+            for root in (layer.self_attn, layer.mlp)
+            for module in root.modules()
+        )
 
     def __init__(self, backbone, config):
+        layers = backbone.layers[backbone.start_layer : backbone.end_layer]
+        self.native_providers = self.needs_native_providers(layers)
+        if self.native_providers:
+            from . import kda_dtypes
+
+            sonar_config = get_current_sonar_config()
+            parallel, cache = sonar_config.parallel_config, sonar_config.cache_config
+            if parallel.tensor_parallel_size not in (8, 16) or parallel.enable_expert_parallel:
+                raise ValueError("Kimi K3.1 native specialized providers require TP8/16 without expert parallelism")
+            if kda_dtypes(sonar_config) != (torch.bfloat16, torch.float32):
+                raise ValueError("Kimi K3.1 native specialized providers require BF16 conv and FP32 recurrent state")
+            if cache.use_replayssm or cache.use_kda_recoverssm:
+                raise ValueError("Kimi K3.1 native specialized providers do not support ReplaySSM / RecoverSSM")
+        # The deferred RecoverSSM's KDA layers, before any provider reads them.
+        install_recoverssm_layers(backbone.layers[backbone.start_layer : backbone.end_layer])
         self.backbone, self.buffers = backbone, {}
+        self.kv_prepared = False  # prepare_kv for the bound KV cache
+        self.cache_config = get_current_sonar_config().cache_config
         q = config.q
         # Verify steps decode q tokens per request at M = requests * q tokens; FULL
         # verify graphs round each capture size up to whole requests.
         rounded = {round_up(s, q) for s in config.capture_sizes}
         verify = {m for m in rounded if m <= PREPARED_MAX}
-        self.batches, self.q = tuple(sorted({*BATCHES, *verify})), q
+        # Steps up to the model's specialized-vs-stock crossover (wider: stock).
+        cap = step_cap(config.dsa, config.dcp > 1)
+        cap = min(cap, PREPARED_MAX)
+        batches = {b for b in (*BATCHES, *verify) if b <= cap}
+        self.batches, self.q = tuple(sorted(batches)), q
+        # Wide verify steps (cap < rows <= ATTENTION_MAX): the stock layer loop with
+        # each attention layer kind's projection and core specialized up to its own
+        # crossover (providers.WIDE_ROWS); kinds and rows past it run stock.
+        decoders = backbone.layers[backbone.start_layer : backbone.end_layer]
+        recoverssm = any(getattr(d.self_attn, "recoverssm_records", None) is not None for d in decoders)
+        self.wide_cap = wide_caps(config.dcp > 1, recoverssm)
+        kinds = ("kda", "mla", "dsa") if config.dsa else ("kda", "mla")
+        widest = max(self.wide_cap[kind] for kind in kinds)
+        wide = {m for m in rounded if q > 1 and cap < m <= min(widest, ATTENTION_MAX)}
+        self.wide = tuple(sorted(wide))
+        self.attention_rows = max((*self.batches, *self.wide))
         self.queries = (1, q) if q > 1 else (1,)
         # The longest sequence the deployment serves bounds the MLA split count.
-        self.max_context, self.mla_core = config.max_context, config.mla_core
+        self.max_context, self.fi_kernels = config.max_context, config.fi_kernels
+        self.prims_ts_rows = config.prims_ts_rows
         # Decode context parallel over the TP ranks: MLA KV is sequence-sharded.
         self.dcp, self.dcp_box, self.mla_layers = config.dcp, None, 0
+        self.dsa_dcp_box, self.dsa_layers = None, 0
         group = get_tp_group()
         self.tp, self.rank = group.world_size, group.rank_in_group
         self.group = group.device_group
@@ -100,6 +182,19 @@ class SpecializedDecode:
 
         layers = backbone.layers[backbone.start_layer : backbone.end_layer]
         self.layers = layers = tuple(layers)
+        # DEP (TP1 attention per DP rank, EP MoE): the stock layer loop with the
+        # TP1-specialized attention layers (runtime.dep), every step a wide one.
+        self.dep = self.tp == 1
+        self.hybrid = None
+        if self.dep:
+            self.build_dep(rounded)
+            return
+        # Hybrid (TP-G attention groups + EP MoE over every rank): runtime.hybrid.
+        if get_current_sonar_config().parallel_config.enable_expert_parallel:
+            from .hybrid import HybridStep
+
+            self.hybrid = HybridStep(self, rounded)
+            return
         self.build_providers()
         self.embedding = PreparedEmbedding(backbone.embed_tokens, self.tp, self.rank)
         self.before = {d.layer_idx: PreparedAttnRes.for_target(d, has_delta=d is not layers[0]) for d in layers}
@@ -120,10 +215,90 @@ class SpecializedDecode:
         end = layers[-1].layer_idx + 1
         for index in self.aux_layers:
             (self.final if index == end else self.before[index]).bind_aux()
+        if not self.native_providers:
+            self.bind_statistics_ahead(layers)
         empty = partial(torch.empty, device=self.device, dtype=torch.bfloat16)
         self.hidden = (empty((64, 7168)), empty((64, 7168)))
         self.prefix = empty((64, 7168))
         self.blocks = empty((64, backbone.num_attn_res_blocks, 7168))
+
+    def bind_statistics_ahead(self, layers):
+        """For the `statistics_rows` of this (TP, DCP), each KDA layer that follows
+        a KDA layer and reads one of the `statistics_blocks` saved-block counts
+        takes its AttnRes saved-block statistics precomputed by the previous layer's
+        fused o-projection, whose own AttnRes reads the same saved blocks; FP32 rows
+        in two parities by the computing layer. Other layers and rows: unchanged."""
+        rows = statistics_rows(self.tp, self.dcp) & set(self.batches)
+        counts = statistics_blocks(self.tp, self.dcp)
+        if not rows:
+            return
+        cap = round_up(max(rows), 8)  # 16-byte aligned parity rows
+        dtype = dict(device=self.device, dtype=torch.float32)
+        mixture = torch.zeros((2, cap, 7168), **dtype)
+        scal = torch.zeros((2, cap, 2), **dtype)
+        self.buffers["attn_res.statistics"] = mixture, scal
+        bound = []
+        for host, target in zip(layers, layers[1:]):
+            kinds = {attention_kind(d.self_attn) for d in (host, target)}
+            nb = target.prev_valid_blocks
+            same = nb == host.prev_valid_blocks + host.is_block_write_layer
+            if kinds != {"kda"} or nb not in counts or not same:
+                continue
+            parity = host.layer_idx % 2
+            views = mixture[parity], scal[parity]
+            output = self.attention[host.layer_idx].output
+            batches = output.bind_ahead(target, *views, rows)
+            if batches:
+                self.before[target.layer_idx].bind_statistics(*views, batches)
+                bound.append(target.layer_idx)
+        logger.info_once(
+            "Specialized decode AttnRes statistics ahead: rows %s, %d layers %s",
+            tuple(sorted(rows)),
+            len(bound),
+            tuple(bound),
+        )
+
+    def build_dep(self, rounded):
+        """DEP: no full specialized step (its MoE, o-projection and AttnRes
+        providers are TP8 / TP16 ones); every decode or uniform verify step of up
+        to the KV cache dtype's DEP_ROWS rows runs `run_wide` with the DEP_KINDS
+        attention layers specialized at TP1 (runtime.dep.DepAttention), the rest
+        stock."""
+        from .dep import (
+            DEP_KINDS,
+            DEP_ROWS,
+            DepAttention,
+            DepKda,
+            DepMoe,
+            dep_moe_supported,
+        )
+
+        self.batches = ()
+        self.aux_layers = tuple(self.backbone.aux_hidden_state_layers)
+        cap = DEP_ROWS.get(self.cache_config.cache_dtype, 0)
+        self.wide = tuple(sorted(m for m in rounded if m <= cap))
+        self.wide_cap = {kind: cap * (kind in DEP_KINDS) for kind in WIDE}
+        self.attention_rows = max(self.wide, default=0)
+        self.attention = {}
+        self.feed_forward = {}
+        self.wide_moe = {}
+        if not self.wide:
+            return
+        providers = {"dsa": DepAttention, "kda": DepKda}
+        side = None  # the DEP MoE layers' side stream (one per rank)
+        for layer in self.layers:
+            kind = attention_kind(layer.self_attn)
+            if kind in DEP_KINDS:
+                self.attention[layer.layer_idx] = providers[kind](layer, self)
+            if layer.is_moe_layer and dep_moe_supported(layer.mlp):
+                side = side or torch.cuda.Stream()
+                moe = DepMoe(layer.mlp, self.wide, side)
+                self.wide_moe[layer.layer_idx] = moe
+
+    def wide_batches(self, kind):
+        """The wide step rows whose `kind` attention layers run the specialized
+        projection and core."""
+        return tuple(b for b in self.wide if b <= self.wide_cap[kind])
 
     def build_providers(self):
         """Every layer's attention and feed-forward providers, the model's mailboxes
@@ -132,10 +307,9 @@ class SpecializedDecode:
         config, layers = self.backbone.config, self.layers
         self.attention: dict[int, Any] = {}
         self.feed_forward: dict[int, Any] = {}
-        # K3.1's sparse MLA backend owns its cache and indexer. Its projections
-        # (and NF12 KDA/MLP projections) must dispatch through quant_method.apply,
-        # not the dense K3 executor's BF16/MXFP4 weight layouts.
-        self.native_providers = any(hasattr(d.self_attn, "dsa_indexer") for d in layers)
+        self.wide_moe = {}
+        # Quantized K3.1 projections retain quant_method.apply and native cache
+        # ownership. BF16 K3.1 uses the upstream prepared DSA providers.
         self.prefetch: PrefetchController | None = None
         if self.native_providers:
             self.attention = {d.layer_idx: d.self_attn for d in layers}
@@ -164,8 +338,12 @@ class SpecializedDecode:
         tp, rank, device, batches = self.tp, self.rank, self.device, self.batches
         owner = self.group, device, tp, rank
         packed = {d.layer_idx: pack_front(d.mlp, rank, tp) for d in layers if d.is_moe_layer}
+        for d in layers:  # before the prefetch tables take the weight addresses
+            if attention_kind(d.self_attn) == "dsa":
+                pack_dsa_projection(d.self_attn)
+        self.packed = packed
         prefetch = self.prefetch = PrefetchController(self, layers, packed)
-        state = MoEScratch(tp, device, batches)
+        state = self.moe_state = MoEScratch(tp, device, batches)
         mailbox, tail_box, moe_layers = (
             OprojMailbox(*owner),
             MoeTailBox(*owner),
@@ -174,6 +352,9 @@ class SpecializedDecode:
         twoshot = TwoShot(*owner)
         front_box = OprojMailbox(*owner, (1, 64, 3584 + 2 * 896))
         small_batch = small_batch_chain.SmallBatchBox(*owner)
+        # Wide steps' MoE layers (moe.wide), sharing one scratch.
+        wide = wide_batches(self.wide)
+        wide_state = WideScratch(tp, device, wide) if wide else None
         for layer in layers:
             index, module = layer.layer_idx, layer.mlp
             boxes = (mailbox, small_batch, twoshot)
@@ -193,24 +374,68 @@ class SpecializedDecode:
             up = module.routed_expert_up_proj.weight
             op = module.experts._k3_latent_moe_tail_op
             placement = tail_box, moe_layers.index(index), len(moe_layers)
-            tail = PreparedTail(op, norm, up, batches, placement)
+            tail = PreparedTail(op, norm, up, batches, placement, dcp=self.dcp)
             moe = PreparedMoE(front, experts, tail, state, prefetch=prefetch, layer_idx=index)
             moe.small_batch = small_batch_chain.SmallBatchChain(
                 small_batch, module, experts, tail, index, beta, linear_beta, prefetch
             )
             self.feed_forward[index] = moe
+            if wide_state is not None:
+                self.wide_moe[index] = WideMoE(
+                    module,
+                    experts,
+                    wide_state,
+                    beta,
+                    linear_beta,
+                    packed=packed[index],
+                )
+
+    def bind_model_state(self, state):
+        """Install the runner-state side of the deferred RecoverSSM on the model
+        runner state (`recoverssm.state.install_model_state`), and the TP
+        specialized decode's target logits gather (`logits_gather`)."""
+        install_recoverssm_model_state(state)
+        model = getattr(state, "language_model", None)
+        if model is not None and not self.dep and self.hybrid is None:
+            install_logits_gather(model, self.group, self.tp, self.rank, self.device, self.dcp)
+
+    @torch.no_grad()
+    def process_weights_after_loading(self):
+        """After a weight reload: re-derive, in place, the copies built from the
+        weights. Everything else reads the backbone's tensors directly, which a
+        reload refills at the same addresses."""
+        if self.native_providers:
+            return
+        for layer in self.layers:
+            if not self.dep and self.hybrid is None:
+                if layer.is_moe_layer:
+                    fresh = pack_front(layer.mlp, self.rank, self.tp)
+                    self.packed[layer.layer_idx].copy_(fresh)
+                else:
+                    self.feed_forward[layer.layer_idx].process_weights_after_loading(layer.mlp)
+            core = getattr(self.attention.get(layer.layer_idx), "core", None)
+            # KDA keeps derived copies; MLA reads the backbone's tensors
+            if isinstance(core, PreparedKda):
+                core.process_weights_after_loading(layer.self_attn)
 
     def prepare_kv(self):
-        """Compile each layer's cores for its bound KV cache layout (the profiling
-        cache, then the real one)."""
+        """Compile each layer's cores for its bound KV cache layout. The memory
+        profiling's throwaway cache is left unprepared (its compiles would all be
+        thrown away: every KV-dependent kernel is specialized to its cache's block
+        count), so its steps run the stock forward; the worker records the real
+        cache's block count before binding it, the profiling one only after."""
+        self.kv_prepared = False
+        if self.cache_config.num_gpu_blocks is None:  # the profiling cache
+            return
         for layer in self.layers:
-            provider = self.attention[layer.layer_idx]
-            if isinstance(provider, Attention):
-                provider.prepare_layout(caches_of(layer.self_attn))
+            attention = self.attention.get(layer.layer_idx)
+            if attention is not None and not self.native_providers:
+                attention.prepare_layout(caches_of(layer.self_attn))
+        self.kv_prepared = True
 
     def embed_input_ids(self, ids):
         rows = ids.shape[0] if ids.ndim == 1 and ids.is_contiguous() else 0
-        if not 1 <= rows <= PREPARED_MAX:
+        if self.dep or self.hybrid or not 1 <= rows <= PREPARED_MAX:
             return self.backbone.embed_input_ids(ids)
         table = self.backbone.embed_tokens.weight
         return self.embedding.run(ids, table.new_empty((ids.shape[0], table.shape[1])))
@@ -219,8 +444,12 @@ class SpecializedDecode:
         """This step's decode plan, or None to run the stock forward instead.
 
         Steps that run the stock forward:
-        - pipeline-parallel stage inputs (``intermediate_tensors``);
-        - token counts without prepared providers (above 64 or not in ``batches``);
+        - pipeline-parallel stage inputs (`intermediate_tensors`);
+        - token counts without prepared providers (not in `batches`, and not a
+          wide verify step: q > 1 and in `wide`, the rows past the step cap
+          that some attention layer kind's projection and core take, run_wide);
+        - steps before `prepare_kv` bound the KV cache (the memory profiling's
+          cache is never prepared);
         - steps outside a CUDA graph capture (profiling, warmup and the warmup run
           before each capture), so every stock kernel runs before its capture;
         - PIECEWISE steps, keyed by token count alone and so captured as stock;
@@ -232,7 +461,10 @@ class SpecializedDecode:
         decode need every rank to take the same path.
         """
         b = positions.shape[0]
-        if intermediate_tensors is not None or b not in self.batches:
+        wide = b in self.wide
+        if intermediate_tensors is not None or not (b in self.batches or wide):
+            return None
+        if not self.kv_prepared:  # KV cache not prepared (memory profiling)
             return None
         if not torch.cuda.is_current_stream_capturing():
             return None
@@ -244,15 +476,20 @@ class SpecializedDecode:
         by_layer = context.attn_metadata
         rows: list[Any] = list(by_layer.values()) if isinstance(by_layer, dict) else []
         q = self.q if any(getattr(md, "num_spec_decodes", 0) for md in rows) else 1
-        if b % q:
+        # Wide steps verify (TP8 / TP16); DEP steps also decode one token each.
+        if b % q or (wide and q == 1 and not self.dep):
             return None
         metadata = [decode_metadata(d.self_attn, context, q, b) for d in self.layers]
         if any(md is None for md in metadata):
             return None
-        return Step(q, metadata, context.slot_mapping, positions)
+        return Step(q, metadata, context.slot_mapping, wide, positions)
 
     def run(self, step, input_ids, inputs_embeds):
         """Normalized hidden states (and the aux streams) of a planned step."""
+        if self.hybrid is not None:
+            return self.hybrid.run(step, input_ids, inputs_embeds)
+        if step.wide:
+            return self.run_wide(step, input_ids, inputs_embeds)
         x = inputs_embeds
         if x is None:
             x = self.embed_input_ids(input_ids)
@@ -289,7 +526,54 @@ class SpecializedDecode:
             self.final.run(hidden, prefix, blocks, out, aux.get(index + 1))
         if self.prefetch is not None:
             self.prefetch.join()
+            self.moe_state.join()
         return (out, aux_out) if aux_out else out
+
+    def run_wide(self, step, input_ids, inputs_embeds):
+        """A wide step: the stock decoder layer loop (KimiLinearModel.forward without
+        pipeline or sequence parallelism: AttnRes, o_proj + all-reduce, MoE / dense
+        MLP), with the attention layers whose kind serves this many rows running the
+        specialized input projection and core instead of the stock module's."""
+        backbone = self.backbone
+        x = inputs_embeds
+        if x is None:
+            x = backbone.embed_input_ids(input_ids)
+        b, q, slots, positions = x.shape[0], step.q, step.slot_mapping, step.positions
+        aux = [x] if backbone.start_layer in self.aux_layers else []
+        residual = x.new_empty(b, backbone.num_attn_res_blocks, x.shape[1])
+        prefix_sum, hidden = x, None
+        for layer, md in zip(self.layers, step.metadata):
+            hidden, prefix_sum, residual = layer._pre_attn_norm(hidden, residual, prefix_sum)
+            attention = self.attention.get(layer.layer_idx)
+            if not self.native_providers and attention is not None and b in attention.wide:
+                caches = caches_of(layer.self_attn)
+                hidden = attention.run_wide(hidden, caches, md, slots, q)
+            else:
+                hidden = layer._run_self_attn(positions, hidden)
+            hidden, prefix_sum, residual = layer._post_attn_norm(hidden, residual, prefix_sum)
+            # moe.wide for the rows it prepared (65-WIDE_ROWS); dense MLP and any
+            # other wide rows (a step cap below 64): stock.
+            moe = self.wide_moe.get(layer.layer_idx)
+            if moe is not None and moe.serves(b):
+                hidden = moe.run(hidden)
+            else:
+                hidden = layer.mlp(hidden)
+            if layer.layer_idx + 1 in self.aux_layers:
+                aux.append(backbone._capture_aux_hidden_stream(layer.layer_idx, prefix_sum, hidden, residual))
+        final = backbone.output_attn_res_norm
+        hidden = attn_res(
+            prefix_sum,
+            hidden,
+            residual,
+            final.weight,
+            backbone.output_attn_res_proj.weight.squeeze(0),
+            None,
+            num_blocks=backbone.num_attn_res_blocks,
+            block_write_idx=-1,
+            eps=final.variance_epsilon,
+            output_norm_eps=0.0,
+        )
+        return self.normalize((hidden, aux) if aux else hidden)
 
     def normalize(self, output):
         """A stock step's output with the backbone's final norm applied, as the
@@ -297,7 +581,7 @@ class SpecializedDecode:
 
         Runs in chunks of at most 255 rows: the stock RMSNorm kernel reduces with
         1024-thread blocks below 256 rows and 256-thread blocks above, so chunking keeps
-        the reduction order ``compute_logits`` uses for the few sampled rows, and
+        the reduction order `compute_logits` uses for the few sampled rows, and
         prefill logits match stock.
         """
         hidden, aux = output if isinstance(output, tuple) else (output, None)

@@ -4,7 +4,7 @@
 
 import torch
 
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 from sonar.model_executor.layers.quantization.utils import replace_parameter
 from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     _upcast_e8m0_to_fp32,

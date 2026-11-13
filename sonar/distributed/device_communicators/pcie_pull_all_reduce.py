@@ -128,12 +128,10 @@ class PciePullAllReduce:
             error = f"{type(exc).__name__}: {exc}"
         return self._exchange(phase, value, error)
 
-    def _manifest(self, config: "SonarConfig", use_v2_model_runner: bool) -> dict[str, Any]:
+    def _manifest(self, config: "SonarConfig") -> dict[str, Any]:
         parallel = config.parallel_config
         model = config.model_config
         errors: list[str] = []
-        if not use_v2_model_runner:
-            errors.append("the V2 model runner is required")
         if not current_platform.is_cuda() or self.device.type != "cuda" or self.device.index is None:
             errors.append("an indexed NVIDIA CUDA device is required")
         if self.world_size != 4 or parallel.tensor_parallel_size != 4:
@@ -344,7 +342,7 @@ class PciePullAllReduce:
 
         self._stage("host registration", register)
 
-    def initialize(self, config: "SonarConfig", *, use_v2_model_runner: bool) -> None:
+    def initialize(self, config: "SonarConfig") -> None:
         """Collectively allocate the fixed workspace before GPU memory profiling."""
         if dist.get_backend(self.group) != dist.Backend.GLOO:
             raise ValueError(f"PCIe {self.transport} all-reduce requires a CPU Gloo process group")
@@ -353,7 +351,7 @@ class PciePullAllReduce:
             def manifest():
                 if self._initialization_attempted or self._destroyed:
                     raise RuntimeError(f"a PCIe {self.transport} workspace cannot be initialized twice or revived")
-                return self._manifest(config, use_v2_model_runner)
+                return self._manifest(config)
 
             manifests = self._stage("configuration", manifest)
             self._initialization_attempted = True
@@ -514,7 +512,7 @@ class PciePullAllReduce:
             return out
 
     def all_gather(self, inp: torch.Tensor) -> torch.Tensor:
-        """Concatenate every rank's ``inp`` along dim 0 in rank order."""
+        """Concatenate every rank's `inp` along dim 0 in rank order."""
         with self._execution():
             if not self.should_use_gather(inp):
                 raise ValueError("tensor does not satisfy the rank-agreed PCIe gather admission policy")

@@ -118,7 +118,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### Install Sonar (AMD ROCm)
@@ -135,7 +135,7 @@ guide: |
   ### Tensor Parallel + Expert Parallel (FP8 on 4 GPUs)
 
   ```bash
-  sonar serve zai-org/GLM-4.6V-FP8 \
+  sonar run zai-org/GLM-4.6V-FP8 \
        --tensor-parallel-size 4 \
        --tool-call-parser glm45 \
        --reasoning-parser glm45 \
@@ -152,7 +152,7 @@ guide: |
   export SAFETENSORS_FAST_GPU=1
   export SONAR_ROCM_USE_AITER=1
 
-  sonar serve zai-org/GLM-4.6V-FP8 \
+  sonar run zai-org/GLM-4.6V-FP8 \
        --tensor-parallel-size 4 \
        --tool-call-parser glm45 \
        --reasoning-parser glm45 \
@@ -193,7 +193,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --backend openai-chat \
     --endpoint /v1/chat/completions \
     --model zai-org/GLM-4.6V-FP8 \
@@ -207,7 +207,7 @@ guide: |
 
   - **Vision encoder overhead:** Prefer `--mm-encoder-tp-mode data` over TP for the encoder.
   - **Long-context memory:** At 128K context, tune `--max-num-batched-tokens` and
-    `--gpu-memory-utilization` to prevent OOM.
+    `--max-num-seqs` to prevent OOM.
 
   ## References
 

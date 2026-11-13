@@ -8,6 +8,8 @@ use clap::{Parser, Subcommand};
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use sonar_tracing::{LogFormatter, LogLevel};
+
 #[derive(Parser)]
 #[command(
     name = "sonar-bench",
@@ -42,11 +44,11 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Some(Command::MmProcessor(args)) => {
             let (timing_layer, timing_stats) = sonar_chat::mm_timing_layer();
-            sonar_tracing::init_tracing_with("Bench", timing_layer);
+            sonar_tracing::init_tracing_with("Bench", LogLevel::from_env(), timing_layer);
             runtime.block_on(sonar_bench::run_mm_processor(args, timing_stats))
         }
         None => {
-            sonar_tracing::init_tracing("Bench");
+            sonar_tracing::init_tracing("Bench", LogLevel::from_env(), LogFormatter::Text);
             runtime.block_on(sonar_bench::run(cli.args))
         }
     }

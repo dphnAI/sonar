@@ -121,6 +121,7 @@ def _build(monkeypatch, gathered_heads, segmented_supported=True):
             v_head_dim=128,
         )
         self.dcp_world_size = DCP
+        self.non_causal_multi_token_decode = False
         self.reorder_batch_threshold = 5
 
     monkeypatch.setattr(rocm_aiter_mla.MLACommonMetadataBuilder, "__init__", init_common_builder)
@@ -147,6 +148,7 @@ def _build(monkeypatch, gathered_heads, segmented_supported=True):
         SimpleNamespace(
             dtypes=SimpleNamespace(fp8="fp8", fp16="fp16", bf16="bf16"),
             get_mla_metadata_info_v1=lambda *args, **kwargs: tuple((1, torch.int32) for _ in range(6)),
+            get_mla_decode_shape_support=lambda *args, **kwargs: SimpleNamespace(native=False, supported=None),
         ),
     )
     config = SimpleNamespace(

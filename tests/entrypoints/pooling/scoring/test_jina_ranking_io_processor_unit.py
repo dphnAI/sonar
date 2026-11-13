@@ -10,8 +10,8 @@ from transformers import TokenizersBackend
 
 from sonar import PoolingParams
 from sonar.entrypoints.pooling.scoring.io_processor import JinaRankingIOProcessor
-from sonar.entrypoints.pooling.scoring.typing import ScoringData
-from sonar.entrypoints.pooling.typing import OfflineScoringInputsContext
+from sonar.entrypoints.pooling.scoring.types import ScoringData
+from sonar.entrypoints.pooling.types import OfflineScoringInputsContext
 from sonar.renderers import TokenizeParams
 
 pytestmark = pytest.mark.skip_global_cleanup

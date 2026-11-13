@@ -19,16 +19,19 @@ import torch
 import sonar.v1.hisparse.binding as attn_utils_module
 import sonar.v1.hisparse.runtime as hisparse_runtime_module
 from sonar.config.compilation import CompilationConfig, CUDAGraphMode
+from sonar.models.kimi_k3.common.dsa_cache import SelfAddressedMLASpec
 from sonar.v1.attention.backend import AttentionBackend, AttentionCGSupport, MultipleOf
 from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
 from sonar.v1.hisparse.backend import CUDAHiSparseBackend
 from sonar.v1.hisparse.binding import allocate_hisparse_kv_caches
+from sonar.v1.hisparse.runtime import _has_hisparse_ops
 from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     HiSparseResidentSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheLayout,
+    KVCacheSpec,
     KVCacheTensor,
     MLAAttentionSpec,
     SparseCacheRole,
@@ -56,17 +59,18 @@ from tests.v1.attention.utils import (
 
 
 @pytest.mark.parametrize(
-    ("enabled", "block_size", "main_sizes", "indexer_sizes", "expected"),
+    ("enabled", "block_size", "main_sizes", "indexer_sizes", "expected", "indexer"),
     [
-        (True, 256, [64], [64], 64),
-        (True, 64, [32, 64], [16, 32], 32),
-        (True, 64, [MultipleOf(16)], [32], 32),
-        (True, 64, [64], [32], None),
-        (False, 256, [64], [64], 256),
+        (True, 256, [64], [64], 64, 64),
+        (True, 64, [32, 64], [16, 32], 32, 32),
+        (True, 64, [MultipleOf(16)], [32], 32, 32),
+        (True, 64, [64], [32], None, None),
+        (False, 256, [64], [64], 256, 256),
+        (True, 384, [MultipleOf(32)], [128, 256], 128, 256),
     ],
 )
 def test_get_kv_cache_spec_resolves_hisparse_block_size(
-    monkeypatch, enabled, block_size, main_sizes, indexer_sizes, expected
+    monkeypatch, enabled, block_size, main_sizes, indexer_sizes, expected, indexer
 ):
     """Resolve shared MLA geometry before planning; leave other specs alone."""
     specs = {
@@ -91,9 +95,17 @@ def test_get_kv_cache_spec_resolves_hisparse_block_size(
             get_kv_cache_spec=lambda _, spec=specs[name]: spec,
             get_attn_backend=lambda backend=backend: backend,
             is_draft_layer=False,
+            kv_sharing_target_layer_name=None,
         )
     monkeypatch.setattr(attn_utils, "get_layers_from_sonar_config", lambda *_: layers)
     monkeypatch.setattr(attn_utils_module, "get_hisparse_kv_cache_groups", lambda *_: [])
+    mamba_fit_inputs: list[dict[str, KVCacheSpec]] = []
+
+    def fit_mamba_blocks(_, kv_cache_spec, __):
+        mamba_fit_inputs.append(kv_cache_spec)
+        return kv_cache_spec
+
+    monkeypatch.setattr(attn_utils_module, "fit_mamba_blocks_to_attention", fit_mamba_blocks)
     config = SimpleNamespace(attention_config=SimpleNamespace(hisparse_config=object() if enabled else None))
     if expected is None:
         with pytest.raises(ValueError, match="supported by every sparse"):
@@ -101,7 +113,9 @@ def test_get_kv_cache_spec_resolves_hisparse_block_size(
         return
 
     resolved = attn_utils.get_kv_cache_spec(config)
-    assert resolved["main"].block_size == resolved["indexer"].block_size == expected
+    assert resolved["main"].block_size == expected
+    assert resolved["indexer"].block_size == indexer
+    assert [specs["indexer"].block_size for specs in mamba_fit_inputs] == ([indexer] if enabled else [])
     dense_backend = layers["dense"].get_attn_backend()
     assert resolved["dense"] == customize_attention_spec(dense_backend, specs["dense"])
     assert all(spec.block_size == block_size for spec in specs.values())
@@ -118,6 +132,7 @@ def test_get_kv_cache_spec_tags_draft_layers(monkeypatch):
             get_kv_cache_spec=lambda _: spec,
             get_attn_backend=lambda: backend,
             is_draft_layer=name == "draft",
+            kv_sharing_target_layer_name=None,
         )
         for name in ("target", "draft")
     }
@@ -261,8 +276,10 @@ def test_flashinfer_sparse_full_graphs_exclude_prefill_keep_varlen_decode(
 
     backend = FlashInferMLASparseTRTLLMBackend
     config: Any = SimpleNamespace(
-        speculative_config=SimpleNamespace(num_speculative_tokens=num_speculative_tokens, parallel_drafting=False),
-        use_v2_model_runner=True,
+        speculative_config=SimpleNamespace(
+            num_speculative_tokens=num_speculative_tokens,
+            max_num_new_slots_for_drafting=0,
+        ),
     )
     spec = MLAAttentionSpec(block_size=64, num_kv_heads=1, head_size=576, dtype=torch.bfloat16)
     group = AttentionGroup(backend, ["target"], spec, 0)
@@ -274,7 +291,6 @@ def test_flashinfer_sparse_full_graphs_exclude_prefill_keep_varlen_decode(
         support.min_cg_support,
         support.min_cg_attn_backend,
         uniform_decode_query_len=1 + num_speculative_tokens,
-        use_v2_model_runner=True,
     )
     assert mode.mixed_mode() != CUDAGraphMode.FULL
     assert mode.decode_mode() == CUDAGraphMode.FULL
@@ -318,9 +334,8 @@ def test_dsv41_sparse_builders_keep_varlen_decode_graphs_only(module_name, backe
     config: Any = SimpleNamespace(
         speculative_config=SimpleNamespace(
             num_speculative_tokens=num_speculative_tokens,
-            parallel_drafting=False,
+            max_num_new_slots_for_drafting=0,
         ),
-        use_v2_model_runner=True,
     )
     spec = MLAAttentionSpec(block_size=64, num_kv_heads=1, head_size=576, dtype=torch.bfloat16)
     group = AttentionGroup(backend, ["target"], spec, 0)
@@ -391,57 +406,41 @@ def test_get_kv_sharing_fast_prefill_eligible_layers(monkeypatch: pytest.MonkeyP
     assert attn_utils.get_kv_sharing_fast_prefill_eligible_layers(sonar_config) == set()
 
 
-@pytest.mark.parametrize("num_tokens", [1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128])
-@pytest.mark.parametrize("num_active_loras", [1, 2, 4])
-def test_fast_prefill_dispatch_preserves_active_lora_count(num_tokens: int, num_active_loras: int):
-    """Fast-prefill padding must match the main dispatch's LoRA variant."""
-
-    class FakeCudaGraphManager:
-        device = "cpu"
-
-        def __init__(self):
-            self.dispatch_calls = []
-
-        def dispatch(self, **kwargs):
-            self.dispatch_calls.append(kwargs)
-            # A captured no-LoRA graph is padded to 8 tokens, while the
-            # active-LoRA path stays eager at the unpadded token count.
-            if kwargs["num_active_loras"] == 0:
-                num_tokens = 8
-                mode = CUDAGraphMode.PIECEWISE
-            else:
-                num_tokens = kwargs["num_tokens"]
-                mode = CUDAGraphMode.NONE
-            return BatchExecutionDescriptor(
-                cg_mode=mode,
-                num_tokens=num_tokens,
-                num_reqs=kwargs["num_reqs"],
-                num_active_loras=kwargs["num_active_loras"],
-                num_ubatches=1,
-            )
-
-    manager = FakeCudaGraphManager()
-    helper = FastPrefillHelper(manager, max_num_tokens=max(32, num_tokens))
-    metadata = helper.prepare(
-        torch.arange(num_tokens, dtype=torch.int32),
-        num_reqs=1,
-        cu_num_logits_np=np.array([0, num_tokens], dtype=np.int32),
-        has_prefill=True,
-        batch_desc=BatchExecutionDescriptor(
-            cg_mode=CUDAGraphMode.NONE,
-            num_tokens=num_tokens,
-            num_reqs=1,
-            num_active_loras=num_active_loras,
-            num_ubatches=1,
-        ),
-        num_active_loras=num_active_loras,
+def test_fast_prefill_skips_lora_batches():
+    """LoRA batches fall back, and subsequent base batches still use fast prefill."""
+    manager = MagicMock(device="cpu")
+    manager.dispatch.return_value = BatchExecutionDescriptor(
+        cg_mode=CUDAGraphMode.PIECEWISE, num_tokens=4, num_reqs=None
     )
+    helper = FastPrefillHelper(manager, max_num_tokens=8)
+    logits_indices = torch.tensor([3, 7], dtype=torch.int32)
+    for num_active_loras in (0, 1, 2, 0):
+        manager.dispatch.reset_mock()
+        metadata = helper.prepare(
+            logits_indices,
+            num_reqs=2,
+            cu_num_logits_np=np.array([0, 1, 2], dtype=np.int32),
+            has_prefill=True,
+            batch_desc=BatchExecutionDescriptor(
+                cg_mode=CUDAGraphMode.PIECEWISE,
+                num_tokens=8,
+                num_reqs=2,
+                num_active_loras=num_active_loras,
+            ),
+            num_active_loras=num_active_loras,
+        )
 
-    assert metadata is not None
-    assert metadata.num_logits_indices == num_tokens
-    assert metadata.logits_indices_padded.shape[0] == num_tokens
-    assert metadata.max_logits_per_req == num_tokens
-    assert manager.dispatch_calls[-1]["num_active_loras"] == num_active_loras
+        if num_active_loras:
+            assert metadata is None
+            manager.dispatch.assert_not_called()
+        else:
+            assert metadata is not None
+            assert metadata.num_logits_indices == 2
+            torch.testing.assert_close(
+                metadata.logits_indices_padded,
+                torch.tensor([3, 7, 7, 7], dtype=torch.int32),
+            )
+            assert metadata.max_logits_per_req == 1
 
 
 class _FakeSharedHostRegion:
@@ -453,33 +452,54 @@ class _FakeSharedHostRegion:
         self.cleanup_calls += 1
 
 
-def test_profiling_cleanup_keeps_host_pool_for_real_kv_cache(monkeypatch):
+@pytest.mark.skipif(not _has_hisparse_ops(), reason="HiSparse CUDA ops not compiled")
+def test_profiling_cleanup_keeps_host_pool_for_real_kv_cache():
     """The real KV cache must reuse the profiling host pool, not pin it again."""
-    pinned = torch.empty(8, dtype=torch.int8)
-    allocate_pinned = MagicMock(return_value=(pinned, pinned))
-    monkeypatch.setattr(hisparse_runtime_module, "allocate_pinned_host_pool", allocate_pinned)
-    monkeypatch.setattr(hisparse_runtime_module, "check_hisparse_host_memory", lambda size: None)
-    sonar_config = SimpleNamespace(instance_id="profiling-reuse")
-    kv_cache_config = SimpleNamespace(hisparse_shared_host_pool=False)
-    pool = attn_utils_module.get_hisparse_host_pool(sonar_config, kv_cache_config)
-    backing = pool.allocate(8)
-    runtime = SimpleNamespace(
-        _host_cache=backing,
-        registered_host_pool=pinned,
-        hot_backing=object(),
-        host_pool=pool,
+    from sonar.config import DeviceConfig, SonarConfig
+    from sonar.platforms import current_platform
+    from sonar.v1.hisparse.runtime import (
+        HiSparseCacheHandle,
+        HiSparseRuntime,
+        ResolvedHiSparseConfig,
+        release_pinned_state,
     )
-    forward_context = {"layer": SimpleNamespace(hisparse_cache=SimpleNamespace(runtime=runtime))}
 
-    attn_utils_module.release_hisparse_profiling_cache(forward_context)
+    config = SonarConfig(device_config=DeviceConfig(device=current_platform.device_type))
+    kv_config = KVCacheConfig(num_blocks=1, kv_cache_groups=[], kv_cache_tensors=[])
+    pool = attn_utils_module.get_hisparse_host_pool(config, kv_config)
+    backing = pool.allocate(4096)
+    assert pool.registered is not None
+    registered_pointer = pool.registered.data_ptr()
+    runtime = HiSparseRuntime(
+        config=ResolvedHiSparseConfig(top_k=4, device_buffer_size=5, max_union_rows=5),
+        max_num_reqs=2,
+        row_width=8,
+        kv_dtype=torch.float32,
+        device=current_platform.device_type,
+    )
+    cache = HiSparseCacheHandle(runtime)
+    layer = torch.nn.Module()
+    layer.hisparse_cache = cache
+    try:
+        runtime.bind_source_cache(
+            backing.view(torch.float32).view(-1, 64, 8),
+            registered_host_pool=pool.registered,
+        )
+        runtime.host_pool = pool
+        attn_utils_module.unbind_hisparse_caches({"layer": layer})
 
-    assert not hasattr(runtime, "_host_cache")
-    assert runtime.host_pool is None
-    reused = attn_utils_module.get_hisparse_host_pool(sonar_config, kv_cache_config)
-    assert reused is pool
-    assert reused.allocate(8) is backing
-    allocate_pinned.assert_called_once_with(8)
-    hisparse_runtime_module.drop_hisparse_host_pool(sonar_config)
+        assert not hasattr(runtime, "_host_cache")
+        assert runtime.host_pool is None
+        reused = attn_utils_module.get_hisparse_host_pool(config, kv_config)
+        assert reused is pool
+        assert reused.allocate(4096) is backing
+        assert reused.registered is not None
+        assert reused.registered.data_ptr() == registered_pointer
+    finally:
+        torch.accelerator.synchronize()
+        cache.unbind_cache()
+        release_pinned_state(pool.pinned, pool.shared_region)
+        hisparse_runtime_module.drop_hisparse_host_pool(config)
 
 
 @pytest.mark.parametrize("failure_phase", ["allocation", "views", "binding", "buffers"])
@@ -508,7 +528,7 @@ def test_init_hisparse_rolls_back_host_pool(monkeypatch, failure_phase, shared):
     )
     pools = []
 
-    def allocate(*args):
+    def allocate(*args, **kwargs):
         pools.append(args[-1])
         if shared:
             args[-1].shared_region = region
@@ -818,13 +838,13 @@ class _TableBuilder:
 
 _SONAR_CONFIG = SimpleNamespace(
     model_config=SimpleNamespace(max_model_len=8192),
-    scheduler_config=SimpleNamespace(max_num_seqs=4),
+    scheduler_config=SimpleNamespace(max_num_seqs=4, max_num_batched_tokens=16),
     parallel_config=SimpleNamespace(decode_context_parallel_size=1),
 )
 
 
-def _packed_group(tokens_per_state, row_bytes, supported_sizes, *, writes_from_block_table=False):
-    spec = MLAAttentionSpec(
+def _packed_group(tokens_per_state, row_bytes, supported_sizes, spec_cls=MLAAttentionSpec):
+    spec = spec_cls(
         block_size=1024,
         num_kv_heads=1,
         head_size=128,
@@ -837,7 +857,6 @@ def _packed_group(tokens_per_state, row_bytes, supported_sizes, *, writes_from_b
         get_supported_kernel_block_sizes=lambda _=None: supported_sizes,
         get_name=lambda: "FAKE",
         customize_spec=lambda spec: spec,
-        writes_kv_cache_from_block_table=lambda: writes_from_block_table,
     )
     return AttentionGroup(backend, ["layer.0"], spec, 0)
 
@@ -885,6 +904,26 @@ def test_split_blocks_align_to_kernel_blocks(block_size, page_states):
     assert spec.get_block_stride_alignment() == max(page_states * 132, 1)
 
 
+def test_packed_token_cache_without_slot_mapping_is_split():
+    """A packed token cache that takes no slot mapping is split like a compressed
+    one: its kernel blocks address the manager blocks' rows."""
+    row, stride_rows = 132, 20 * 64
+    group = _packed_group(1, row, [64], spec_cls=SelfAddressedMLASpec)
+    group.create_metadata_builders(_SONAR_CONFIG, "cpu", kernel_block_size=1024)
+    # Each row holds its own row index.
+    backing = torch.arange(3 * stride_rows).repeat_interleave(row)
+    manager = backing.view(3, 1, stride_rows, row)[:, :, :1024]
+    pages = map_kv_caches_to_kernel_blocks({"layer.0": manager}, [group])["layer.0"]
+    metadata = create_common_attn_metadata(BatchSpec([2048], [1]), 1024, "cpu")
+    metadata.block_table_tensor = torch.tensor([[0, 2]], dtype=torch.int32)
+
+    table = group.build_metadata(metadata)
+
+    assert group.get_metadata_builder().kv_cache_spec.block_size == 64
+    second_block = pages[table[0, 16:], 0].flatten(0, 1)
+    assert torch.equal(second_block, manager[2, 0])
+
+
 def test_packed_token_cache_cannot_be_split():
     group = _packed_group(1, 1152, [64])
     group.create_metadata_builders(_SONAR_CONFIG, "cpu", kernel_block_size=1024)
@@ -895,7 +934,7 @@ def test_packed_token_cache_cannot_be_split():
 
 def test_packed_token_cache_block_table_writes_address_original_storage():
     row, stride_rows = 132, 2048
-    group = _packed_group(1, row, [64], writes_from_block_table=True)
+    group = _packed_group(1, row, [64], spec_cls=SelfAddressedMLASpec)
     group.create_metadata_builders(_SONAR_CONFIG, "cpu", kernel_block_size=1024)
     backing = torch.arange(3 * stride_rows).repeat_interleave(row)
     manager = backing.view(3, 1, stride_rows, row)[:, :, :1024]

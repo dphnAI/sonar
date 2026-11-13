@@ -1231,9 +1231,9 @@ def parse_cuda_priority_lists() -> dict[str, list[str]]:
 def _get_backends_from_return(stmts: list) -> list[str]:
     """Extract backend names from return statements in a list of statements.
 
-    Handles starred unpacking (e.g. ``*sparse_backends``) by resolving the
+    Handles starred unpacking (e.g. `*sparse_backends`) by resolving the
     variable from assignments found in the same statement list.  When the
-    variable is conditionally assigned (inside an ``if/else``), the ``else``
+    variable is conditionally assigned (inside an `if/else`), the `else`
     branch value is used as the representative default.
     """
     # Collect variable assignments so we can resolve starred expressions.

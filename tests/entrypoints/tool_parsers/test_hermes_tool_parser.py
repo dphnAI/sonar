@@ -14,7 +14,7 @@ from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 from sonar.transformers_utils.repo_utils import hf_api
 from tests.utils import RemoteOpenAIServer
 
-LORA_MODEL = "minpeter/LoRA-Llama-3.2-1B-tool-vllm-ci"
+LORA_MODEL = "vllm-project/LoRA-Llama-3.2-1B-tool-vllm-ci"
 
 TOOLS = [
     {

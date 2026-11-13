@@ -143,8 +143,8 @@ class SharedExperts(torch.nn.Module):
     def maybe_forward_async(self, shared_experts_input: torch.Tensor) -> bool:
         """Enqueue shared experts on the auxiliary stream.
 
-        Return whether work was enqueued. Call :meth:`wait` before reading
-        ``output`` when this returns true.
+        Return whether work was enqueued. Call `wait` before reading
+        `output` when this returns true.
         """
         if self._determine_shared_experts_order(shared_experts_input) != SharedExpertsOrder.MULTI_STREAM_OVERLAPPED:
             return False

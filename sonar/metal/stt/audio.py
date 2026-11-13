@@ -56,7 +56,7 @@ _FFMPEG_TIMEOUT_S = 300
 def load_audio(file_path: str, sample_rate: int = SAMPLE_RATE) -> mx.array:
     """Load an audio file and return mono samples at *sample_rate* Hz.
 
-    Tries ``librosa`` first (handles WAV natively without ffmpeg).
+    Tries `librosa` first (handles WAV natively without ffmpeg).
     Falls back to ffmpeg for non-WAV formats.
 
     Args:
@@ -64,7 +64,7 @@ def load_audio(file_path: str, sample_rate: int = SAMPLE_RATE) -> mx.array:
         sample_rate: Target sample rate in Hz.
 
     Returns:
-        1-D ``mx.array`` of float32 samples.
+        1-D `mx.array` of float32 samples.
 
     Raises:
         RuntimeError: If the file cannot be decoded.
@@ -95,11 +95,11 @@ def _load_audio_ffmpeg(
         timeout_s: Timeout (seconds) for ffmpeg decode.
 
     Returns:
-        1-D ``mx.array`` of float32 samples.
+        1-D `mx.array` of float32 samples.
 
     Raises:
         RuntimeError: If ffmpeg is missing or returns an error.
-        ValueError: If ``timeout_s`` is not positive.
+        ValueError: If `timeout_s` is not positive.
     """
     if timeout_s <= 0:
         raise ValueError("ffmpeg timeout must be > 0")
@@ -145,7 +145,7 @@ def pad_or_trim(
         axis: Axis to pad/trim.
 
     Returns:
-        Array with ``shape[axis] == length``.
+        Array with `shape[axis] == length`.
     """
     if array.shape[axis] > length:
         sl = [slice(None)] * array.ndim
@@ -170,7 +170,7 @@ def _hanning(size: int) -> mx.array:
         size: Window length.
 
     Returns:
-        1-D ``mx.array`` of float32 window values.
+        1-D `mx.array` of float32 window values.
     """
     n = mx.arange(size, dtype=mx.float32)
     return 0.5 - 0.5 * mx.cos(2 * math.pi * n / size)
@@ -184,7 +184,7 @@ def _stft(
 ) -> mx.array:
     """Compute the Short-Time Fourier Transform.
 
-    Uses ``mx.as_strided`` to build the frame matrix in one shot,
+    Uses `mx.as_strided` to build the frame matrix in one shot,
     avoiding a Python loop over thousands of frames.
 
     Args:
@@ -194,7 +194,7 @@ def _stft(
         hop_length: Hop between frames.
 
     Returns:
-        Complex spectrogram of shape ``(n_fft // 2 + 1, num_frames)``.
+        Complex spectrogram of shape `(n_fft // 2 + 1, num_frames)`.
     """
     pad_amount = n_fft // 2
     audio = mx.pad(audio, [(pad_amount, pad_amount)])
@@ -222,7 +222,7 @@ def _mel_filters(sample_rate: int, n_fft: int, n_mels: int) -> mx.array:
         n_mels: Number of Mel bands.
 
     Returns:
-        Filter-bank of shape ``(n_mels, n_fft // 2 + 1)``.
+        Filter-bank of shape `(n_mels, n_fft // 2 + 1)`.
     """
 
     def hz_to_mel(hz: float) -> float:
@@ -261,7 +261,7 @@ def log_mel_spectrogram(
         n_mels: Number of Mel frequency bands.
 
     Returns:
-        Log-Mel spectrogram of shape ``(n_mels, num_frames)``.
+        Log-Mel spectrogram of shape `(n_mels, num_frames)`.
     """
     if isinstance(audio, str):
         audio = load_audio(audio)
@@ -306,7 +306,7 @@ def _rms_energy(audio: mx.array, window_size: int) -> mx.array:
         window_size: Number of samples per window.
 
     Returns:
-        Array of length ``ceil(len(audio) / window_size)`` with the
+        Array of length `ceil(len(audio) / window_size)` with the
         RMS energy of each window.
     """
     n = audio.shape[0]
@@ -350,7 +350,7 @@ def _find_split_point(
         center: Target split position (sample index).
         window_size: RMS window size in samples.
         search_radius: Search range in samples.  Defaults to
-            ``window_size * _SPLIT_SEARCH_MULTIPLIER``.
+            `window_size * _SPLIT_SEARCH_MULTIPLIER`.
 
     Returns:
         Sample index of the best split point.
@@ -386,7 +386,7 @@ def split_audio(
         sample_rate: Audio sample rate in Hz.
 
     Returns:
-        List of ``(chunk, start_seconds)`` tuples.
+        List of `(chunk, start_seconds)` tuples.
     """
     max_samples = int(max_clip_s * sample_rate)
     overlap_samples = int(overlap_s * sample_rate)

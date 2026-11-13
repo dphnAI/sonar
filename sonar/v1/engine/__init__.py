@@ -5,7 +5,7 @@ import enum
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import msgspec
 import numpy as np
@@ -154,6 +154,14 @@ class EngineCoreReadyResponse:
     # Set with --dphn-network; frontends must then attach weight receipts to
     # every completion response and refuse to serve without them.
     dphn_network_enabled: bool = False
+    # `CacheConfig.metrics_info()` after initialization, the labels of the
+    # frontend's `sonar:cache_config_info`.
+    cache_config_info: dict[str, str] | None = None
+    # `system_fingerprint` inputs for frontends without a SonarConfig (the Rust
+    # frontend): `hash_config()` of the engine's initialized config (None if
+    # hashing failed) and whether expert parallelism is enabled.
+    config_hash: str | None = None
+    enable_expert_parallel: bool = False
 
 
 class EngineCoreRequest(
@@ -163,7 +171,13 @@ class EngineCoreRequest(
     gc=False,
 ):  # type: ignore[call-arg]
     request_id: str
-    prompt_token_ids: list[int] | None
+    if TYPE_CHECKING:
+        prompt_token_ids: list[int] | None
+    else:
+        # Both frontends send a 32-bit int ndarray, out of band when long, which
+        # decodes as a view of the received frame; Request copies it into a
+        # TokenBuffer. In-process clients pass the list.
+        prompt_token_ids: np.ndarray | None
     mm_features: list[MultiModalFeatureSpec] | None
     sampling_params: SamplingParams | None
     pooling_params: PoolingParams | None
@@ -293,6 +307,11 @@ class EngineCoreOutput(
 
     # Sent with FinishReason.ERROR, e.g. when a paused engine rejects a request.
     error: RequestError | None = None
+
+    # Whether the sampler watermarks this request, after EngineCore enforcement.
+    # Sent once, on the first output, when watermark_config is set. Appended last
+    # for array_like compatibility.
+    watermarking: bool | None = None
 
     @property
     def finished(self) -> bool:

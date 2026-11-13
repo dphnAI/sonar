@@ -113,7 +113,7 @@ class Mxfp4Config(QuantizationConfig):
 class GptOssMxfp4Config(Mxfp4Config):
     """MXFP4 config for GPT-OSS checkpoints.
 
-    Checkpoints carry ``"quant_method": "mxfp4"`` in their JSON config.
+    Checkpoints carry `"quant_method": "mxfp4"` in their JSON config.
     override_quantization_method() maps that to the canonical internal name
     so that the rest of the loading path uses "gpt_oss_mxfp4" consistently.
     """
@@ -373,6 +373,7 @@ class GptOssMxfp4MoEMethod(FusedMoEMethodBase):
                 experts_cls=self.experts_cls,
                 routing_tables=layer._expert_routing_tables(),
             )
+            self.moe_kernel.fused_experts.keep_constants(layer)
             self.moe_kernel.fused_experts.process_weights_after_loading(layer)
 
     def process_weights_after_loading(self, layer: RoutedExperts) -> None:
@@ -500,8 +501,8 @@ def _mxfp4_experts_to_int4_gfx942(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Requantize packed MXFP4 experts to shuffled groupwise int4 for gfx942.
 
-    Takes ``(E, N, K // 2)`` MXFP4 weights with ``(E, N, K // 32)`` E8M0
-    scales and returns ``(E, N, K // 2)`` packed int4 with flattened
+    Takes `(E, N, K // 2)` MXFP4 weights with `(E, N, K // 32)` E8M0
+    scales and returns `(E, N, K // 2)` packed int4 with flattened
     per-32 scales.
     """
     from aiter import dtypes as aiter_dtypes
@@ -944,6 +945,7 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
                 experts_cls=self.experts_cls,
                 routing_tables=layer._expert_routing_tables(),
             )
+            self.moe_kernel.fused_experts.keep_constants(layer)
             self.moe_kernel.fused_experts.process_weights_after_loading(layer)
 
     def _setup_kernel_k3_situ_gfx942(self, layer: RoutedExperts) -> None:
@@ -984,6 +986,7 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
                 experts_cls=self.experts_cls,
                 routing_tables=layer._expert_routing_tables(),
             )
+            self.moe_kernel.fused_experts.keep_constants(layer)
 
     def process_weights_after_loading(self, layer: RoutedExperts) -> None:
         if self.mxfp4_backend == Mxfp4MoeBackend.NONE:

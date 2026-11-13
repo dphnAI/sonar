@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from datetime import timedelta
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import torch
 from torch.distributed import TCPStore
 
 from sonar.config import set_current_sonar_config
+from sonar.config.utils import hash_config_cached
 from sonar.distributed import (
     get_dp_group,
     get_ep_group,
@@ -39,7 +40,6 @@ from sonar.v1.worker.sentinel.eplb_redistribute import (
 
 if TYPE_CHECKING:
     from sonar.distributed.parallel_state import GroupCoordinator
-    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
     from sonar.v1.worker.gpu_worker import Worker
 
 logger = init_logger(__name__)
@@ -57,7 +57,7 @@ def _reinit_cpu_group(
     size: int,
     timeout: timedelta | None = None,
 ) -> None:
-    """Rebuild a group's Gloo cpu_group over a port coordinated via ``store``"""
+    """Rebuild a group's Gloo cpu_group over a port coordinated via `store`"""
     # Rendezvous recovery groups on their actual leader hosts: DP replicas and
     # pipeline stages can span nodes independently of the deployment master.
     if rank == 0:
@@ -106,8 +106,6 @@ class WorkerSentinel:
             raise ValueError("Fault tolerance does not support MoE draft models yet.")
         if worker.parallel_config.prefill_context_parallel_size > 1:
             raise ValueError("Fault tolerance does not support PCP yet.")
-        if not worker.sonar_config.use_v2_model_runner:
-            raise ValueError("Fault tolerance requires the v2 model runner (SONAR_USE_V2_MODEL_RUNNER=1).")
 
     def handle_command(self, ft_request: FaultToleranceRequest):
         """Dispatch an FT command by instruction name."""
@@ -245,7 +243,7 @@ class WorkerSentinel:
     def _eplb_model_state(self):
         model_runner = self.worker.model_runner
         assert model_runner.eplb_state is not None
-        return model_runner.eplb_state.model_states[model_runner.model_config.compute_hash()]
+        return model_runner.eplb_state.model_states[hash_config_cached(model_runner.model_config)]
 
     def _redistribute_experts(self, dead_ep_ranks: set[int]) -> None:
         """One-shot expert redistribution after scale-down."""
@@ -282,6 +280,5 @@ class WorkerSentinel:
     def _clean_worker_state(self):
         model_runner = self.worker.model_runner
         model_runner.execute_model_state = None
-        runner = cast("GPUModelRunnerV2", model_runner)
-        for req_id in list(runner.req_states.req_id_to_index):
-            runner._remove_request(req_id)
+        for req_id in list(model_runner.req_states.req_id_to_index):
+            model_runner._remove_request(req_id)

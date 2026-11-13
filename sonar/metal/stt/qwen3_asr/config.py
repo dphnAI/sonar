@@ -10,9 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sonar.transformers_utils.configs.qwen3_asr import (
-    Qwen3ASRConfig as SonarQwen3ASRConfig,
-)
+from transformers import Qwen3ASRConfig as HFQwen3ASRConfig
 
 # Maximum decode tokens for Qwen3-ASR decode loop.
 QWEN3_ASR_MAX_DECODE_TOKENS = 1024
@@ -81,11 +79,10 @@ class Qwen3ASRConfig:
     n_audio_ctx: int = 1500
 
     @classmethod
-    def _from_sonar_config(cls, config: SonarQwen3ASRConfig) -> Qwen3ASRConfig:
-        """Adapt the upstream Sonar/HF config into the local MLX model config."""
-        thinker = config.thinker_config
-        audio = thinker.audio_config
-        text = thinker.text_config
+    def _from_hf_config(cls, config: HFQwen3ASRConfig) -> Qwen3ASRConfig:
+        """Adapt the Transformers config into the local MLX model config."""
+        audio = config.audio_config
+        text = config.text_config
 
         audio_cfg = Qwen3ASRAudioConfig(
             num_mel_bins=audio.num_mel_bins,
@@ -95,7 +92,7 @@ class Qwen3ASRConfig:
             encoder_ffn_dim=audio.encoder_ffn_dim,
             downsample_hidden_size=audio.downsample_hidden_size,
             output_dim=audio.output_dim,
-            max_source_positions=audio.max_source_positions,
+            max_source_positions=getattr(audio, "max_source_positions", audio.max_position_embeddings),
             n_window=audio.n_window,
             n_window_infer=audio.n_window_infer,
             activation_function=audio.activation_function,
@@ -109,25 +106,37 @@ class Qwen3ASRConfig:
             intermediate_size=text.intermediate_size,
             vocab_size=text.vocab_size,
             rms_norm_eps=text.rms_norm_eps,
-            rope_theta=text.rope_theta,
+            rope_theta=text.rope_parameters["rope_theta"],
             tie_word_embeddings=text.tie_word_embeddings,
         )
         config_kwargs = {
             "audio_config": audio_cfg,
             "text_config": text_cfg,
-            "audio_token_id": thinker.audio_token_id,
+            "audio_token_id": config.audio_token_id,
             "n_mels": audio_cfg.num_mel_bins,
             "n_audio_ctx": audio_cfg.max_source_positions,
         }
-        # The nested text config may omit eos_token_id entirely depending on how
-        # upstream constructs Qwen3-ASR configs. Preserve the local model
-        # default unless upstream exposes an explicit value here.
         eos_token_id = getattr(text, "eos_token_id", None)
+        if eos_token_id is None:
+            eos_token_id = config.eos_token_id
+        if isinstance(eos_token_id, (list, tuple)):
+            eos_token_id = eos_token_id[0]
         if eos_token_id is not None:
             config_kwargs["eos_token_id"] = eos_token_id
         return cls(**config_kwargs)
 
     @classmethod
     def from_dict(cls, d: dict) -> Qwen3ASRConfig:
-        """Create config from config.json using the upstream schema owner."""
-        return cls._from_sonar_config(SonarQwen3ASRConfig.from_dict(d))
+        """Create config from legacy nested or current Transformers config.json."""
+        config_dict = dict(d)
+        if "thinker_config" in config_dict:
+            thinker_config = dict(config_dict.pop("thinker_config"))
+            config_dict = {**thinker_config, **config_dict}
+        if "audio_config" in config_dict:
+            config_dict["audio_config"] = {
+                **config_dict["audio_config"],
+                "model_type": "qwen3_asr_encoder",
+            }
+        if config_dict.get("text_config", {}).get("model_type") == "qwen3_asr_text":
+            config_dict["text_config"] = {**config_dict["text_config"], "model_type": "qwen3"}
+        return cls._from_hf_config(HFQwen3ASRConfig.from_dict(config_dict))

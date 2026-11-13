@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use serde::Deserialize;
 use sonar_engine_core_client::protocol::kv_hints::KvHintsEnvelope;
@@ -14,7 +15,7 @@ use uuid::Uuid;
 use crate::error::{Error, Result};
 use crate::request_metrics::current_unix_timestamp_secs;
 
-/// Tokenized decoder-only generate request accepted by [`crate::Llm`].
+/// Tokenized decoder-only generate request accepted by [`crate::EngineCoreLlm`].
 ///
 /// This is the first-stage Rust subset of the inputs that eventually flow into
 /// Python `AsyncLLM.generate()`. The boundary is intentionally above
@@ -67,6 +68,8 @@ pub struct GenerateRequest {
 #[derive(Debug)]
 pub(crate) struct PreparedGenerateRequest {
     pub engine_request: EngineCoreRequest,
+    /// The original prompt token IDs, also moved into the raw engine request.
+    pub prompt_token_ids: Arc<[u32]>,
 }
 
 impl GenerateRequest {
@@ -102,9 +105,10 @@ impl GenerateRequest {
             external_request_id.clone()
         };
         Ok(PreparedGenerateRequest {
+            prompt_token_ids: prompt_token_ids.as_slice().into(),
             engine_request: EngineCoreRequest {
                 request_id: engine_request_id,
-                prompt_token_ids: Some(prompt_token_ids),
+                prompt_token_ids: Some(prompt_token_ids.into()),
                 mm_features,
                 sampling_params: Some(sampling_params),
                 pooling_params: None,
@@ -159,14 +163,6 @@ impl PreparedGenerateRequest {
             None
         }
     }
-
-    /// Return the original prompt token IDs copied into the raw engine request.
-    pub fn prompt_token_ids(&self) -> &[u32] {
-        self.engine_request
-            .prompt_token_ids
-            .as_ref()
-            .expect("prepared request must have prompt token ids")
-    }
 }
 
 #[cfg(test)]
@@ -177,6 +173,7 @@ mod tests {
     use sonar_engine_core_client::protocol::kv_hints::{KvHintAction, KvHintsEnvelope};
     use sonar_engine_core_client::protocol::request::ReasoningParserKwargs;
     use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
+    use sonar_engine_core_client::test_utils::decode_prompt_token_ids;
 
     use super::GenerateRequest;
     use crate::error::Error;
@@ -184,7 +181,7 @@ mod tests {
     fn sample_request() -> GenerateRequest {
         GenerateRequest {
             request_id: "req-1".to_string(),
-            prompt_token_ids: vec![11, 22, 33],
+            prompt_token_ids: [11, 22, 33].into(),
             sampling_params: EngineCoreSamplingParams::for_test(),
             mm_features: None,
             arrival_time: Some(42.5),
@@ -224,13 +221,16 @@ mod tests {
     fn prepare_builds_engine_core_request() {
         let prepared = sample_request().prepare(true).unwrap();
 
-        assert_eq!(prepared.prompt_token_ids(), &[11, 22, 33]);
+        assert_eq!(&*prepared.prompt_token_ids, &[11, 22, 33]);
 
         let request = prepared.engine_request;
         assert_eq!(request.external_req_id.as_deref(), Some("req-1"));
         assert!(request.request_id.starts_with("req-1-"));
         assert_ne!(request.request_id, "req-1");
-        assert_eq!(request.prompt_token_ids.as_deref(), Some(&[11, 22, 33][..]));
+        assert_eq!(
+            decode_prompt_token_ids(&request).as_deref(),
+            Some(&[11, 22, 33][..])
+        );
         assert_eq!(request.arrival_time, 42.5);
         assert_eq!(request.cache_salt.as_deref(), Some("salt"));
         assert_eq!(request.data_parallel_rank, Some(2));
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn prepare_rejects_empty_prompt_tokens() {
         let mut request = sample_request();
-        request.prompt_token_ids.clear();
+        request.prompt_token_ids = Default::default();
 
         let error = request.prepare(true).unwrap_err();
         assert!(matches!(

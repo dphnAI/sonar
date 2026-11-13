@@ -80,8 +80,6 @@ hardware_overrides:
       - "ROCM_AITER_UNIFIED_ATTN"
       - "-cc.pass_config.fuse_rope_kvcache=True"
       - "-cc.use_inductor_graph_partition=True"
-      - "--gpu-memory-utilization"
-      - "0.95"
       - "--block-size=64"
     extra_env:
       SONAR_ROCM_USE_AITER: "1"
@@ -131,7 +129,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   Docker quickstart:
@@ -157,14 +155,14 @@ guide: |
   A100 (single card, default TRITON_ATTN + Marlin MXFP4 MoE):
 
   ```bash
-  sonar serve openai/gpt-oss-120b
-  sonar serve openai/gpt-oss-120b --tensor-parallel-size 4
+  sonar run openai/gpt-oss-120b
+  sonar run openai/gpt-oss-120b --tensor-parallel-size 4
   ```
 
   Blackwell (B200) with FlashInfer MXFP4+MXFP8 MoE:
 
   ```bash
-  sonar serve openai/gpt-oss-120b --config GPT-OSS_Blackwell.yaml --tensor-parallel-size 1
+  sonar run openai/gpt-oss-120b --config GPT-OSS_Blackwell.yaml --tensor-parallel-size 1
   ```
 
   On Sonar v0.28.0+ the FlashInfer TRTLLM MXFP4 MoE path is selected automatically on Blackwell; it can be pinned explicitly with `--moe-backend flashinfer_trtllm --quantization-config.moe.activation mxfp8`.
@@ -178,7 +176,7 @@ guide: |
   export MODEL_IMPL_TYPE=sonar
   export HF_HOME=/data
   export HUGGING_FACE_HUB_TOKEN=<your HF token>
-  sonar serve openai/gpt-oss-120b \
+  sonar run openai/gpt-oss-120b \
     --host 0.0.0.0 \
     --port 8000 \
     --seed 42 \
@@ -187,7 +185,6 @@ guide: |
     --max-model-len 9216 \
     --max-num-batched-tokens 16384 \
     --max-num-seqs 2048 \
-    --gpu-memory-utilization 0.86 \
     --kv-cache-dtype fp8 \
     --load-format runai_streamer \
     --no-enable-prefix-caching \
@@ -202,12 +199,11 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve openai/gpt-oss-120b \
+  sonar run openai/gpt-oss-120b \
     --tensor-parallel-size 8 \
     --attention-backend ROCM_AITER_UNIFIED_ATTN \
     -cc.pass_config.fuse_rope_kvcache=True \
     -cc.use_inductor_graph_partition=True \
-    --gpu-memory-utilization 0.95 \
     --block-size 64
   ```
 
@@ -219,8 +215,8 @@ guide: |
     --privileged --ipc=host -p 8000:8000 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     -e TORCH_LLM_ALLREDUCE=1 \
-    -e SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
-    -e SONAR_WORKER_MULTIPROC_METHOD=spawn \
+    -e VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
+    -e VLLM_WORKER_MULTIPROC_METHOD=spawn \
     vllm/vllm-openai-xpu:latest \
     openai/gpt-oss-120b \
     --tensor-parallel-size 4 \
@@ -240,13 +236,13 @@ guide: |
   `PYTHON_EXECUTION_BACKEND=dangerously_use_uv`. For demo tools:
 
   ```bash
-  sonar serve ... --tool-server demo
+  sonar run ... --tool-server demo
   ```
 
   For user-defined function calling:
 
   ```bash
-  sonar serve ... --tool-call-parser openai --enable-auto-tool-choice
+  sonar run ... --tool-call-parser openai --enable-auto-tool-choice
   ```
 
   ## Client Usage
@@ -267,10 +263,10 @@ guide: |
   OpenAI recommends evaluating with the gpt-oss reference library:
 
   ```bash
-  sonar serve openai/gpt-oss-120b \
+  sonar run openai/gpt-oss-120b \
     --tensor_parallel_size 8 --max-model-len 131072 \
     --max-num-batched-tokens 10240 --max-num-seqs 128 \
-    --gpu-memory-utilization 0.85 --no-enable-prefix-caching
+    --no-enable-prefix-caching
 
   mkdir -p /tmp/gpqa_openai
   OPENAI_API_KEY=empty python -m gpt_oss.evals \
@@ -283,7 +279,7 @@ guide: |
 
   - **Attention sinks dtype error on Blackwell:** pass `--quantization-config.moe.activation mxfp8` and `--kv-cache-dtype fp8`.
   - **`tl.language not defined`:** make sure no extra Triton (e.g., pytorch-triton) is installed.
-  - **H100 TP1 OOM:** `--gpu-memory-utilization 0.95 --max-num-batched-tokens 1024`.
+  - **H100 TP1 OOM:** `--max-num-batched-tokens 1024`.
   - **Harmony vocab download failure:** pre-download tiktoken files and set `TIKTOKEN_ENCODINGS_BASE`.
 
   ## Known Limitations

@@ -32,15 +32,9 @@ logger = init_logger("sonar.entrypoints.openai.server_utils")
 
 
 class AuthenticationMiddleware:
-    """
-    Pure ASGI middleware that authenticates each request by checking
-    if the Authorization Bearer token exists and equals anyof "{api_key}".
+    """Authenticate ASGI requests against configured bearer tokens.
 
-    Notes
-    -----
-    There are two cases in which authentication is skipped:
-        1. The HTTP method is OPTIONS.
-        2. The request path doesn't start with /v1 (e.g. /health).
+    OPTIONS requests and paths without the `/v1` prefix bypass authentication.
     """
 
     def __init__(self, app: ASGIApp, tokens: list[str]) -> None:

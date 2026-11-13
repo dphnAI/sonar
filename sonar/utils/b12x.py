@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Accessors, legacy warmup and native preparation for optional ``b12x``."""
+"""Accessors, legacy warmup and native preparation for optional `b12x`."""
 
 from __future__ import annotations
 
@@ -245,7 +245,7 @@ _B12X_SUBMODULES = {
 
 
 def has_b12x() -> bool:
-    """Return whether the B12X package is installed."""
+    """Return whether the b12x package is available."""
     return _HAS_B12X
 
 

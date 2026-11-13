@@ -24,8 +24,6 @@ model:
     - "--trust-remote-code"
     - "--dtype"
     - "bfloat16"
-    - "--gpu-memory-utilization"
-    - "0.85"
     - "--enable-prefix-caching"
 
 features:
@@ -102,11 +100,10 @@ guide: |
   BF16 on one GPU:
 
   ```bash
-  sonar serve inclusionAI/Ling-3.0-tiny \
+  sonar run inclusionAI/Ling-3.0-tiny \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 1 \
-    --gpu-memory-utilization 0.85 \
     --enable-prefix-caching \
     --enable-auto-tool-choice \
     --tool-call-parser ling3 \
@@ -117,15 +114,15 @@ guide: |
 
   ```bash
   # Serialized block FP8
-  sonar serve inclusionAI/Ling-3.0-tiny-fp8 \
+  sonar run inclusionAI/Ling-3.0-tiny-fp8 \
     --trust-remote-code --dtype bfloat16 --tensor-parallel-size 1 \
-    --gpu-memory-utilization 0.85 --enable-prefix-caching --enable-auto-tool-choice \
+    --enable-prefix-caching --enable-auto-tool-choice \
     --tool-call-parser ling3 --reasoning-parser ling3
 
   # Compressed-tensors INT4
-  sonar serve inclusionAI/Ling-3.0-tiny-int4 \
+  sonar run inclusionAI/Ling-3.0-tiny-int4 \
     --trust-remote-code --dtype bfloat16 --tensor-parallel-size 1 \
-    --gpu-memory-utilization 0.85 --enable-prefix-caching --enable-auto-tool-choice \
+    --enable-prefix-caching --enable-auto-tool-choice \
     --tool-call-parser ling3 --reasoning-parser ling3
   ```
 

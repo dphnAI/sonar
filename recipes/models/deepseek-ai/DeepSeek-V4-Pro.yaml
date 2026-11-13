@@ -183,8 +183,6 @@ hardware_overrides:
     extra_args:
       - "--max-model-len"
       - "800000"
-      - "--gpu-memory-utilization"
-      - "0.95"
       - "--max-num-seqs"
       - "512"
       - "--disable-flashinfer-autotune"
@@ -199,8 +197,6 @@ hardware_overrides:
     extra_args:
       - "--distributed-executor-backend"
       - "mp"
-      - "--gpu-memory-utilization"
-      - "0.9"
       - "--max-num-seqs"
       - "512"
       - "--max-num-batched-tokens"
@@ -314,7 +310,6 @@ presets:
     json_args:
       "--speculative-config": { num_speculative_tokens: 6 }
     env:
-      SONAR_USE_V2_MODEL_RUNNER: "1"
       SONAR_FLOAT32_MATMUL_PRECISION: "high"
       TORCH_CUDA_ARCH_LIST: "10.0"
       SONAR_ENGINE_READY_TIMEOUT_S: "7200"
@@ -415,7 +410,7 @@ presets:
     strategy: single_node_dep
     variants: [default]
     workload: "Agentic (InferenceX AgentX)"
-    description: "Data-parallel ranks with expert parallelism and a Simple CPU KV tier behind a consistent-hash Sonar Router: DEP8 for concurrency 64 to 192, TP4 x DP2 at 32 and TP2 x DP4 at 48 and 64."
+    description: "Data-parallel ranks with expert parallelism and a Simple CPU KV tier behind a consistent-hash vLLM Router: DEP8 for concurrency 64 to 192, TP4 x DP2 at 32 and TP2 x DP4 at 48 and 64."
     source: { label: "InferenceX #4554", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/4554", key: "dsv4-fp4-b200-vllm-agentic-mtp", revision: 2c044c3 }
     image: "vllm/vllm-openai:nightly-8e2beaa3bff595577a069d49d96bde9074294ec2@sha256:3207cb99c0f59b92f7d47a74da8c6eb5467565d811a4f8d9df51df5188f59c70"
     select:
@@ -445,7 +440,6 @@ presets:
       "--speculative-config": { num_speculative_tokens: 6 }
       "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: 241500000000, enable_cross_layers_blocks: "true", lazy_offload: false } }
     env:
-      SONAR_USE_V2_MODEL_RUNNER: "1"
       SONAR_FLOAT32_MATMUL_PRECISION: "high"
       TORCH_CUDA_ARCH_LIST: "10.0"
       SONAR_ENGINE_READY_TIMEOUT_S: "7200"
@@ -605,7 +599,7 @@ presets:
       verification slots per sequence. The TP4 x DP2 and TP2 x DP4 points leave `SONAR_DSV4_MEGA_FP8_COMBINE` unset.
       TP2 x DP4 was measured on a second pinned image, shown on those points.
 
-      The lane fronts the server with Sonar Router 0.1.14 (`--policy consistent_hash`, `--intra-node-data-parallel-size`
+      The lane fronts the server with vLLM Router 0.1.14 (`--policy consistent_hash`, `--intra-node-data-parallel-size`
       equal to the server's DP size, as on the router tab), plus `--request-timeout-secs 14400` so long agentic
       requests outlive the default and `--disable-retries` so a failed request is not replayed. Clients send a stable
       per-conversation `X-Session-ID` so the router keeps a conversation on the rank that holds its prefix.
@@ -629,7 +623,7 @@ presets:
       key: dsv4-fp4-mi355x-vllm-agentic-mtp
       revision: 5ec3c995988e5d3632c1ff53e8ae39da3e799892
     image:
-      sonar: "vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d"
+      vllm: "vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d"
       model_revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
       pip: [Pillow, fastapi, uvicorn]
     tp: 8
@@ -654,7 +648,6 @@ presets:
       - "--no-disable-hybrid-kv-cache-manager"
     env:
       SONAR_ENGINE_READY_TIMEOUT_S: "10800"
-      SONAR_USE_V2_MODEL_RUNNER: "1"
       SONAR_ROCM_USE_AITER: "1"
       SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
       SONAR_ROCM_USE_AITER_MOE: "1"
@@ -748,7 +741,7 @@ presets:
       key: dsv4-fp4-mi355x-vllm-agentic-mtp
       revision: 5ec3c995988e5d3632c1ff53e8ae39da3e799892
     image:
-      sonar: "vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d"
+      vllm: "vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d"
       model_revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
       pip: [Pillow, fastapi, uvicorn, "vllm-router==0.1.14"]
     select:
@@ -773,7 +766,6 @@ presets:
       - "16384"
     env:
       SONAR_ENGINE_READY_TIMEOUT_S: "10800"
-      SONAR_USE_V2_MODEL_RUNNER: "1"
       SONAR_ROCM_USE_AITER: "1"
       SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
       SONAR_ROCM_USE_AITER_MOE: "1"
@@ -946,7 +938,7 @@ guide: |
     800K tokens (`--max-model-len 800000`) to leave KV headroom with dense params
     replicated across ranks — applies to both single-node and multi-node H200.
   - **MI355X (8× GPU)**: validated with ROCm + AITER (`SONAR_ROCM_USE_AITER=1`),
-    `--gpu-memory-utilization 0.9`, `--max-num-seqs 128`,
+    `--max-num-seqs 128`,
     `--max-num-batched-tokens 8192`, and `--distributed-executor-backend mp`.
   - **GB200 NVL4 (4× GPU per tray)**: the ~960 GB mixed-precision checkpoint does not
     fit on one tray; run multi-node DP + EP across **2 trays** (8 GPUs total) with
@@ -957,7 +949,7 @@ guide: |
   ```bash
   export SONAR_ROCM_USE_AITER=1
 
-  sonar serve deepseek-ai/DeepSeek-V4-Pro \
+  sonar run deepseek-ai/DeepSeek-V4-Pro \
     --host localhost \
     --port 8001 \
     --dtype auto \
@@ -967,7 +959,6 @@ guide: |
     --max-num-batched-tokens 8192 \
     --distributed-executor-backend mp \
     --trust-remote-code \
-    --gpu-memory-utilization 0.9 \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 \
     --tool-call-parser deepseek_v4 \
@@ -1014,7 +1005,7 @@ guide: |
     `mooncake_master` coordinates the pool; across 2+ instances, GPU workers share it for
     cross-instance prefix reuse. Install from the extra-install block above; see the [Mooncake docs](https://kvcache-ai.github.io/Mooncake/).
   - **LMCache** — `LMCacheMPConnector`: a node-local KV pool served by a
-    companion `lmcache server` process, launched before `sonar serve`.
+    companion `lmcache server` process, launched before `sonar run`.
     Single-node strategies only. Install from the extra-install block above; see the [LMCache docs](https://docs.lmcache.ai/).
 
   ## Agentic serving on GB200/GB300 (DSpark)
@@ -1025,7 +1016,7 @@ guide: |
 
   ### Common settings
 
-  Set `SONAR_USE_V2_MODEL_RUNNER=1` and use these engine arguments:
+  Use these engine arguments:
 
   ```text
   --tokenizer-mode deepseek_v4 --trust-remote-code
@@ -1196,7 +1187,7 @@ guide: |
   export SONAR_NIXL_SIDE_CHANNEL_HOST="$NODE_IP"
   export SONAR_NIXL_SIDE_CHANNEL_PORT=20096
   export DYN_SYSTEM_PORT=8081
-  export SONAR_USE_V2_MODEL_RUNNER=1 SONAR_DSV4_MEGA_FP8_COMBINE=1
+  export SONAR_DSV4_MEGA_FP8_COMBINE=1
   export PYTHONHASHSEED=0
   export MOONCAKE_MASTER="${INFRA_IP}:8700"
   export MOONCAKE_TE_META_DATA_SERVER="http://${INFRA_IP}:8701/metadata"
@@ -1331,7 +1322,7 @@ guide: |
   export SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve deepseek-ai/DeepSeek-V4-Pro \
+  sonar run deepseek-ai/DeepSeek-V4-Pro \
     --port "${PORT:-8000}" \
     --tensor-parallel-size 8 \
     --data-parallel-size 1 \
@@ -1381,7 +1372,7 @@ guide: |
   ```bash
   CONC=32
 
-  sonar bench serve \
+  sonar bench run \
     --model deepseek-ai/DeepSeek-V4-Pro \
     --host localhost \
     --port "${PORT:-8000}" \

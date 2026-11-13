@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 import ray
 
+from sonar.config import CacheConfig
 from sonar.config.model import ModelDType
 from sonar.platforms import current_platform
 from sonar.sampling_params import SamplingParams
@@ -73,7 +74,11 @@ def test_engine_log_metrics_ray(
         ray.get(actor.run.remote())
     finally:
         ray.shutdown()
-        wait_for_memory_to_settle(threshold_ratio=1.0 - engine_args.gpu_memory_utilization)
+        # Unset resolves to 1.0 under the extensible KV cache, which does not
+        # need that memory free up front; wait for the standard fraction.
+        wait_for_memory_to_settle(
+            threshold_ratio=1.0 - (engine_args.gpu_memory_utilization or CacheConfig.DEFAULT_GPU_MEMORY_UTILIZATION)
+        )
 
 
 def test_sanitized_opentelemetry_name():
@@ -108,7 +113,7 @@ def test_sanitized_opentelemetry_name():
 
 def _install_mock_metric(wrapper: RayPrometheusMetric) -> MagicMock:
     """Swap the wrapper's underlying Ray metric for a MagicMock while
-    preserving the real metric's ``_tag_keys`` (labels() reads them to
+    preserving the real metric's `_tag_keys` (labels() reads them to
     validate arity)."""
     real_metric = wrapper.metric
     mock = MagicMock()
@@ -202,7 +207,7 @@ def test_ray_histogram_labels_returns_independent_children_and_forwards_tags():
 
 
 def test_ray_counter_labels_accepts_non_string_label_values():
-    """RayPrometheusStatLogger passes ``str(idx)`` for engine indexes; this
+    """RayPrometheusStatLogger passes `str(idx)` for engine indexes; this
     covers the coercion path for any caller that passes a non-string label
     value positionally."""
     wrapper = RayCounterWrapper(

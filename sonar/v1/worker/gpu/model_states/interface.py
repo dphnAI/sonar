@@ -133,15 +133,15 @@ class ModelState(ABC):
         stream: torch.cuda.Stream | None = None,
     ) -> None:
         """Capture the CUDA graphs this state runs inside the model's forward,
-        on ``stream``: the model graphs' capture stream."""
+        on `stream`: the model graphs' capture stream."""
         return None
 
     def get_additional_cg_support(self) -> tuple[AttentionCGSupport, str | None]:
         """Cudagraph support of attention groups this ModelState builds outside
-        ``init_attn_backend`` (e.g. encoder-only layers).
+        `init_attn_backend` (e.g. encoder-only layers).
 
         Returns the minimum support level and its backend name. The default of
-        ``ALWAYS`` imposes no extra constraint on the runner's cudagraph mode.
+        `ALWAYS` imposes no extra constraint on the runner's cudagraph mode.
         """
         return AttentionCGSupport.ALWAYS, None
 
@@ -172,11 +172,15 @@ class ModelState(ABC):
         input_batch: InputBatch,
         req_states: RequestState,
     ) -> torch.Tensor | None:
-        """Prepare the ``inputs_embeds`` tensor for the current forward pass."""
+        """Prepare the `inputs_embeds` tensor for the current forward pass."""
         raise NotImplementedError
 
-    def dummy_inputs_embeds(self, num_tokens: int) -> torch.Tensor | None:
-        """Pre-allocated inputs_embeds buffer for dummy runs (contents unused)."""
+    def dummy_inputs_embeds(self, num_tokens: int, input_ids: torch.Tensor | None = None) -> torch.Tensor | None:
+        """Pre-allocated inputs_embeds buffer for dummy runs.
+
+        Holds the embeddings of `input_ids` when given; otherwise the contents
+        are unused.
+        """
         return None
 
     def execute_mm_encoder(self, scheduled_encoder_inputs: dict[str, list[int]]) -> None:
@@ -231,8 +235,8 @@ class ModelState(ABC):
         """Wrap or replace the default sampler.
 
         Called after model loading with the already-constructed base
-        ``Sampler``.  Return ``None`` to keep the defaults, or
-        ``(sampler, rejection_sampler | None)`` to override.
+        `Sampler`.  Return `None` to keep the defaults, or
+        `(sampler, rejection_sampler | None)` to override.
         """
         return None
 
@@ -243,7 +247,7 @@ class ModelState(ABC):
     def dummy_sampler_run(self, sampler: Any, hidden_states: torch.Tensor) -> bool:
         """Run a model-specific sampler profiling pass.
 
-        Return ``True`` to skip the default dummy sampler run.
+        Return `True` to skip the default dummy sampler run.
         """
         return False
 

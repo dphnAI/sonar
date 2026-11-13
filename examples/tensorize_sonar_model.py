@@ -12,7 +12,7 @@ from sonar.model_executor.model_loader.tensorizer import TensorizerArgs, Tensori
 
 # yapf conflicts with isort for this docstring
 # yapf: disable
-"""
+r"""
 tensorize_sonar_model.py is a script that can be used to serialize and 
 deserialize Sonar models. These models can be loaded using tensorizer 
 to the GPU extremely quickly over an HTTP/HTTPS endpoint, an S3 endpoint,

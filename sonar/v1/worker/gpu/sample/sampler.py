@@ -88,6 +88,8 @@ class Sampler:
         self.needs_logits_processing = np.zeros(max_num_reqs, dtype=bool)
         # Requests whose only processing is a temperature other than 0 or 1.
         self.temperature_only_processing = np.zeros(max_num_reqs, dtype=bool)
+        # Whether filters, forcing, or processors can leave masked logits.
+        self.may_mask_logits = np.zeros(max_num_reqs, dtype=bool)
         self.num_speculative_tokens = num_speculative_tokens
         self.return_sampling_mask = return_sampling_mask
         self.fork_state: GPUForkSamplingState | None = None
@@ -118,6 +120,7 @@ class Sampler:
         self.temperature_only_processing[req_idx] = (
             sampling_needs and not other_needs and not self.sampling_states.uses_filters(req_idx)
         )
+        self.may_mask_logits[req_idx] = self.sampling_states.masks_logits(req_idx) or other_needs
 
         self.logprob_token_ids_state.add_request(req_idx, sampling_params)
         if self.trace_replay_state is not None:
@@ -132,6 +135,7 @@ class Sampler:
             self.phrase_retry_mask.add_request(req_idx, int(self.req_states.prompt_len.np[req_idx]), retry)
         self.needs_logits_processing[req_idx] |= retry is not None
         self.temperature_only_processing[req_idx] &= retry is None
+        self.may_mask_logits[req_idx] |= retry is not None
 
     def remove_request(self, req_idx: int) -> None:
         """Detach before RequestState frees the slot; retain preempted state."""
@@ -163,11 +167,11 @@ class Sampler:
         if self.trace_replay_state is not None:
             self.trace_replay_state.apply_staged_writes()
 
-    def get_logprobs_dims(self, idx_mapping_np: np.ndarray, include_token_ids: bool = True) -> tuple[int, int] | None:
+    def get_logprobs_dims(self, idx_mapping_np: np.ndarray) -> tuple[int, int] | None:
         """(num_logprobs, max_per_req_token_ids) for the given requests, or
         None when none of them want logprobs."""
         max_num_logprobs = self.sampling_states.max_num_logprobs(idx_mapping_np)
-        max_token_ids = self.logprob_token_ids_state.max_num_token_ids(idx_mapping_np) if include_token_ids else 0
+        max_token_ids = self.logprob_token_ids_state.max_num_token_ids(idx_mapping_np)
         if max_num_logprobs == NO_LOGPROBS and max_token_ids == 0:
             return None
         num_logprobs = max_num_logprobs if max_num_logprobs != NO_LOGPROBS else 0

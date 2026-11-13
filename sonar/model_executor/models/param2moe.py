@@ -87,10 +87,10 @@ class Param2MoEAttention(nn.Module):
     """Grouped-Query Attention (GQA) for Param2MoE.
 
     Notable differences from a vanilla GQA layer:
-      * The checkpoint fuses Q, K, V into a single ``query_key_value`` weight.
-        Sonar receives it already renamed to ``qkv_proj`` by the weight-name
-        translator and splits it during ``load_weights``.
-      * Optional per-head RMS norms on Q and K (``use_qk_norm=True``).
+      * The checkpoint fuses Q, K, V into a single `query_key_value` weight.
+        Sonar receives it already renamed to `qkv_proj` by the weight-name
+        translator and splits it during `load_weights`.
+      * Optional per-head RMS norms on Q and K (`use_qk_norm=True`).
     """
 
     def __init__(
@@ -352,7 +352,7 @@ class Param2MoEMoEBlock(nn.Module):
 class Param2MoEDecoderLayer(nn.Module):
     """Single transformer decoder block.
 
-    Dense for the first ``first_k_dense_replace`` layers; MoE thereafter.
+    Dense for the first `first_k_dense_replace` layers; MoE thereafter.
     """
 
     def __init__(

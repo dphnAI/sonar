@@ -24,6 +24,7 @@ from sonar.model_executor.layers.quantization.utils.mxfp6_online_utils import (
     quantize_mxfp6_cuda,
 )
 from sonar.model_executor.layers.quantization.utils.quant_utils import (
+    QuantKey,
     kMxfp6E2M3Dynamic,
     kMxfp6E2M3Static,
     kMxfp6E3M2Dynamic,
@@ -36,7 +37,7 @@ logger = init_logger(__name__)
 
 
 def _swizzle_mxfp6_expert_scales(scales: torch.Tensor, m: int, k: int) -> torch.Tensor:
-    """Vectorized F8_128x4 scale swizzle for ``[expert, M, K/32]``."""
+    """Vectorized F8_128x4 scale swizzle for `[expert, M, K/32]`."""
     experts = scales.shape[0]
     num_m_tiles = (m + 127) // 128
     num_k_tiles = (k + 127) // 128
@@ -50,6 +51,9 @@ def _swizzle_mxfp6_expert_scales(scales: torch.Tensor, m: int, k: int) -> torch.
 
 
 class Mxfp6OnlineLinearMethod(OnlineLinearBase):
+    accepts_activation_override = True
+    activation_quant_key: QuantKey | None = kMxfp8Dynamic
+
     def __init__(self, spec: QuantSpec):
         super().__init__()
         self.weight_quant_key = spec.weight
@@ -143,6 +147,9 @@ class Mxfp6OnlineLinearMethod(OnlineLinearBase):
 
 class Mxfp6OnlineMoEMethod(OnlineMoEMethodBase):
     """Quantize BF16 MoE weights to packed MXFP6 while each layer loads."""
+
+    accepts_activation_override = True
+    activation_quant_key: QuantKey | None = kMxfp8Dynamic
 
     @classmethod
     def can_implement(cls, moe) -> tuple[bool, str | None]:

@@ -8,7 +8,7 @@ import pytest
 from sonar import LLM, PoolingParams
 from sonar.exceptions import SonarValidationError
 
-MODEL_NAME = "intfloat/multilingual-e5-small"
+MODEL_NAME = "vllm-project/multilingual-e5-small"
 
 PROMPTS = [
     "Hello, my name is",

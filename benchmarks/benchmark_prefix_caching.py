@@ -139,7 +139,7 @@ def sample_requests_from_random(
     prefix_token_ids = sample_tokens(tokenizer, prefix_len)
     min_len, max_len = input_length_range
 
-    for i in range(num_requests):
+    for _ in range(num_requests):
         unique_part_token_ids = sample_tokens(tokenizer, random.randint(min_len - prefix_len, max_len - prefix_len))
         prompt_token_ids = prefix_token_ids + unique_part_token_ids
         prompt = tokenizer.decode(prompt_token_ids)

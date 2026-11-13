@@ -14,13 +14,13 @@ LogFormatter = Literal["text", "json"]
 
 @config
 class LoggingConfig:
-    """Sonar logging. Default ``dictConfig`` adds a formatted stream handler.
+    """Sonar logging. Default `dictConfig` adds a formatted stream handler.
 
-    Supply a JSON object with ``--logging-config`` or individual fields with
-    dotted arguments such as ``--logging-config.log_level DEBUG`` and
-    ``--logging-config.formatter json``. ``--log-level`` and legacy
-    ``--log-config-file`` override their matching fields. Set
-    ``configure_logging`` to false to skip applying a ``dictConfig``.
+    Supply a JSON object with `--logging-config` or individual fields with
+    dotted arguments such as `--logging-config.log_level DEBUG` and
+    `--logging-config.formatter json`. `--log-level` and legacy
+    `--log-config-file` override their matching fields. Set
+    `configure_logging` to false to skip applying a `dictConfig`.
     """
 
     log_level: LogLevel = Field(default_factory=lambda: cast(LogLevel, envs.SONAR_LOGGING_LEVEL))
@@ -32,15 +32,15 @@ class LoggingConfig:
     configure_logging: bool = Field(default_factory=lambda: envs.SONAR_CONFIGURE_LOGGING)
     """Whether to apply a Python logging configuration.
 
-    With no ``pylogging_config_file``, the default config adds a formatted
-    stream handler to the ``sonar`` logger. A custom Python logging configuration
+    With no `pylogging_config_file`, the default config adds a formatted
+    stream handler to the `sonar` logger. A custom Python logging configuration
     file also requires this to be enabled.
     """
 
     pylogging_config_file: str | None = Field(default_factory=lambda: envs.SONAR_LOGGING_CONFIG_PATH)
     """Path to a Python logging JSON file using
-    [``dictConfig`` schema](https://docs.python.org/3/library/logging.config.html#configuration-file-format).
+    [`dictConfig` schema](https://docs.python.org/3/library/logging.config.html#configuration-file-format).
 
-    A custom ``dictConfig`` is authoritative over ``log_level`` and
-    ``formatter`` for logger, handler, and formatter settings.
+    A custom `dictConfig` is authoritative over `log_level` and
+    `formatter` for logger, handler, and formatter settings.
     """

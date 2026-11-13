@@ -49,8 +49,6 @@ variants:
     extra_args:
       - "--tensor-parallel-size"
       - "4"
-      - "--gpu-memory-utilization"
-      - "0.9"
 
 compatible_strategies:
   - single_node_tp
@@ -87,7 +85,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### Install Sonar (AMD ROCm MI300X/MI325X/MI355X)
@@ -101,20 +99,19 @@ guide: |
   Basic TP4:
 
   ```bash
-  sonar serve XiaomiMiMo/MiMo-V2-Flash \
+  sonar run XiaomiMiMo/MiMo-V2-Flash \
     --host 0.0.0.0 --port 9001 --seed 1024 \
     --served-model-name mimo_v2_flash \
     --tensor-parallel-size 4 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.9 \
     --generation-config sonar
   ```
 
   With tool calling + reasoning:
 
   ```bash
-  sonar serve XiaomiMiMo/MiMo-V2-Flash \
-    --tensor-parallel-size 4 --trust-remote-code --gpu-memory-utilization 0.9 \
+  sonar run XiaomiMiMo/MiMo-V2-Flash \
+    --tensor-parallel-size 4 --trust-remote-code \
     --tool-call-parser mimo \
     --reasoning-parser qwen3 \
     --generation-config sonar \
@@ -124,12 +121,11 @@ guide: |
   DP + TP + EP:
 
   ```bash
-  sonar serve XiaomiMiMo/MiMo-V2-Flash \
+  sonar run XiaomiMiMo/MiMo-V2-Flash \
     --data-parallel-size 2 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --trust-remote-code \
-    --gpu-memory-utilization 0.9 \
     --generation-config sonar \
     --served-model-name mimo_v2_flash
   ```
@@ -138,14 +134,13 @@ guide: |
 
   ```bash
   export SONAR_ROCM_USE_AITER=0
-  sonar serve XiaomiMiMo/MiMo-V2-Flash --tensor-parallel-size 4 \
-    --trust-remote-code --gpu-memory-utilization 0.9 --generation-config sonar
+  sonar run XiaomiMiMo/MiMo-V2-Flash --tensor-parallel-size 4 \
+    --trust-remote-code --generation-config sonar
   ```
 
   Tunable flags:
   - `--max-model-len=65536` works well; max is 128K.
   - `--max-num-batched-tokens=32768` for prompt-heavy; 16K/8K for lower latency.
-  - `--gpu-memory-utilization=0.95` to maximize KV cache.
 
   ## Client Usage
 
@@ -164,7 +159,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model XiaomiMiMo/MiMo-V2-Flash \
     --dataset-name random --random-input-len 8000 --random-output-len 1000 \
     --request-rate 3 --num-prompts 1800 --ignore-eos

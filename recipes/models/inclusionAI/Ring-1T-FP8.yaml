@@ -43,8 +43,6 @@ variants:
     vram_minimum_gb: 1200
     description: "FP8 weights on 8x H200 (80 GB) with FP8 KV cache"
     extra_args:
-      - "--gpu-memory-utilization"
-      - "0.97"
       - "--compilation-config"
       - '{"use_inductor": false}'
 
@@ -75,7 +73,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### Install Sonar (AMD ROCm)
@@ -89,10 +87,9 @@ guide: |
   8x H200 (FP8 KV cache):
 
   ```bash
-  sonar serve inclusionAI/Ring-1T-FP8 \
+  sonar run inclusionAI/Ring-1T-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
-    --gpu-memory-utilization 0.97 \
     --max-num-seqs 32 \
     --kv-cache-dtype fp8 \
     --compilation-config '{"use_inductor": false}' \
@@ -103,10 +100,9 @@ guide: |
 
   ```bash
   export SONAR_ROCM_USE_AITER=1
-  sonar serve inclusionAI/Ring-1T-FP8 \
+  sonar run inclusionAI/Ring-1T-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
-    --gpu-memory-utilization 0.9 \
     --max-num-seqs 32 \
     --kv-cache-dtype fp8 \
     --served-model-name Ring-1T-FP8
@@ -115,7 +111,7 @@ guide: |
   Tuning flags:
   - `--max-model-len=65536` works well for most scenarios.
   - `--max-num-batched-tokens=32768` for prompt-heavy; 16384/8192 for lower latency.
-  - Reduce `--gpu-memory-utilization` below 0.97 if you hit OOM.
+  - If you hit OOM, lower `--max-num-seqs` or `--max-num-batched-tokens`.
 
   ## Client Usage
 

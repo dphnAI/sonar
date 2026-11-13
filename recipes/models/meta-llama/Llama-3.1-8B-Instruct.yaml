@@ -162,7 +162,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### AMD ROCm
@@ -180,7 +180,7 @@ guide: |
 
   ```bash
   export SONAR_ROCM_USE_AITER=1
-  sonar serve meta-llama/Llama-3.1-8B-Instruct \
+  sonar run meta-llama/Llama-3.1-8B-Instruct \
     --tensor-parallel-size 1
   ```
 
@@ -204,7 +204,7 @@ guide: |
     --privileged --network host --shm-size 16G \
     -v /dev/shm:/dev/shm -e HF_TOKEN=$HF_TOKEN \
     vllm/vllm-tpu:latest \
-    sonar serve meta-llama/Llama-3.1-8B-Instruct \
+    sonar run meta-llama/Llama-3.1-8B-Instruct \
       --tensor-parallel-size 1 \
       --max-model-len 2048 \
       --host 0.0.0.0 --port 8000
@@ -270,7 +270,7 @@ guide: |
   Enable the **Spec Decoding** toggle above, or add the `--speculative-config` manually:
 
   ```bash
-  sonar serve meta-llama/Llama-3.1-8B-Instruct \
+  sonar run meta-llama/Llama-3.1-8B-Instruct \
     --speculative-config '{"model":"RedHatAI/Llama-3.1-8B-Instruct-speculator.eagle3","method":"eagle3","num_speculative_tokens":3}'
   ```
 
@@ -280,7 +280,8 @@ guide: |
   ## Troubleshooting
 
   **OOM on small GPUs:**
-  Lower `--max-model-len` or `--gpu-memory-utilization`.
+  Lower `--max-model-len` or `--max-num-seqs`. On TPU, XPU and CPU, lowering
+  `--gpu-memory-utilization` also leaves more headroom.
 
   **EAGLE3 draft head not loading:**
   Upgrade Sonar to >= 0.9.0 — earlier releases don't support the EAGLE3 verification path.

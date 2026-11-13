@@ -24,14 +24,18 @@ import sonar.model_executor.layers.quantization.utils.w8a8_utils
 from sonar.config import (
     CompilationConfig,
     EPLBConfig,
+    KernelConfig,
     ParallelConfig,
     SchedulerConfig,
     SonarConfig,
     set_current_sonar_config,
 )
 from sonar.distributed import (
+    cleanup_dist_env_and_memory,
     get_ep_group,
     get_eplb_group,
+    init_distributed_environment,
+    initialize_model_parallel,
     tensor_model_parallel_all_gather,
 )
 from sonar.distributed.device_communicators.all_reduce_utils import (
@@ -59,6 +63,7 @@ from sonar.utils.flashinfer import (
 )
 from sonar.utils.import_utils import has_deep_ep, has_mori, has_nixl_ep
 from sonar.utils.math_utils import cdiv, next_power_of_2
+from sonar.utils.network_utils import get_open_port
 from sonar.utils.torch_utils import set_random_seed
 from sonar.v1.worker.workspace import (
     init_workspace_manager,
@@ -70,6 +75,7 @@ from tests.kernels.moe.modular_kernel_tools.parallel_utils import (
     parallel_launch_with_config,
 )
 from tests.kernels.moe.utils import TestMLP, make_test_weights, moe_quantize_weights
+from tests.kernels.utils import torch_moe
 
 
 def on_gfx950() -> bool:
@@ -501,7 +507,7 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
     if config.use_routed_input_transform and config.use_gate:
         return (
             False,
-            "routed_input_transform not supported with gate because of padding problems",
+            ("routed_input_transform not supported with gate because of padding problems"),
         )
 
     # TODO: disable for now
@@ -511,7 +517,7 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
     ]:
         return (
             False,
-            "routed_input_transform not supported with DeepEP backends because of padding problems",
+            ("routed_input_transform not supported with DeepEP backends because of padding problems"),
         )
 
     # routed_input_transform + quantization + high hidden dimensions
@@ -519,7 +525,7 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
     if config.use_routed_input_transform and config.quantization is not None and config.k >= 2048:
         return (
             False,
-            "routed_input_transform + quantization + higher hidden dimensions leads to large differences.",
+            ("routed_input_transform + quantization + higher hidden dimensions leads to large differences."),
         )
 
     # Skip modelopt_fp4 if not on B100+ (compute capability 10.0+) or gfx950.
@@ -548,7 +554,7 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
         if on_gfx950() and config.backend == "deepep_low_latency" and config.quantization == "modelopt_fp4":
             return (
                 False,
-                "DeepEP low latency requires a batched NVFP4 MoE backend, which is not available on gfx950.",
+                ("DeepEP low latency requires a batched NVFP4 MoE backend, which is not available on gfx950."),
             )
 
         if config.backend in MORI_BACKENDS:
@@ -1750,8 +1756,6 @@ def _parallel_worker(
             # Independent test configs can change top_k and num_experts, unlike
             # the layers sharing a one-sided manager in a single model.
             if test_config.backend == "flashinfer_nvlink_one_sided":
-                from flashinfer.comm.trtllm_moe_alltoall import MoeAlltoAll
-
                 from sonar.distributed.device_communicators.all2all import (
                     FlashInferNVLinkOneSidedManager,
                 )
@@ -1763,8 +1767,6 @@ def _parallel_worker(
                 if manager is not None:
                     assert isinstance(manager, FlashInferNVLinkOneSidedManager)
                     manager.cleanup()
-                # Run cached tensor deleters before their JIT library unloads.
-                MoeAlltoAll._WORKSPACE_CACHE.clear()
             # DeepEP managers are not reliably reusable across many subtests in
             # a single worker process. Tear them down after each DeepEP case so
             # later subtests do not inherit stale communication state. Skip this
@@ -2169,3 +2171,93 @@ def test_moe_layer(
             os.remove(failure_report_path)
         torch.accelerator.synchronize()  # TODO: Is this needed?
         torch.accelerator.empty_cache()
+
+
+def _biased_moe_tp_worker(rank: int, tp_size: int, port: int, result_path: str):
+    if current_platform.is_cpu():
+        device = torch.device("cpu")
+        os.environ["SONAR_DIST_IDENT"] = f"moe-bias-{port}"
+    else:
+        device = torch.device(current_platform.device_type, rank)
+        torch.accelerator.set_device_index(device)
+    torch.set_default_device(device)
+    # Unquantized FlashInfer CUTLASS drops expert biases, so pin a bias-aware
+    # kernel on GPU; CPU only has its own backend.
+    sonar_config = SonarConfig(
+        parallel_config=ParallelConfig(tensor_parallel_size=tp_size),
+        kernel_config=KernelConfig(moe_backend="auto" if current_platform.is_cpu() else "triton"),
+    )
+    with set_current_sonar_config(sonar_config):
+        init_distributed_environment(
+            world_size=tp_size,
+            rank=rank,
+            distributed_init_method=f"tcp://127.0.0.1:{port}",
+            local_rank=rank,
+            backend=current_platform.dist_backend,
+        )
+        initialize_model_parallel(tensor_model_parallel_size=tp_size)
+        if not is_workspace_manager_initialized():
+            init_workspace_manager(device)
+
+        num_experts, top_k, hidden, intermediate, num_tokens = 8, 2, 128, 256, 16
+        dtype = torch.bfloat16
+        generator = torch.Generator(device="cpu").manual_seed(0)
+
+        def randn(*shape: int, scale: float = 1.0) -> torch.Tensor:
+            sample = torch.randn(*shape, generator=generator, device="cpu")
+            return (sample * scale).to(device=device, dtype=dtype)
+
+        w13 = randn(num_experts, 2 * intermediate, hidden, scale=0.05)
+        w2 = randn(num_experts, hidden, intermediate, scale=0.05)
+        b13 = randn(num_experts, 2 * intermediate, scale=0.1)
+        b2 = randn(num_experts, hidden)
+        hidden_states = randn(num_tokens, hidden)
+        router_logits = randn(num_tokens, num_experts)
+
+        layer = FusedMoEFactory(
+            num_experts=num_experts,
+            top_k=top_k,
+            hidden_size=hidden,
+            intermediate_size=intermediate,
+            params_dtype=dtype,
+            renormalize=False,
+            prefix="model.layers.0.mlp.experts",
+            has_bias=True,
+        )
+        experts = layer.routed_experts
+        for e in range(num_experts):
+            gate, up = w13[e].chunk(2)
+            gate_bias, up_bias = b13[e].chunk(2)
+            for param, weight, name, shard_id in [
+                (experts.w13_weight, gate, "w13_weight", "w1"),
+                (experts.w13_weight, up, "w13_weight", "w3"),
+                (experts.w2_weight, w2[e], "w2_weight", "w2"),
+                (experts.w13_bias, gate_bias, "w13_bias", "w1"),
+                (experts.w13_bias, up_bias, "w13_bias", "w3"),
+                (experts.w2_bias, b2[e], "w2_bias", "w2"),
+            ]:
+                assert experts.weight_loader(param, weight, name, shard_id, e, return_success=True)
+        layer._quant_method.process_weights_after_loading(experts)
+
+        with set_forward_context(None, sonar_config, num_tokens=num_tokens):
+            output = layer(hidden_states, router_logits)
+        expected = torch_moe(hidden_states, w13, w2, router_logits, top_k, b_bias1=b13, b_bias2=b2)
+        if rank == 0:
+            torch.save((output.cpu(), expected.cpu()), result_path)
+        cleanup_dist_env_and_memory()
+
+
+@pytest.mark.parametrize("tp_size", [1, 2])
+def test_moe_layer_tp_expert_bias(tp_size: int, tmp_path):
+    """A biased MoE loaded through the expert weight loader matches the
+    unsharded reference under TP, so the down-projection bias is added once."""
+    if not current_platform.is_cpu() and current_platform.device_count() < tp_size:
+        pytest.skip(f"Requires {tp_size} GPUs")
+    result_path = str(tmp_path / "result.pt")
+    torch.multiprocessing.spawn(
+        _biased_moe_tp_worker,
+        args=(tp_size, get_open_port(), result_path),
+        nprocs=tp_size,
+    )
+    output, expected = torch.load(result_path)
+    torch.testing.assert_close(output, expected, atol=3.5e-2, rtol=3.5e-2)

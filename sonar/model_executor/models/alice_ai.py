@@ -47,7 +47,7 @@ from sonar.model_executor.models.interfaces import (
     MixtureOfExperts,
     SupportsLoRA,
 )
-from sonar.model_executor.models.qwen2_moe import Qwen2MoeMLP
+from sonar.model_executor.models.qwen3_moe import Qwen3MoeMLP
 from sonar.model_executor.models.qwen3_next import (
     Qwen3NextAttention,
     _should_replicate_misaligned_shared_expert,
@@ -137,7 +137,6 @@ def _make_alice_ai_full_attention_config(
     adapted = copy(config)
     adapted.attn_output_gate = True
     adapted.qkv_bias = False
-    adapted.dual_chunk_attention_config = None
     adapted.is_causal = True
     return cast(Qwen3NextConfig, adapted)
 
@@ -245,7 +244,7 @@ class AliceAISparseMoeBlock(nn.Module):
         if self.is_fused_shared_expert_enabled or config.shared_expert_intermediate_size <= 0:
             self.shared_expert = None
         else:
-            self.shared_expert = Qwen2MoeMLP(
+            self.shared_expert = Qwen3MoeMLP(
                 hidden_size=config.hidden_size,
                 intermediate_size=config.shared_expert_intermediate_size,
                 hidden_act=config.hidden_act,
@@ -676,14 +675,4 @@ class AliceAIForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsLoRA, Mixtu
         loader = AutoWeightsLoader(self)
         loaded = loader.load_weights(weights=weights)
         loaded.update(manually_loaded)
-        expected_target_weights = {
-            name
-            for name, _ in self.named_parameters()
-            if ".attnres_final." in name
-            or ".attn_res_" in name
-            or ".mlp_res_" in name
-            or name.endswith(".e_score_correction_bias")
-        }
-        if missing := expected_target_weights - loaded:
-            raise ValueError("AliceAI checkpoint is missing target-specific weights: " + ", ".join(sorted(missing)))
         return loaded

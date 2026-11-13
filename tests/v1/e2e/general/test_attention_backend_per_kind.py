@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""End-to-end checks that ``backend_per_kind`` selects the requested attention
+"""End-to-end checks that `backend_per_kind` selects the requested attention
 backend for each KV-cache group at runtime.
 
-Uses ``google/gemma-3-1b-it``, which interleaves full-attention and
-sliding-window layers, so the model produces separate ``full_attention`` and
-``sliding_window`` KV-cache groups.
+Uses `google/gemma-3-1b-it`, which interleaves full-attention and
+sliding-window layers, so the model produces separate `full_attention` and
+`sliding_window` KV-cache groups.
 """
 
 import pytest

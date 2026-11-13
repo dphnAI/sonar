@@ -225,7 +225,7 @@ class TextDecoder(nn.Module):
 class WhisperModel(nn.Module):
     """Whisper speech recognition model.
 
-    Combines :class:`AudioEncoder` and :class:`TextDecoder` into a single
+    Combines `AudioEncoder` and `TextDecoder` into a single
     module with weight sanitization for HuggingFace compatibility.
     """
 
@@ -269,7 +269,7 @@ class WhisperModel(nn.Module):
         """Encode audio mel spectrogram.
 
         Args:
-            mel: Mel spectrogram of shape ``(batch, n_frames, n_mels)``.
+            mel: Mel spectrogram of shape `(batch, n_frames, n_mels)`.
 
         Returns:
             Encoder hidden states.
@@ -285,7 +285,7 @@ class WhisperModel(nn.Module):
         """Decode tokens given audio features.
 
         Args:
-            tokens: Token IDs of shape ``(batch, seq_len)``.
+            tokens: Token IDs of shape `(batch, seq_len)`.
             audio_features: Encoder output.
             kv_cache: Optional cached key-value pairs.
 
@@ -335,7 +335,7 @@ class WhisperModel(nn.Module):
     def sanitize(self, weights: dict) -> dict:
         """Sanitize weight keys and dtypes for MLX compatibility.
 
-        Handles HuggingFace-format keys (``model.encoder.layers.*``) by
+        Handles HuggingFace-format keys (`model.encoder.layers.*`) by
         renaming them to the MLX layout, transposes Conv1d weights, and
         casts to the model dtype.
 
@@ -343,7 +343,7 @@ class WhisperModel(nn.Module):
             weights: Raw weight dictionary.
 
         Returns:
-            Sanitized weight dictionary ready for ``load_weights``.
+            Sanitized weight dictionary ready for `load_weights`.
         """
         is_hf_format = any(k.startswith("model.") for k in weights)
 

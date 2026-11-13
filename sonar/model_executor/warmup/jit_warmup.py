@@ -889,8 +889,8 @@ class SonarJitKernel(Generic[CompileKeyT], ABC):
 def _same_value(left: Any, right: Any) -> bool:
     """True if two registration values are the same object or compare equal.
 
-    Identity is checked first so shared singletons (e.g. ``sonar_config``, torch
-    dtypes) short-circuit before any potentially deep or non-boolean ``__eq__``.
+    Identity is checked first so shared singletons (e.g. `sonar_config`, torch
+    dtypes) short-circuit before any potentially deep or non-boolean `__eq__`.
     """
     if left is right:
         return True
@@ -904,7 +904,7 @@ def _same_registration(
     left: tuple[tuple[Any, ...], dict[str, Any]],
     right: tuple[tuple[Any, ...], dict[str, Any]],
 ) -> bool:
-    """True if two ``(args, kwargs)`` registrations are equivalent."""
+    """True if two `(args, kwargs)` registrations are equivalent."""
     left_args, left_kwargs = left
     right_args, right_kwargs = right
     if len(left_args) != len(right_args) or left_kwargs.keys() != right_kwargs.keys():

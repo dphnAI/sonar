@@ -19,6 +19,7 @@ import torch
 
 from sonar.platforms import current_platform
 from sonar.triton_utils import triton
+from sonar.utils.platform_utils import cuda_get_device_properties
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,12 @@ def get_available_device() -> str:
 
 @functools.cache
 def _check_platform() -> Literal["nvidia", "amd", "intel", "musa"]:
+    # Use Sonar's NVML-based platform: querying Triton here initializes CUDA at
+    # import time, which forces the engine process to be spawned instead of forked.
+    if current_platform.is_cuda():
+        return "nvidia"
+    if current_platform.is_rocm():
+        return "amd"
     device = get_available_device()
     mapping = {
         "cuda": "nvidia",
@@ -138,7 +145,7 @@ is_intel = device_platform == "intel"
 is_nvidia = device_platform == "nvidia"
 is_intel_alchemist = is_intel and "Intel(R) Arc(TM) A" in torch.xpu.get_device_name(0)
 is_nvidia_hopper = is_nvidia and (
-    "NVIDIA H" in torch.cuda.get_device_name(0) or torch.cuda.get_device_capability()[0] >= 9
+    "NVIDIA H" in current_platform.get_device_name(0) or current_platform.get_device_capability(0).major >= 9
 )
 use_cuda_graph = is_nvidia and os.environ.get("FLA_USE_CUDA_GRAPH", "0") == "1"
 is_gather_supported = hasattr(triton.language, "gather")
@@ -179,8 +186,12 @@ class Backend(Enum):
 @functools.cache
 def check_shared_mem(arch: str = "none", tensor_idx: int = 0) -> bool:
     try:
-        device_shared_mem_list = get_all_max_shared_mem()
-        max_shared_memory = device_shared_mem_list[tensor_idx]
+        if is_amd:
+            # Triton's device query initializes HIP outside torch, so Sonar would
+            # fork workers from an initialized parent and they could not use HIP.
+            (max_shared_memory,) = cuda_get_device_properties(tensor_idx, ("shared_memory_per_block",))
+        else:
+            max_shared_memory = get_all_max_shared_mem()[tensor_idx]
         return max_shared_memory >= Backend.get_shared_memory(arch)
     except Exception:
         return False

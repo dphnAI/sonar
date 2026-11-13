@@ -800,12 +800,12 @@ class Exl3LinearMethod(LinearMethodBase):
         start: int,
         size: int,
     ) -> None:
-        """Keep this rank's output columns ``[start, start + size)``.
+        """Keep this rank's output columns `[start, start + size)`.
 
         EXL3 applies its output Hadamard transform to 128-wide column blocks, so a
         shard boundary inside a block (e.g. a vocab-parallel lm_head) cannot be
         computed from its own columns. Such shards keep the covering 128-aligned
-        window and narrow the result in ``_apply_one``. Columns past the
+        window and narrow the result in `_apply_one`. Columns past the
         checkpoint (vocab padding) are zero.
         """
         svh = layer.svh.exl3_tensors[source_id]

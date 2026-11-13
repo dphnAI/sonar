@@ -36,6 +36,8 @@ class _QueryAttention(nn.Module):
     [("auto", False), ("fp8", False), ("fp8", True)],
 )
 def test_draft_attention_stores_kv_after_compile(dist_init, monkeypatch, kv_cache_dtype, query_pre_quantized):
+    from transformers import MiniMaxM3VLTextConfig
+
     from sonar.compilation.decorators import support_torch_compile
     from sonar.config import (
         CompilationConfig,
@@ -46,10 +48,9 @@ def test_draft_attention_stores_kv_after_compile(dist_init, monkeypatch, kv_cach
     )
     from sonar.forward_context import set_forward_context
     from sonar.models.minimax_m3.common.dspark import MiniMaxM3DSparkAttention
-    from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
 
     monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
-    config = MiniMaxM3TextConfig(
+    config = MiniMaxM3VLTextConfig(
         hidden_size=512,
         num_attention_heads=8,
         num_key_value_heads=2,

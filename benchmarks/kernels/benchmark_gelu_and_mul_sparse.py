@@ -78,7 +78,7 @@ if __name__ == "__main__":
         )
     )
     perf_report(
-        lambda num_tokens, intermediate_size, provider: (
-            benchmark_gelu_and_mul_sparse(num_tokens, intermediate_size, provider, dtype)
+        lambda num_tokens, intermediate_size, provider: benchmark_gelu_and_mul_sparse(
+            num_tokens, intermediate_size, provider, dtype
         )
     ).run(print_data=True)

@@ -12,11 +12,9 @@ the real weight-load path (falls back to unquantized) and the dummy-load path
 """
 
 import pytest
-from sonar.model_executor.layers.quantization.utils.humming_utils import (
-    humming_is_layer_skipped,
-)
 
 from sonar.model_executor.layers.quantization.humming import HummingConfig
+from sonar.model_executor.layers.quantization.utils.humming import humming_is_layer_skipped
 
 # The real ignore list from Kimi-K2.6's compressed-tensors quantization_config.
 K26_IGNORE = [

@@ -90,7 +90,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### Intel Xeon 6 CPUs
@@ -115,7 +115,7 @@ guide: |
     --shm-size=16G \
     -e HF_HOME -e HF_TOKEN \
     vllm/vllm-tpu:latest \
-    sonar serve ...
+    vllm serve ...
   ```
 
   ## Deployment Configurations
@@ -126,7 +126,7 @@ guide: |
   prescribe a fixed TP/DP layout or hard-code NUMA node IDs.
 
   ```bash
-  sonar serve Qwen/Qwen2.5-VL-7B-Instruct
+  sonar run Qwen/Qwen2.5-VL-7B-Instruct
   ```
 
   Docker:
@@ -160,7 +160,7 @@ guide: |
   ```bash
   export HF_HOME=/dev/shm
   export HF_TOKEN=<your HF token>
-  sonar serve Qwen/Qwen2.5-VL-7B-Instruct \
+  sonar run Qwen/Qwen2.5-VL-7B-Instruct \
     --tensor-parallel-size 1 \
     --pipeline-parallel-size 1 \
     --dtype bfloat16 \
@@ -175,7 +175,7 @@ guide: |
   ### Single GPU (BF16, TP=1)
   ```bash
   export CUDA_VISIBLE_DEVICES=0
-  sonar serve Qwen/Qwen2.5-VL-7B-Instruct \
+  sonar run Qwen/Qwen2.5-VL-7B-Instruct \
     --host 0.0.0.0 \
     --port 8000 \
     --limit-mm-per-prompt '{"image":2,"video":0}'
@@ -185,7 +185,7 @@ guide: |
   For higher throughput across a node, data parallelism works better than TP for a model this size.
   ```bash
   export CUDA_VISIBLE_DEVICES=0,1,2,3
-  sonar serve Qwen/Qwen2.5-VL-7B-Instruct \
+  sonar run Qwen/Qwen2.5-VL-7B-Instruct \
     --host 0.0.0.0 \
     --port 8000 \
     --data-parallel-size 4 \
@@ -197,7 +197,7 @@ guide: |
   - `--max-model-len 16384` is a safe default on a single v6e chip (native context is 128K); raise it if you have headroom.
   - `--limit-mm-per-prompt` caps incoming multimodal requests per prompt.
   - `--mm-processor-kwargs '{"max_pixels":1003520}'` bounds the per-image resolution to control encoder cost.
-  - Sonar uses 90% of device memory by default; on TPU the recipe pushes `--gpu-memory-utilization 0.98` to maximize KV cache.
+  - On TPU, the recipe raises `--gpu-memory-utilization` to 0.98 to maximize KV cache.
   - `--disable-chunked-mm-input` is recommended on TPU for stable multimodal batching.
 
   ## Benchmarking
@@ -206,7 +206,7 @@ guide: |
 
   ### VisionArena-Chat
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --host 0.0.0.0 \
     --port 8000 \
     --backend openai-chat \
@@ -219,7 +219,7 @@ guide: |
 
   ### Random Synthetic
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --host 0.0.0.0 \
     --port 8000 \
     --model Qwen/Qwen2.5-VL-7B-Instruct \

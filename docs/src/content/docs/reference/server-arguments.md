@@ -87,7 +87,7 @@ Default: `0`.
 
 Select GDN prefill backend.
 
-Choices: `flashinfer`, `triton`, `cutedsl`, `aiter_flydsl`, `sycl`.
+Choices: `flashinfer`, `triton`, `cutedsl`, `aiter_flydsl`, `sycl`, `hip`.
 
 ### `--kda-prefill-backend`
 
@@ -238,7 +238,7 @@ Default: `False`.
 
 ### `--tool-call-parser`
 
-`--tool-call-parser {apertus,beam,cohere_command3,cohere_command4,deepseek_v3,deepseek_v31,deepseek_v32,deepseek_v4,deepseek_v41,dots,ernie45,functiongemma,gemma4,gigachat3,glm45,glm47,granite,granite-20b-fc,granite4,hermes,hf,hunyuan_a13b,hy_v3,hy_v4,inkling,internlm,jamba,k2_horizon,kimi_k2,kimi_k3,lfm2,ling3,llama3_json,llama4_json,llama4_pythonic,longcat,mimo,minicpm5,minimax_m2,minimax_m3,minimax_m3_rust,mistral,muse,muse_glimmer,musespark1x,olmo3,openai,phi4_mini_json,plamo3,poolside_v1,pythonic,qwen3_coder,qwen3_json,qwen3_xml,seed_oss,step3,step3p5,step5,xlam} or name registered in --tool-parser-plugin`
+`--tool-call-parser {apertus,beam,cohere_command3,cohere_command4,deepseek_v3,deepseek_v31,deepseek_v32,deepseek_v4,deepseek_v41,dots,ernie45,functiongemma,gemma4,gigachat3,glm45,glm47,granite,granite-20b-fc,granite4,granite_toolcall_parser,hermes,hf,hunyuan_a13b,hy_v3,hy_v4,inkling,internlm,jamba,k2_horizon,kimi_k2,kimi_k3,lfm2,ling3,llama3_json,llama4_json,llama4_pythonic,longcat,mimo,minicpm5,minimax_m2,minimax_m3,minimax_m3_rust,mistral,muse,muse_glimmer,musespark,olmo3,openai,phi4_mini_json,plamo3,poolside_v1,pythonic,qwen3_coder,qwen3_json,qwen3_xml,ripple,seed_oss,step3,step3p5,step5,xlam,zaya,zaya_xml} or name registered in --tool-parser-plugin`
 
 Select the tool call parser depending on the model that you're using.
 This is used to parse the model-generated tool call into OpenAI API format.
@@ -363,11 +363,11 @@ Default: `True`.
 
 `--cohere-is-reasoning-model, --no-cohere-is-reasoning-model`
 
-Cohere ``/cohere/v2/chat`` only. Whether the served model is a
+Cohere `/cohere/v2/chat` only. Whether the served model is a
 reasoning Command-family model. When True (default), the assistant's
-chain-of-thought is surfaced as a ``thinking`` content block (or
-``content-*`` events on the stream). When False, reasoning is
-surfaced as Cohere's ``tool_plan`` field (or ``tool-plan-delta``
+chain-of-thought is surfaced as a `thinking` content block (or
+`content-*` events on the stream). When False, reasoning is
+surfaced as Cohere's `tool_plan` field (or `tool-plan-delta`
 events) whenever the model emits tool calls, matching older non-
 reasoning Command models. Has no effect on the non-Cohere
 endpoints.
@@ -378,14 +378,14 @@ Default: `True`.
 
 `--cohere-format COHERE_FORMAT`
 
-Cohere ``--tokenizer-mode cohere`` only. Which Cohere prompt
-format to render: ``cmd4`` (current Command A+ models; default) or
-``cmd3`` (earlier Cmd-A and Cmd-A reasoning models). Selecting the
+Cohere `--tokenizer-mode cohere` only. Which Cohere prompt
+format to render: `cmd4` (current Command A+ models; default) or
+`cmd3` (earlier Cmd-A and Cmd-A reasoning models). Selecting the
 wrong format silently produces a prompt the model wasn't trained
 on, which most commonly manifests as the model emitting text but no
 citations / tool calls / thinking blocks. Equivalent to passing
-``--default-chat-template-kwargs '{"cohere_format": "..."}'`` -- any
-explicit request-level ``chat_template_kwargs.cohere_format`` takes
+`--default-chat-template-kwargs '{"cohere_format": "..."}'` -- any
+explicit request-level `chat_template_kwargs.cohere_format` takes
 priority.
 
 Default: `cmd4`.
@@ -394,13 +394,14 @@ Default: `cmd4`.
 
 `--anthropic-disabled-thinking-effort ANTHROPIC_DISABLED_THINKING_EFFORT`
 
-The ``reasoning_effort`` used for Anthropic Messages, token counting,
-and render requests with ``thinking: {"type": "disabled"}``.
-``none`` turns thinking off for models that support it; ``low`` suits
+The `reasoning_effort` used for Anthropic Messages, token counting,
+and render requests with `thinking: {"type": "disabled"}` or
+`thinking: {"type": "between_tools"}`.
+`none` turns thinking off for models that support it; `low` suits
 models that always think
-(e.g. GLM-5.3) or reject ``none`` (e.g. gpt-oss). ``auto`` (default) uses
-``low`` when the renderer rejects ``none`` or renders it the same as a
-thinking effort, and ``none`` otherwise.
+(e.g. GLM-5.3) or reject `none` (e.g. gpt-oss). `auto` (default) uses
+`low` when the renderer rejects `none` or renders it the same as a
+thinking effort, and `none` otherwise.
 
 Choices: `auto`, `high`, `low`, `max`, `medium`, `none`, `xhigh`.
 
@@ -429,6 +430,7 @@ Default: `False`.
 
 If set to True, register the scale-out endpoints (`/render`, `/derender`,
 `/inference/v1/generate` and `/inference/v1/abort_requests`) on `sonar serve`.
+Defaults to `SONAR_SERVER_DEV_MODE`.
 Has no effect on `sonar launch render` or `sonar serve --tokens-only` which
 always register their required endpoints regardless of this flag.
 
@@ -438,17 +440,17 @@ Default: `False`.
 
 `--fingerprint-mode FINGERPRINT_MODE`
 
-Controls the ``system_fingerprint`` field on responses.
+Controls the `system_fingerprint` field on responses.
 
-- ``full`` (default): ``sonar-<version>[-<parallelism>]-<hash8>``. Encodes
+- `full` (default): `sonar-<version>[-<parallelism>]-<hash8>`. Encodes
   server version, non-trivial parallelism degrees (tp/pp/dp/ep), and an
   8-char config hash.
 
-- ``hash``: ``sonar-<version>-<hash8>``. Parallelism stripped.
+- `hash`: `sonar-<version>-<hash8>`. Parallelism stripped.
 
-- ``custom``: emits the literal string from ``--fingerprint-value``.
+- `custom`: emits the literal string from `--fingerprint-value`.
 
-- ``none``: the field is omitted (serialized as ``null``).
+- `none`: the field is omitted (serialized as `null`).
 
 Choices: `custom`, `full`, `hash`, `none`.
 
@@ -458,7 +460,7 @@ Default: `full`.
 
 `--fingerprint-value FINGERPRINT_VALUE`
 
-Literal fingerprint string used when ``--fingerprint-mode=custom``.
+Literal fingerprint string used when `--fingerprint-mode=custom`.
 
 ### `--host`
 
@@ -591,11 +593,11 @@ Default: `['*']`.
 If provided, the server will require one of these keys to be presented in
 the header.
 
-Warning: this only authenticates endpoints under the `/v1`, `/v2`, and
-`/inference` path prefixes. Other endpoints on the same server, including
-`/invocations` (which exposes the same inference capabilities as `/v1`),
-remain unauthenticated. Do not rely on `--api-key` alone to secure Sonar;
-see
+Warning: this only authenticates endpoints under the `/v1`, `/v2`,
+`/inference`, and `/cohere` path prefixes. Other endpoints on the same
+server, including `/invocations` (which exposes the same inference
+capabilities as `/v1`), remain unauthenticated. Do not rely on `--api-key`
+alone to secure Sonar; see
 <https://sonar.dphn.ai/usage/security.html#api-key-authentication-limitations>
 for what it does and does not protect.
 
@@ -780,8 +782,8 @@ Tokenizer mode:
 
 - "deepseek_v41" will use the DeepSeek V4.1 prompt encoder.
 
-- "kimi_k3" will always use the "hf" tokenizer but render chat prompts
-  with Kimi K3's Python XTML encoding instead of a Jinja template.
+- "kimi_k3" requires a tokenizer with native Kimi K3 XTML chat encoding.
+  It rejects the generic Hugging Face Jinja fallback.
 
 - "glm5_next" uses the "hf" tokenizer and renderer on the Python frontend;
   the Rust frontend renders GLM-5.3 and GLM-5.3-Flash prompts natively,
@@ -838,6 +840,8 @@ Default: `auto`.
 `--seed SEED`
 
 Random seed for reproducibility.
+
+The seed must be in the range [0, 2**32 - 1].
 
 We must set the global seed because otherwise,
 different tensor parallel workers would sample different tokens,
@@ -941,7 +945,7 @@ determine the data type of the weights.
 
 User-facing quantization configuration. Carries per-layer-kind specs
 (linear, moe), ignore patterns, and ordered precision overrides; see
-:class:`QuantizationConfigArgs`.
+`QuantizationConfigArgs`.
 Auto-populated from the matching online shorthand when `quantization` is
 one of the values in `ONLINE_QUANT_SHORTHAND_NAMES`.
 
@@ -1181,8 +1185,8 @@ Default: `False`.
 
 `--sleep-mode-backend SLEEP_MODE_BACKEND`
 
-Mechanism used to free and restore GPU state for sleep mode. ``"cumem"``
-(default) uses the built-in ``CuMemAllocator`` and is behavior-compatible
+Mechanism used to free and restore GPU state for sleep mode. `"cumem"`
+(default) uses the built-in `CuMemAllocator` and is behavior-compatible
 with prior releases. Additional backends (CUDA checkpoint, CRIU, durable
 snapshot) may be registered in-tree or by plugins (RFC #34303).
 
@@ -1203,8 +1207,8 @@ Default: `False`.
 
 Parameter-name globs to preserve across level-2 sleep.
 Use target globs for frozen Engram table weights and scales omitted by the
-trainer (e.g. ``*.engram.embed_tokens.weight*``).
-Use ``draft.<name>`` for draft-private parameters, or ``draft.*`` for all.
+trainer (e.g. `*.engram.embed_tokens.weight*`).
+Use `draft.<name>` for draft-private parameters, or `draft.*` for all.
 The sender must omit these parameters; loaders must preserve their storage.
 
 Default: `[]`.
@@ -1226,7 +1230,7 @@ Default: `False`.
 `--enable-nccl-comm-suspend, --disable-nccl-comm-suspend`
 
 Enable releasing NCCL communicator memory during sleep mode
-(``ncclCommSuspend``/``ncclCommResume``). Experimental; when disabled
+(`ncclCommSuspend`/`ncclCommResume`). Experimental; when disabled
 (the default) sleep still releases weights/KV-cache memory as before.
 
 Default: `False`.
@@ -1446,6 +1450,19 @@ the original doc for `map_location` parameter in [`torch.load`][] parameter.
 
 Default: `cpu`.
 
+### `--shuffle-safetensors-files`
+
+`--shuffle-safetensors-files, --no-shuffle-safetensors-files`
+
+Whether to shuffle the safetensors checkpoint files during loading.
+When enabled, files are randomly shuffled based on the distributed rank,
+which can help with load balancing and improve weight loading speed in
+startup scenarios. This reduces I/O contention by ensuring different ranks
+load different files in a randomized order.
+Set to True to enable shuffling. Default is False.
+
+Default: `False`.
+
 ## AttentionConfig
 
 Configuration for attention mechanisms in Sonar.
@@ -1479,13 +1496,24 @@ mode.
 
 Choices: `auto`, `horizontal`, `simple`, `vertical`, `None`.
 
+### `--mamba-prefill-backend`
+
+`--mamba-prefill-backend MAMBA_PREFILL_BACKEND`
+
+Kernel backend for the SSD scan of Mamba2 prefills. "flashinfer" runs
+FlashInfer's fused SSD scan (SM100/SM103 only); prefills that store Mamba
+checkpoints always use "triton".
+
+Default: `MambaBackendEnum.TRITON`.
+
 ### `--enable-mamba-cache-stochastic-rounding`
 
 `--enable-mamba-cache-stochastic-rounding, --disable-mamba-cache-stochastic-rounding`
 
 Enable stochastic rounding when writing SSM state to fp16 cache.
 Uses random bits to unbias the rounding error, which can improve
-numerical stability for long sequences.
+numerical stability for long sequences. The Triton backend requires
+compute capability 10.0 on CUDA or gfx950 on ROCm.
 
 Default: `False`.
 
@@ -1864,9 +1892,10 @@ by implementing `compute_logits_local`.
 Skip non-local expert weights during model loading when expert
 parallelism is active.  Each rank only reads its own expert shard from
 disk, which can drastically reduce storage I/O for MoE models with
-per-expert weight tensors (e.g. DeepSeek, Mixtral, Kimi-K2.5).  Has no
-effect on 3D fused-expert checkpoints (e.g. GPT-OSS) or non-MoE
-models.
+per-expert weight tensors (e.g. DeepSeek, Mixtral, Kimi-K2.5).  With EPLB,
+each rank also reads the experts its redundant slots replicate in the
+initial placement; elastic EP loads every expert.  Has no effect on 3D
+fused-expert checkpoints (e.g. GPT-OSS) or non-MoE models.
 
 Default: `False`.
 
@@ -1877,6 +1906,9 @@ Default: `False`.
 All2All backend for MoE expert parallel communication. Available options:
 
 - "allgather_reducescatter": All2all based on allgather and reducescatter
+
+- "alltoall_batched": All2all based on all_to_all_single, routing each
+  token only to the ranks owning its experts, in batched activation format
 
 - "deepep_high_throughput": Use deepep high-throughput kernels
 
@@ -1904,7 +1936,7 @@ All2All backend for MoE expert parallel communication. Available options:
   itself (e.g. the FlashInfer MoE-EP megakernels). Bound automatically for
   such MoE backends; not selectable from the CLI.
 
-Choices: `allgather_reducescatter`, `deepep_high_throughput`, `deepep_low_latency`, `deepep_v2`, `flashinfer_all2allv`, `flashinfer_nvlink_one_sided`, `flashinfer_nvlink_two_sided`, `moonep`, `mori`, `mori_high_throughput`, `mori_low_latency`, `naive`, `nixl_ep`, `pplx`.
+Choices: `allgather_reducescatter`, `alltoall_batched`, `deepep_high_throughput`, `deepep_low_latency`, `deepep_v2`, `flashinfer_all2allv`, `flashinfer_nvlink_one_sided`, `flashinfer_nvlink_two_sided`, `moonep`, `mori`, `mori_high_throughput`, `mori_low_latency`, `naive`, `nixl_ep`, `pplx`.
 
 Default: `allgather_reducescatter`.
 
@@ -1920,13 +1952,13 @@ Default: `False`.
 
 `--enable-shm-tensor-arena, --disable-shm-tensor-arena`
 
-Route large CPU tensors (e.g. multimodal ``pixel_values``) in the
+Route large CPU tensors (e.g. multimodal `pixel_values`) in the
 engine→worker broadcast through a zero-copy shared-memory arena instead of
 sending a copy to every reader. **Experimental**: may be reconciled with
 Sonar's existing multimodal shm tensor caching in a future release. Opt-in;
 most beneficial for multimodal serving with large images and tensor
 parallelism. Active only when all queue readers are node-local; reserves
-slots in ``/dev/shm``.
+slots in `/dev/shm`.
 
 Default: `False`.
 
@@ -2109,14 +2141,22 @@ Accepts None (meaning "use default"). After construction, always int.
 
 The fraction of GPU memory to be used for the model executor, which can
 range from 0 to 1. For example, a value of 0.5 would imply 50% GPU memory
-utilization. If unspecified, will use the default value of 0.92. This is a
-per-instance limit, and only applies to the current Sonar instance. It does
-not matter if you have another Sonar instance running on the same GPU. For
-example, if you have two Sonar instances running on the same GPU, you can
-set the GPU memory utilization to 0.5 for each instance. On non-GPU
-installs, this value controls the corresponding device memory utilization.
+utilization. This is a per-instance limit, and only applies to the current
+Sonar instance. It does not matter if you have another Sonar instance running
+on the same GPU. For example, if you have two Sonar instances running on the
+same GPU, you can set the GPU memory utilization to 0.5 for each instance.
+On non-GPU installs, this value controls the corresponding device memory
+utilization.
 
-Default: `0.92`.
+If unspecified, 1.0 with the extensible KV cache (sized from measured
+memory) and 0.92 otherwise; see `resolved_gpu_memory_utilization`.
+
+With the extensible KV cache (the default on CUDA and ROCm), leave this
+unset unless something needs memory that Sonar does not measure: other
+processes sharing the GPU (including ones that allocate after Sonar has
+started), unified-memory devices whose memory the CPU also uses, weight
+transfer buffers for weight updates, or KV connectors that allocate their
+own device buffers. A lower value takes memory away from the KV cache.
 
 ### `--kv-cache-memory-bytes`
 
@@ -2141,14 +2181,32 @@ Examples:
 
 - '25.6k' -> 25,600
 
+### `--enable-extensible-kv-cache`
+
+`--enable-extensible-kv-cache, --disable-extensible-kv-cache`
+
+Reserve the KV cache address range with device virtual memory and commit
+physical pages after warmup, so the cache is sized from the memory actually
+free after CUDA graph capture rather than from a profiling estimate. If
+unspecified, enabled on CUDA and ROCm unless kv_cache_memory_bytes is set,
+or NIXL on device memory has no IMEX channel; falls back to estimate-based
+sizing where the driver lacks VMM support. Explicitly requesting it where
+unsupported is an error. On unpartitioned discrete ROCm GPUs, the sizing
+adds back free memory that HIP hides by counting each allocation as at
+least 2 MiB, so gpu_memory_utilization bounds exact device memory use
+there. When a KV connector registers the KV cache for RDMA or exports it to
+another process, each segment is backed by a single physical allocation;
+connectors declare this by overriding
+`KVConnectorBase_V1.kv_cache_access`.
+
 ### `--kv-cache-dtype`
 
-`--kv-cache-dtype ['auto', 'bfloat16', 'float16', 'fp8', 'fp8_ds_mla', 'fp8_e4m3', 'fp8_e5m2', 'fp8_inc', 'fp8_per_token_head', 'int4_per_token_head', 'int8_per_token_head', 'nvfp4', 'nvfp4_4over6', 'nvfp4_ds_mla', 'octave_k3v3', 'octave_k3v3_compact', 'octave_k3v4', 'turboquant_3bit_nc', 'turboquant_4bit_nc', 'turboquant_k3v4_nc', 'turboquant_k8v4', 'ultraquant_4bit']`
+`--kv-cache-dtype ['auto', 'bfloat16', 'float16', 'fp8', 'fp8_ds_mla', 'fp8_e4m3', 'fp8_e5m2', 'fp8_inc', 'fp8_per_token_head', 'int4_per_token_head', 'int8_per_token_head', 'mxfp4_mla', 'nvfp4', 'nvfp4_4over6', 'nvfp4_ds_mla', 'octave_k3v3', 'octave_k3v3_compact', 'octave_k3v4', 'turboquant_3bit_nc', 'turboquant_4bit_nc', 'turboquant_k3v4_nc', 'turboquant_k8v4', 'ultraquant_4bit']`
 
 Data type for kv cache storage. If "auto", will use model data type.
 An explicit float16 or bfloat16 must match the model data type.
 Custom dtypes can registered by platform backends via
-``register_kv_cache_dtype`` are accepted (see sonar.config.cache).
+`register_kv_cache_dtype` are accepted (see sonar.config.cache).
 CUDA 11.8+ supports fp8 (=fp8_e4m3) and fp8_e5m2. ROCm (AMD GPU) supports
 fp8 (=fp8_e4m3). Intel Gaudi (HPU) supports fp8 (using fp8_inc).
 Some models (namely DeepSeekV3.2) default to fp8, set to bfloat16 to use
@@ -2185,7 +2243,7 @@ Set the hash algorithm for prefix caching:
   serializes objects using canonical CBOR and hashes them with SHA-256.
 
 - "xxhash" uses Pickle serialization with xxHash (128-bit) for faster,
-  non-cryptographic hashing. Requires the optional ``xxhash`` package.
+  non-cryptographic hashing. Requires the optional `xxhash` package.
   IMPORTANT: Use of a hashing algorithm that is not considered  cryptographically
   secure theoretically increases the risk of hash collisions, which can cause
   undefined behavior or even leak private information in multi-tenant environments.
@@ -2193,7 +2251,7 @@ Set the hash algorithm for prefix caching:
   security risk tolerance against the performance benefits before turning this on.
 
 - "xxhash_cbor" combines canonical CBOR serialization with xxHash for
-  reproducible hashing. Requires the optional ``xxhash`` package.
+  reproducible hashing. Requires the optional `xxhash` package.
 
 Choices: `sha256`, `sha256_cbor`, `xxhash`, `xxhash_cbor`.
 
@@ -2204,10 +2262,10 @@ Default: `sha256`.
 `--prefix-cache-retention-interval PREFIX_CACHE_RETENTION_INTERVAL`
 
 Token interval between retained sliding-window and Mamba prefix-cache
-checkpoints. ``0`` retains only semantic checkpoints, including the latest
+checkpoints. `0` retains only semantic checkpoints, including the latest
 replay boundary and shared-prefix junctions. Positive values additionally
 retain periodic checkpoints at the specified interval, which must be a
-multiple of the scheduler block size. ``None`` retains checkpoints densely.
+multiple of the scheduler block size. `None` retains checkpoints densely.
 Applies only to sliding-window and Mamba cache groups.
 
 Default: `0`.
@@ -2228,7 +2286,9 @@ Default: `[]`.
 In some KV sharing setups, e.g. YOCO (<https://arxiv.org/abs/2405.05254>),
 some layers can skip tokens corresponding to prefill. This flag enables
 attention metadata for eligible layers to be overridden with metadata
-necessary for implementing this optimization in some models (e.g. Gemma3n)
+necessary for implementing this optimization in some models (e.g. Gemma3n).
+In Model Runner V2, batches containing LoRA requests use regular prefill;
+batches without LoRA requests can still use fast prefill.
 
 Default: `False`.
 
@@ -2289,7 +2349,7 @@ cache group's `block_size` is divisible by it.
 
 `--mamba-cache-mode MAMBA_CACHE_MODE`
 
---mamba-cache-mode is deprecated and will be removed in v0.33.0. It has no effect: Mamba prefix caching follows --enable-prefix-caching.
+--mamba-cache-mode is deprecated and will be removed in v0.34.0. It has no effect: Mamba prefix caching follows --enable-prefix-caching.
 
 Choices: `align`, `none`.
 
@@ -2309,9 +2369,10 @@ Default: `False`.
 
 `--replayssm-buffer-len REPLAYSSM_BUFFER_LEN`
 
-ReplaySSM logical history length B for Mamba2. Triton uses B physical
-rows and FlashInfer uses B+T, where T is the target verification length.
-Kimi-K3 speculative decode does not use B. Default 16.
+ReplaySSM logical history length B for Mamba2. Triton standard decode
+uses B physical rows; FlashInfer and Triton speculative decoding use B+T,
+where T is the target verification length. Kimi-K3 speculative decode does
+not use B. Default 16.
 
 Default: `16`.
 
@@ -2321,9 +2382,9 @@ Default: `16`.
 
 Use the ReplaySSM Mamba2 decode kernel: cache recent SSM inputs and skip
 the per-step full-state store, writing the checkpoint back only on flush.
-Requires the Triton or FlashInfer mamba backend; FlashInfer does not support
-prefix caching yet. Mamba2 speculative decode requires FlashInfer. With
-prefix caching, flushes are most efficient when mamba_block_size is a
+Triton and FlashInfer support the 'none' and 'align' Mamba cache modes.
+Mamba2 speculative decoding supports both backends. Pipeline parallelism is not
+supported. Flushes are most efficient when mamba_block_size is a
 multiple of replayssm_buffer_len, but this is not required.
 
 Default: `False`.
@@ -2885,13 +2946,13 @@ base classification head size.
 
 ## LoggingConfig
 
-Sonar logging. Default ``dictConfig`` adds a formatted stream handler.
+Sonar logging. Default `dictConfig` adds a formatted stream handler.
 
-Supply a JSON object with ``--logging-config`` or individual fields with
-dotted arguments such as ``--logging-config.log_level DEBUG`` and
-``--logging-config.formatter json``. ``--log-level`` and legacy
-``--log-config-file`` override their matching fields. Set
-``configure_logging`` to false to skip applying a ``dictConfig``.
+Supply a JSON object with `--logging-config` or individual fields with
+dotted arguments such as `--logging-config.log_level DEBUG` and
+`--logging-config.formatter json`. `--log-level` and legacy
+`--log-config-file` override their matching fields. Set
+`configure_logging` to false to skip applying a `dictConfig`.
 
 ### `--logging-config`
 
@@ -3016,9 +3077,9 @@ Default: `False`.
 
 `--enable-layerwise-nvtx-tracing, --disable-layerwise-nvtx-tracing`
 
-Enable layerwise NVTX tracing. This traces the execution of each layer or
-module in the model and attach information such as input/output shapes to
-nvtx range markers. Noted that this doesn't work with CUDA graphs enabled.
+Deprecated: per-layer tracing was only implemented by the removed Model Runner
+V1. This now only adds NVTX range markers around calls to the compiled model, and
+will be removed in a future release. It doesn't work with CUDA graphs enabled.
 
 Default: `False`.
 
@@ -3120,11 +3181,41 @@ In real usage, this should be set in `EngineArgs.create_engine_config`.
 
 Maximum number of requests the scheduler admits into RUNNING.
 
-``max_num_seqs`` sizes the model runner (per-request buffers and CUDA
+`max_num_seqs` sizes the model runner (per-request buffers and CUDA
 graph capture) and is also the default admission limit. Setting this
 lowers only the number of requests that may occupy RUNNING, so decode
 batches stay smaller without shrinking runner or graph capacity. Must
-be ``<= max_num_seqs``. ``None`` (default) keeps current behavior.
+be `<= max_num_seqs`. `None` (default) keeps current behavior.
+
+### `--max-num-inflight-kv-loads`
+
+`--max-num-inflight-kv-loads MAX_NUM_INFLIGHT_KV_LOADS`
+
+Maximum number of requests holding KV blocks for an async KV connector
+load (e.g. a P/D NIXL pull) before they run: loads in progress, or finished
+and waiting for a running slot.
+
+Setting it also lets requests the connector may load asynchronously
+(`KVConnectorBase_V1.may_load_async`, by default P/D remote-prefill
+requests) start their loads while the running batch is full, so they are
+ready when a slot frees. `None` (default) keeps current behavior: no cap,
+and loads start only when a running slot is free.
+
+### `--max-async-kv-loads-per-step`
+
+`--max-async-kv-loads-per-step MAX_ASYNC_KV_LOADS_PER_STEP`
+
+Maximum number of async KV connector loads (e.g. a P/D NIXL pull) that
+start in one scheduling step. Each start allocates KV blocks for the whole
+prompt on the main thread, and with data parallelism every rank waits for the
+slowest step. `max_num_inflight_kv_loads` bounds how many loads are held;
+this bounds how fast they start. `None` (default) means no limit.
+
+Requests identified by the connector as async loads wait separately, so
+this limit does not block ordinary waiting requests. Starting loads while
+the running batch is full still requires `max_num_inflight_kv_loads`.
+
+**Experimental**: this option may be changed or removed in a future release.
 
 ### `--max-num-queued-reqs`
 
@@ -3136,10 +3227,10 @@ requests are rejected with HTTP 503 so the client can retry on another
 instance. This bounds Sonar's otherwise unbounded request queue and is
 primarily a coarse capacity valve.
 
-Unlike ``max_num_seqs``, which applies per data-parallel rank, this
+Unlike `max_num_seqs`, which applies per data-parallel rank, this
 limit is enforced in the API server process and counts in-flight
 requests across all DP ranks it routes to. Size it as roughly
-``data_parallel_size * max_num_seqs`` plus the desired queue depth if
+`data_parallel_size * max_num_seqs` plus the desired queue depth if
 it should not bind before per-rank admission does.
 
 ### `--max-num-queued-tokens`
@@ -3151,23 +3242,23 @@ phase, or None for no limit. When the limit is reached, new requests
 are rejected with HTTP 503.
 
 This is a TTFT QoS mechanism: by setting it to
-``target_TTFT * prefill_throughput`` you reject requests when the
+`target_TTFT * prefill_throughput` you reject requests when the
 prefill backlog would exceed the latency target.  In a disaggregated
 prefill-decode setup this maps directly to the prefill pool's
 capacity.
 
-Like ``max_num_queued_reqs``, this limit is enforced in the API
+Like `max_num_queued_reqs`, this limit is enforced in the API
 server process and covers the prefill backlog across all DP ranks it
-routes to, so ``prefill_throughput`` in the formula above is the
+routes to, so `prefill_throughput` in the formula above is the
 aggregate throughput of the deployment.
 
 Note: the count is conservative.  A partially prefilled request
-still contributes its full ``prompt_len`` until it transitions out
+still contributes its full `prompt_len` until it transitions out
 of the prefill phase, because the scheduler's per-iteration
-``num_computed_tokens`` progress is not propagated to the API
-server process during prefill (``EngineCoreOutput`` is only
+`num_computed_tokens` progress is not propagated to the API
+server process during prefill (`EngineCoreOutput` is only
 emitted once the request starts producing tokens).  Similarly,
-prefix-cache hits (``num_cached_tokens``) are only known to the
+prefix-cache hits (`num_cached_tokens`) are only known to the
 OutputProcessor after prefill completes.  This overestimates the
 real backlog, causing earlier rejection than strictly necessary
 — the safe direction for QoS.  The impact is limited to long
@@ -3191,6 +3282,7 @@ Examples:
 
 For chunked prefill, a request is considered long if the prompt is
 longer than this number of tokens. 0 disables the cap (default).
+Ignored when chunked prefill is disabled.
 
 The cap is not applied when the request is the only one in the batch,
 since there is no other request for it to starve.
@@ -3291,6 +3383,39 @@ steps to finish prefilling.
 
 Default: `1`.
 
+### `--cache-aware-admission-window`
+
+`--cache-aware-admission-window CACHE_AWARE_ADMISSION_WINDOW`
+
+Look-ahead window for cache-aware admission. Within the first N waiting
+requests, those whose prefix is already in the KV cache are admitted ahead
+of requests that would have to compute theirs, so a cold request does not
+evict blocks a resident one still needs. 0 (the default) admits strictly in
+arrival order.
+
+Reordering is confined to the window and to requests that are merely
+waiting, so a request that is blocked or already partially computed keeps
+its position and nothing is moved past it. Requires prefix caching and the
+"fcfs" policy; it is ignored otherwise. Costs one prefix-cache lookup per
+request in the window per step, so prefer the smallest window that spans
+the usual queue depth.
+
+Default: `0`.
+
+### `--cache-aware-admission-threshold`
+
+`--cache-aware-admission-threshold CACHE_AWARE_ADMISSION_THRESHOLD`
+
+KV cache usage below which `cache_aware_admission_window` is not applied.
+
+Defaults to 0.5, so the window engages only once the cache is at least half
+used. Below that there is room for both prompts and reordering would change
+admission order without an eviction to avoid, which is a fairness cost for
+no benefit. It also means the per-request cache probe is skipped entirely
+while the cache is roomy. Set to 0.0 to reorder on every step.
+
+Default: `0.5`.
+
 ### `--disable-hybrid-kv-cache-manager`
 
 `--disable-hybrid-kv-cache-manager, --enable-hybrid-kv-cache-manager`
@@ -3345,6 +3470,14 @@ The rest has three parts:
     [sonar.config.CompilationConfig.cudagraph_capture_sizes]
     - [`max_cudagraph_capture_size`]
     [sonar.config.CompilationConfig.max_cudagraph_capture_size]
+    - [`prefill_cudagraph_capture_token_sizes`]
+    [sonar.config.CompilationConfig.prefill_cudagraph_capture_token_sizes]
+    - [`max_prefill_cudagraph_capture_tokens`]
+    [sonar.config.CompilationConfig.max_prefill_cudagraph_capture_tokens]
+    - [`decode_cudagraph_capture_request_sizes`]
+    [sonar.config.CompilationConfig.decode_cudagraph_capture_request_sizes]
+    - [`max_decode_cudagraph_capture_requests`]
+    [sonar.config.CompilationConfig.max_decode_cudagraph_capture_requests]
     - [`cudagraph_num_of_warmups`]
     [sonar.config.CompilationConfig.cudagraph_num_of_warmups]
     - [`cudagraph_copy_inputs`]
@@ -3381,6 +3514,13 @@ Sizes to capture cudagraph.
 
 - list[int]: capture sizes are specified as given.
 
+Deprecated with model runner V2, which takes
+`prefill_cudagraph_capture_token_sizes` and
+`decode_cudagraph_capture_request_sizes` instead. Set there, these token
+counts are the prefill sizes and, rounded up to whole requests of the target
+model's query length, the decode sizes. After config resolution it holds the
+token count of every captured graph.
+
 ### `--max-cudagraph-capture-size`
 
 `--max-cudagraph-capture-size MAX_CUDAGRAPH_CAPTURE_SIZE`
@@ -3400,6 +3540,11 @@ or 1024 on data center Blackwell GPUs. This avoids OOM in tight memory
 scenarios with small max_num_seqs, and limits capture of large graphs that
 increase startup time and memory usage. Uniform decode sizes are appended
 only within this default ceiling.
+
+Deprecated with model runner V2, which takes
+`max_prefill_cudagraph_capture_tokens` (tokens) and
+`max_decode_cudagraph_capture_requests` (requests) instead. After config
+resolution it holds the token count of the widest captured graph.
 
 ## KernelConfig
 
@@ -3433,7 +3578,10 @@ fastest. Enabled by default except at `-O0`; disable for faster startup.
 If True, run the eligible layers of decode steps on the model's
 MonoKernel: a persistent kernel that runs most or all of one decoder layer
 in a single launch (DeepSeek-V4.1 on MI355X, DeepSeek-V4-Pro at TP8 on
-MI355X). A deployment that cannot run it is refused at startup.
+MI355X; Muse Spark MXFP4 on MI355X with tensor parallel size 8, expert
+parallelism and a 7-token DSpark draft, for speculative verify steps of 1-16
+requests, with bf16 MoE activations instead of the checkpoint's MXFP4). A
+deployment that cannot run it is refused at startup.
 
 Default: `False`.
 
@@ -3464,7 +3612,8 @@ Backend for MoE expert computation kernels. Available options:
 
 - "flashinfer_moe_ep_cutedsl": Use FlashInfer's CuTeDSL MoE-EP
   mega-kernel with NVFP4 weights (MXFP4 checkpoints are requantized at
-  load); requires Blackwell, expert parallelism, and NVSHMEM
+  load) on Blackwell, or with block-FP8 (128x128) weights on Hopper;
+  requires expert parallelism and NVSHMEM
 
 - "flashinfer_b12x": Use FlashInfer CuteDSL fused MoE for SM12x
   (RTX Pro 6000 / DGX Spark)
@@ -3489,7 +3638,7 @@ Backend for MoE expert computation kernels. Available options:
 
 - "aiter_mega_moe": Use the AITER MegaMoE fused dispatch/GEMM/combine
   kernel (ROCm gfx950, requires DP+EP with a MoRI all2all backend;
-  DeepSeek-V4 only)
+  DeepSeek-V4 and V4.1 only)
 
 - "aiter_triton_mxfp4_bf16": Use the AITER Triton MXFP4 W4A16
   (moe_gemm_a16w4) MoE kernel (ROCm gfx942/gfx950/gfx1250)
@@ -3570,18 +3719,24 @@ Default: `auto`.
 
 Backend for the DSA sparse indexer decode top-k kernel. Available options:
 
-- "auto": The pre-existing chain (cooperative -> persistent -> per_row);
-  the other backends are opt-in
+- "auto": The pre-existing chain (cooperative -> persistent -> per_row)
+  on CUDA and per_row on ROCm; the other backends are opt-in
 
 - "deep_select": Use DeepSelect kernels (SM100a/SM103a only)
 
 - "cooperative": Use Sonar's cooperative_topk kernel
 
-- "persistent": Use Sonar's persistent_topk kernel
+- "persistent": Use Sonar's persistent_topk kernel (CUDA and ROCm)
 
 - "per_row": Use Sonar's top_k_per_row_decode kernel
 
 - "flashinfer": Use FlashInfer's top_k_ragged_transform kernel
+
+- "flashinfer_gvr2": Use FlashInfer's self-sampling GVR V2 top-k
+  (`top_k_varlen(backend="gvr_2")`). SM100 family, fp32 logits, topk in
+  {512, 1024, 2048}. Also routes prefill chunks of >= 1024 row-relative
+  rows to gvr_2. Its latency depends on the logit distribution (rows with
+  strong position skew or many ties at the k-th value are slower)
 
 - "torch": Use a plain torch.topk implementation (debug reference)
 
@@ -3590,11 +3745,11 @@ Backend for the DSA sparse indexer decode top-k kernel. Available options:
 
 Explicit values raise RuntimeError when their constraints are not met.
 
-On SM100 decode without DCP, persistent (including auto selecting it)
-reads BF16 logits directly and widens scores inside the kernel, avoiding
-a full FP32 logits copy. Cooperative still requires FP32 logits.
+On SM100 decode without DCP, cooperative and persistent (including auto
+selecting them) read BF16 logits directly and widen scores inside the
+kernel, avoiding a full FP32 logits copy.
 
-Choices: `aiter`, `auto`, `cooperative`, `deep_select`, `flashinfer`, `per_row`, `persistent`, `torch`.
+Choices: `aiter`, `auto`, `cooperative`, `deep_select`, `flashinfer`, `flashinfer_gvr2`, `per_row`, `persistent`, `torch`.
 
 Default: `auto`.
 
@@ -3612,7 +3767,7 @@ Should either be a valid JSON string or JSON keys passed individually.
 
 ### `--spec-method`
 
-`--spec-method ['bailing_hybrid_mtp', 'bailing_hybrid_v3_mtp', 'custom_class', 'deepseek_mtp', 'dflash', 'dots3_note_mtp', 'draft_model', 'dspark', 'eagle', 'eagle3', 'ernie_mtp', 'exaone4_5_mtp', 'exaone_moe_mtp', 'extract_hidden_states', 'gemma4_mtp', 'glm4_moe_lite_mtp', 'glm4_moe_mtp', 'glm5_next_mtp', 'glm_ocr_mtp', 'hy_v3_mtp', 'hy_v4_mtp', 'inkling_mtp', 'kimi_k3_mtp', 'longcat_flash_mtp', 'mimo_mtp', 'mimo_v2_mtp', 'minimax_m3_mtp', 'mtp', 'nemotron3_5_transcribe_mtp', 'nemotron_h_mtp', 'ngram', 'ngram_gpu', 'pangu_ultra_moe_mtp', 'qwen3_5_mtp', 'qwen3_next_mtp', 'qwen4_exp_mtp', 'step3p5_mtp', 'step5_mtp', 'suffix']`
+`--spec-method ['bailing_hybrid_mtp', 'bailing_hybrid_v3_mtp', 'deepseek_mtp', 'dflash', 'dots3_note_mtp', 'draft_model', 'dspark', 'eagle', 'eagle3', 'ernie_mtp', 'exaone4_5_mtp', 'exaone_moe_mtp', 'extract_hidden_states', 'gemma4_mtp', 'glm4_moe_lite_mtp', 'glm4_moe_mtp', 'glm5_next_mtp', 'glm_ocr_mtp', 'hy_v3_mtp', 'hy_v4_mtp', 'inkling_mtp', 'kimi_k3_mtp', 'longcat_flash_mtp', 'mimo_mtp', 'mimo_v2_mtp', 'minimax_m3_mtp', 'mtp', 'nemotron3_5_transcribe_mtp', 'nemotron_h_mtp', 'ngram', 'ngram_gpu', 'pangu_ultra_moe_mtp', 'qwen3_5_mtp', 'qwen3_next_mtp', 'qwen4_exp_mtp', 'step3p5_mtp', 'step5_mtp', 'suffix']`
 
 The name of the speculative method to use. If users provide and set the
 `model` param, the speculative method type will be detected automatically
@@ -3628,9 +3783,9 @@ requires an MTP draft, and `draft_model` rejects one).
 
 Besides the built-in methods, this can be a custom method registered with
 `sonar.v1.worker.gpu.spec_decode.speculator_config.register_speculative_method`
-(e.g. by a Sonar plugin), which requires the V2 model runner. It is then
-moved to `custom_method`, and this is set to the built-in method that its
-config is based on (None if it isn't based on one).
+(e.g. by a Sonar plugin). It is then moved to `custom_method`, and this is
+set to the built-in method that its config is based on (None if it isn't
+based on one).
 
 ### `--spec-model`
 
@@ -3703,7 +3858,7 @@ You can specify the full compilation config like so:
 `{"mode": 3, "cudagraph_capture_sizes": [1, 2, 4, 8]}`
 Should either be a valid JSON string or JSON keys passed individually.
 
-Default: `{'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': [], 'ir_enable_torch_wrap': None, 'splitting_ops': None, 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'cudagraph_decoder_replay': True, 'decoder_replay_cudagraph_capture_sizes': [], 'decoder_replay_trim_threshold': 768, 'compile_sizes': None, 'compile_ranges_endpoints': None, 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': None, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': None, 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': None, 'pass_config': {}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': None, 'static_all_moe_layers': []}`.
+Default: `{'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': [], 'ir_enable_torch_wrap': None, 'splitting_ops': None, 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_token_budget': 5120, 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'cudagraph_decoder_replay': True, 'decoder_replay_cudagraph_capture_sizes': [], 'decoder_replay_trim_threshold': 768, 'compile_sizes': None, 'compile_ranges_endpoints': None, 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': None, 'use_breakable_cudagraph': None, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': None, 'prefill_cudagraph_capture_token_sizes': None, 'max_prefill_cudagraph_capture_tokens': None, 'decode_cudagraph_capture_request_sizes': None, 'max_decode_cudagraph_capture_requests': None, 'max_decode_cudagraph_capture_tokens': None, 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': None, 'pass_config': {}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': None, 'static_all_moe_layers': []}`.
 
 ### `--attention-config`
 
@@ -3712,7 +3867,7 @@ Default: `{'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cach
 Attention configuration.
 Should either be a valid JSON string or JSON keys passed individually.
 
-Default: `AttentionConfig(backend=None, minimax_m3_msa_decode_backend='cutlass', backend_per_kind={}, flash_attn_version=None, flash_attn_max_num_splits_for_cuda_graph=32, tokenspeed_mla_min_split_kv=1, tq_max_kv_splits_for_cuda_graph=32, use_trtllm_attention=None, disable_flashinfer_q_quantization=False, mla_prefill_backend=None, use_prefill_query_quantization=False, trtllm_ragged_backend='trtllm-gen', indexer_kv_dtype='auto', indexer_decode_cp=False, indexer_sparse_logits=None, indexer_tp_shard_min_rows=65536, minimax_m3_indexer_cp=False, hisparse_config=None, use_non_causal=False, sparse_mla_force_mqa=False, sparse_mla_prefill_workspace_factor=None, flex_attn_block_m=None, flex_attn_block_n=None, flex_attn_q_block_size=None, flex_attn_kv_block_size=None)`.
+Default: `AttentionConfig(backend=None, minimax_m3_msa_decode_backend='cutlass', backend_per_kind={}, flash_attn_version=None, flash_attn_max_num_splits_for_cuda_graph=32, tokenspeed_mla_min_split_kv=1, tq_max_kv_splits_for_cuda_graph=32, use_trtllm_attention=None, disable_flashinfer_q_quantization=False, mla_prefill_backend=None, use_prefill_query_quantization=False, trtllm_ragged_backend='trtllm-gen', indexer_kv_dtype='auto', indexer_decode_cp=False, indexer_sparse_logits=None, indexer_logits_dtype='auto', indexer_tp_shard_min_rows=65536, sparse_mla_shard_q=True, sparse_mla_shard_q_min_tokens=1024, minimax_m3_indexer_cp=False, hisparse_config=None, use_non_causal=False, sparse_mla_force_mqa=False, sparse_mla_prefill_workspace_factor=None, flex_attn_block_m=None, flex_attn_block_n=None, flex_attn_q_block_size=None, flex_attn_kv_block_size=None)`.
 
 ### `--engram-config`
 
@@ -3750,7 +3905,7 @@ Should either be a valid JSON string or JSON keys passed individually.
 Kernel configuration.
 Should either be a valid JSON string or JSON keys passed individually.
 
-Default: `KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=[], fused_add_rms_norm=[], gelu_and_mul_sparse=[]), enable_flashinfer_autotune=None, enable_rocm_segmented_attn_autotune=False, enable_cutedsl_warmup=True, enable_jit_warmup=True, monokernel=False, moe_backend='auto', sparse_indexer_topk_backend='auto', linear_backend='auto', linear_backend_per_quant=None, rdna_hybrid_w4a16_prefill_dequant='disable')`.
+Default: `KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=[], fused_add_rms_norm=[], gelu_and_mul_sparse=[]), enable_flashinfer_autotune=None, enable_rocm_segmented_attn_autotune=False, enable_rocm_aiter_gemm_warmup=False, enable_cutedsl_warmup=True, enable_jit_warmup=True, monokernel=False, moe_backend='auto', sparse_indexer_topk_backend='auto', flashinfer_sparse_mla_kernel='auto', linear_backend='auto', linear_backend_per_quant=None, rdna_hybrid_w4a16_prefill_dequant='disable')`.
 
 ### `--additional-config`
 

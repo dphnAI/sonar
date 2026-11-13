@@ -8,9 +8,7 @@ from transformers import Idefics3ImageProcessor
 from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
 from sonar.model_executor.models.colultravbert import get_capped_longest_edge
 
-MODEL_NAME = "athrael-soju/ColUltraVBERT"
-# Later revisions declare the UltraVBertModel architecture instead.
-REVISION = "509adbab61b71da0484b20f3baf718e15219d761"
+MODEL_NAME = "vllm-project/ColUltraVBERT"
 DTYPE = "bfloat16"
 PAGE_PROMPT = "User:<image>Describe the image.<end_of_utterance>\nAssistant:"
 IMAGE_SEQ_LEN = 64
@@ -51,7 +49,6 @@ def test_colultravbert_tile_cap(width, height, grid):
 def colultravbert_model(sonar_runner):
     with sonar_runner(
         MODEL_NAME,
-        revision=REVISION,
         runner="pooling",
         dtype=DTYPE,
         max_model_len=2048,

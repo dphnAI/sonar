@@ -141,7 +141,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U "sonar>=0.22.1" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U "sonar>=0.22.1" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ## Launch commands
@@ -149,7 +149,7 @@ guide: |
   ### Recommended — official FP8 checkpoint, TP=8
 
   ```bash
-  sonar serve internlm/Intern-S2-397B-FP8 \
+  sonar run internlm/Intern-S2-397B-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --reasoning-parser qwen3 \
@@ -161,7 +161,7 @@ guide: |
   ### BF16 (8x H200)
 
   ```bash
-  sonar serve internlm/Intern-S2-397B \
+  sonar run internlm/Intern-S2-397B \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --reasoning-parser qwen3 \
@@ -173,7 +173,7 @@ guide: |
   ### With MTP speculative decoding
 
   ```bash
-  sonar serve internlm/Intern-S2-397B-FP8 \
+  sonar run internlm/Intern-S2-397B-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --reasoning-parser qwen3 \
@@ -234,7 +234,7 @@ guide: |
   ## Troubleshooting
 
   - **OOM at full 262K context:** drop `--max-model-len` to 65536 or 131072,
-    or lower `--gpu-memory-utilization` headroom.
+    or lower `--max-num-seqs`.
   - **DeepGEMM warmup failures / slow startup:** this recipe already exports
     `SONAR_DEEP_GEMM_WARMUP=skip` and `SONAR_USE_DEEP_GEMM=0` per the deployment
     guide — if you launch outside the builder, set them yourself.

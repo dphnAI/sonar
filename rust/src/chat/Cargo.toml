@@ -35,6 +35,7 @@ trait-set.workspace = true
 uuid.workspace = true
 sonar-engine-core-client.workspace = true
 sonar-llm.workspace = true
+sonar-metrics.workspace = true
 sonar-parser.workspace = true
 sonar-text.workspace = true
 sonar-tokenizer.workspace = true

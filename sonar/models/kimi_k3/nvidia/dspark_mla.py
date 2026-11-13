@@ -25,7 +25,9 @@ from sonar.model_executor.models.utils import (
     get_draft_quant_config,
     maybe_prefix,
 )
+from sonar.model_executor.utils import refill_derived
 from sonar.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
+from sonar.models.kimi_k3.common.dsa_cache import SelfAddressedMLASpec
 from sonar.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
 from sonar.models.kimi_k3.nvidia.model import KimiMLP
 from sonar.v1.kv_cache_interface import is_quantized_kv_cache
@@ -55,6 +57,12 @@ def _duplicate_context_kv_weights(
         yield f"context_kv_proj.{param_name}", fused_weight
 
 
+class K3DSparkAttention(MultiHeadLatentAttention):
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> SelfAddressedMLASpec:
+        # DFlash derives the slots of every draft KV write from the block table.
+        return SelfAddressedMLASpec.from_spec(super().get_kv_cache_spec(sonar_config))
+
+
 class K3DSparkDecoderLayer(nn.Module):
     def __init__(
         self,
@@ -67,7 +75,7 @@ class K3DSparkDecoderLayer(nn.Module):
     ) -> None:
         super().__init__()
         quant_config = get_draft_quant_config(sonar_config)
-        self.self_attn = MultiHeadLatentAttention(
+        self.self_attn = K3DSparkAttention(
             config=config,
             hidden_size=config.hidden_size,
             num_heads=config.num_attention_heads,
@@ -205,8 +213,6 @@ class K3DSparkModel(nn.Module):
         context_slot_mapping: torch.Tensor | list[torch.Tensor | None] | None = None,
     ) -> None:
         """Project target-derived context into each draft layer's latent cache."""
-        if not hasattr(self, "_num_context_layers"):
-            self._build_fused_context_kv_metadata()
         self._precompute_fused_context_kv(context_states, context_positions, context_slot_mapping)
 
     def _build_fused_context_kv_metadata(self) -> None:
@@ -224,17 +230,17 @@ class K3DSparkModel(nn.Module):
                 and attn.qk_rope_head_dim == attn0.qk_rope_head_dim
                 and attn.kv_a_layernorm.variance_epsilon == attn0.kv_a_layernorm.variance_epsilon
             ), "All MLA DSpark layers must share their latent KV geometry."
-        self._context_kv_norm_weights = torch.stack(
-            [attn.kv_a_layernorm.weight.detach() for attn in attentions], dim=0
-        ).contiguous()
+        norms = [attn.kv_a_layernorm.weight.detach() for attn in attentions]
+        refill_derived(self, "_context_kv_norm_weights", torch.stack(norms, dim=0).contiguous())
         self._num_context_layers = len(attentions)
         self._context_kv_width = kv_width
         self._context_kv_lora_rank = attn0.kv_lora_rank
         self._context_rope_dim = attn0.qk_rope_head_dim
         self._context_rms_norm_eps = attn0.kv_a_layernorm.variance_epsilon
-        self._context_kv_scales: torch.Tensor | None = None
+        kv_scales = None
         if attn0.kv_cache_dtype in _GROUPED_KV_CACHE_DTYPES and is_quantized_kv_cache(attn0.kv_cache_dtype):
-            self._context_kv_scales = torch.stack([attn._k_scale.reshape(()) for attn in attentions])
+            kv_scales = torch.stack([attn._k_scale.reshape(()) for attn in attentions])
+        refill_derived(self, "_context_kv_scales", kv_scales)
 
     def _precompute_fused_context_kv(
         self,

@@ -18,13 +18,13 @@ import torch
 
 from sonar.logger import init_logger
 from sonar.platforms import current_platform
+from sonar.utils.host_memory import pin_tensor
 from sonar.v1.simple_kv_offload.cuda_mem_ops import (
     CU_MEMCPY_SRC_ACCESS_ORDER_ANY,
     CU_MEMCPY_SRC_ACCESS_ORDER_STREAM,
     BatchMemcpyParams,
     build_params,
     copy_blocks,
-    pin_tensor,
 )
 
 logger = init_logger(__name__)

@@ -89,7 +89,7 @@ def describe_video_messages(video_url: str | None, *, extra_video_fields: dict |
     family of tests. *extra_video_fields* is merged into the top-level
     video content block (for uuid / bad-key tests).
 
-    Pass ``None`` for *video_url* to omit media (uuid-backed cache hits).
+    Pass `None` for *video_url* to omit media (uuid-backed cache hits).
     """
     video_block: dict = {
         "type": "video_url",

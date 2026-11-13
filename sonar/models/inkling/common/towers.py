@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Inkling Titan vision + audio towers.
 
-The vision tower (``InklingVision`` / ``HMLPPatchEncoder``) emits one token per
-image patch; the audio tower (``InklingAudio``) emits one token per audio frame.
-Both use Sonar's standard ``RMSNorm`` with a CPU-friendly native fallback.
+The vision tower (`InklingVision` / `HMLPPatchEncoder`) emits one token per
+image patch; the audio tower (`InklingAudio`) emits one token per audio frame.
+Both use Sonar's standard `RMSNorm` with a CPU-friendly native fallback.
 """
 
 from __future__ import annotations

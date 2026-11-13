@@ -441,7 +441,6 @@ class QuarkW4A16Int4MoEMethod(QuarkMoEMethod):
             backend=self.wna16_backend,
             layer=layer,
             quant_config=self.quant_config,
-            input_dtype=None,
             w13=layer.w13_weight,
             w2=layer.w2_weight,
             w13_scale=layer.w13_weight_scale,
@@ -462,8 +461,6 @@ class QuarkW4A16Int4MoEMethod(QuarkMoEMethod):
             w2_scales,
             _,  # w13_qzeros
             _,  # w2_qzeros
-            _,  # w13_input_global_scale
-            _,  # w2_input_global_scale
             _,  # w13_bias
             _,  # w2_bias
         ) = converted
@@ -917,6 +914,8 @@ class QuarkW8A8Fp8MoEMethod(QuarkMoEMethod):
             experts_cls=self.experts_cls,
             routing_tables=layer._expert_routing_tables(),
         )
+        self.moe_kernel.fused_experts.process_weights_after_loading(layer)
+        self.moe_kernel.fused_experts.keep_constants(layer)
 
     def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig:
         return make_fp8_moe_quant_config(
@@ -931,6 +930,7 @@ class QuarkW8A8Fp8MoEMethod(QuarkMoEMethod):
             per_act_token_quant=self.input_qscheme == "per_channel",
             per_out_ch_quant=self.weight_qscheme == "per_channel",
             swiglu_limit=getattr(layer, "swiglu_limit", None),
+            layer=layer,
         )
 
     def apply(
@@ -1250,6 +1250,12 @@ class QuarkW8A8Int8MoEMethod(QuarkMoEMethod):
             )
 
     def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> FusedMoEQuantConfig | None:
+        # Activation- and weight-scale layouts are independent.
+        activation_quant_key = self.activation_quant_key
+        assert activation_quant_key is not None
+        per_act_token_quant = activation_quant_key.scale.group_shape.is_per_token()
+        per_out_ch_quant = self.weight_quant_key.scale.group_shape.is_per_channel()
+
         if self.int8_backend is None:
             return int8_w8a8_moe_quant_config(
                 w1_scale=layer.w13_weight_scale,
@@ -1258,7 +1264,8 @@ class QuarkW8A8Int8MoEMethod(QuarkMoEMethod):
                 a2_scale=layer.w2_input_scale,
                 w1_bias=getattr(layer, "w13_bias", None),
                 w2_bias=getattr(layer, "w2_bias", None),
-                per_act_token_quant=False,
+                per_act_token_quant=per_act_token_quant,
+                per_out_ch_quant=per_out_ch_quant,
             )
         return make_int8_moe_quant_config(
             int8_backend=self.int8_backend,
@@ -1268,7 +1275,8 @@ class QuarkW8A8Int8MoEMethod(QuarkMoEMethod):
             a2_scale=layer.w2_input_scale,
             w1_bias=getattr(layer, "w13_bias", None),
             w2_bias=getattr(layer, "w2_bias", None),
-            per_act_token_quant=(self.weight_qscheme == "per_channel"),
+            per_act_token_quant=per_act_token_quant,
+            per_out_ch_quant=per_out_ch_quant,
             layer=layer,
         )
 
@@ -1439,6 +1447,7 @@ class QuarkW4A8Fp8MoEMethod(QuarkMoEMethod):
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
         from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+            AiterQuantType,
             rocm_aiter_fused_experts,
         )
 
@@ -1451,6 +1460,7 @@ class QuarkW4A8Fp8MoEMethod(QuarkMoEMethod):
             activation=layer.activation,
             apply_router_weight_on_input=layer.apply_router_weight_on_input,
             quant_config=self.moe_quant_config,
+            quant_type=AiterQuantType.PER_TOKEN,
             moe_config=layer.moe_config,
             expert_mask=layer.expert_mask,
         )
@@ -1741,6 +1751,7 @@ class QuarkOCP_MX_MoEMethod(QuarkMoEMethod):
                 experts_cls=self.experts_cls,
                 routing_tables=layer._expert_routing_tables(),
             )
+            self.moe_kernel.fused_experts.keep_constants(layer)
             self.moe_kernel.fused_experts.process_weights_after_loading(layer)
 
     def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig | None:
@@ -1871,13 +1882,13 @@ class QuarkOCP_MX_MoEMethod(QuarkMoEMethod):
 class QuarkW8A8Mxfp8MoEMethod(QuarkMoEMethod):
     """Quark OCP MX MXFP8 (W8A8) experts.
 
-    FP8 E4M3 weights with E8M0 uint8 scales per 1x32 block (Quark ``fp8_e4m3``
-    ``per_group`` ``group_size=32`` ``scale_format=e8m0``), and activations
+    FP8 E4M3 weights with E8M0 uint8 scales per 1x32 block (Quark `fp8_e4m3`
+    `per_group` `group_size=32` `scale_format=e8m0`), and activations
     dynamically quantized to MXFP8. The stored layout is the one the online,
     ModelOpt and compressed-tensors MXFP8 MoE methods produce or load
-    (``[E, rows, cols]`` E4M3, ``[E, rows, cols / 32]`` uint8), and the weights go
+    (`[E, rows, cols]` E4M3, `[E, rows, cols / 32]` uint8), and the weights go
     through the same backend selection, kernel-format conversion and kernel
-    (``AITER_MXFP8`` on gfx950).
+    (`AITER_MXFP8` on gfx950).
     """
 
     supported_activation_quant_keys = [kMxfp8Dynamic]
@@ -1971,6 +1982,7 @@ class QuarkW8A8Mxfp8MoEMethod(QuarkMoEMethod):
             experts_cls=self.experts_cls,
             routing_tables=layer._expert_routing_tables(),
         )
+        self.moe_kernel.fused_experts.keep_constants(layer)
 
     def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig | None:
         return make_fp8_moe_quant_config(
@@ -2166,7 +2178,7 @@ class QuarkNvfp4MoEMethod(QuarkMoEMethod):
         set_weight_attrs(w2_input_scale_2, extra_weight_attrs)
 
     def dequantize_weight(self, layer: torch.nn.Module) -> Iterator[tuple[slice, torch.Tensor, torch.Tensor]]:
-        """Yield ``(experts, w13, w2)`` dequantized Quark NVFP4 experts."""
+        """Yield `(experts, w13, w2)` dequantized Quark NVFP4 experts."""
         return dequantize_nvfp4_moe_weights(
             layer.w13_weight,
             layer.w13_weight_scale,
@@ -2242,6 +2254,7 @@ class QuarkNvfp4MoEMethod(QuarkMoEMethod):
                 backend=self.nvfp4_backend,
                 routing_tables=layer._expert_routing_tables(),
             )
+            self.moe_kernel.fused_experts.keep_constants(layer)
 
     def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> FusedMoEQuantConfig | None:
         return make_nvfp4_moe_quant_config(

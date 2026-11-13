@@ -23,8 +23,6 @@ model:
     - "--trust-remote-code"
     - "--dtype"
     - "bfloat16"
-    - "--gpu-memory-utilization"
-    - "0.9"
     - "--enable-chunked-prefill"
     - "--compilation-config"
     - '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
@@ -101,11 +99,10 @@ guide: |
   ## Launching the Server
 
   ```bash
-  NCCL_DEBUG=WARN sonar serve inclusionAI/Ling-3.0-flash-VL \
+  NCCL_DEBUG=WARN sonar run inclusionAI/Ling-3.0-flash-VL \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 4 \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \

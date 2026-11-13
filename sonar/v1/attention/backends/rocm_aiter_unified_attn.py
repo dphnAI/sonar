@@ -28,6 +28,7 @@ from sonar.v1.attention.backends.rocm_attn import (
     RocmAttentionMetadata,
     RocmAttentionMetadataBuilder,
 )
+from sonar.v1.attention.backends.utils import set_triton_ptr_range
 from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheLayout,
@@ -48,6 +49,12 @@ def _kv_connector_enabled() -> bool:
 
 
 class RocmAiterUnifiedAttentionMetadataBuilder(RocmAttentionMetadataBuilder):
+    # Step-dependent fields reference persistent input buffers directly.
+    supports_draft_decode_metadata_update = True
+
+    def update_draft_decode_metadata(self, _metadata: RocmAttentionMetadata) -> None:
+        pass
+
     def build_for_cudagraph_capture(self, common_attn_metadata: CommonAttentionMetadata) -> RocmAttentionMetadata:
         attn_metadata = self.build(0, common_attn_metadata)
         # Avoid capturing the real maximum sequence length while preserving
@@ -327,6 +334,7 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
                 unified_attention as triton_unified_attention,
             )
 
+            set_triton_ptr_range(kv_cache, key_cache, value_cache)
             descale_shape = (cu_seqlens_q.shape[0] - 1, key_cache.shape[2])
             triton_unified_attention(
                 q=query[:num_actual_tokens],

@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     SONAR_TRACE_FUNCTION: int = 0
     SONAR_USE_FLASHINFER_SAMPLER: bool = True
     SONAR_PP_LAYER_PARTITION: str | None = None
-    SONAR_CPU_KVCACHE_SPACE: int | None = 0
+    SONAR_CPU_KVCACHE_SPACE: int | None = None
     SONAR_CPU_OMP_THREADS_BIND: str = "auto"
     SONAR_CPU_NUM_OF_RESERVED_CPU: int | None = None
     SONAR_CPU_CI_ENV: bool = False
@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     SONAR_XLA_CHECK_RECOMPILATION: bool = False
     SONAR_USE_FUSED_MQA_TOPK: bool = True
     SONAR_SPARSE_INDEXER_MAX_LOGITS_MB: int = 512
+    SONAR_SPARSE_INDEXER_MAX_DECODE_LOGITS_MB: int = 2048
     SONAR_ADAPTIVE_VERIFICATION_PROFILE_CONTEXT_LEN: int = 8192
     SONAR_XPU_PP_MICROBATCH: bool = True
     SONAR_DISTRIBUTED_USE_SPLIT_GROUP: bool = False
@@ -95,7 +96,7 @@ if TYPE_CHECKING:
     SONAR_PRECOMPILED_WHEEL_LOCATION: str | None = None
     SONAR_PRECOMPILED_WHEEL_COMMIT: str | None = None
     SONAR_SKIP_PRECOMPILED_VERSION_SUFFIX: bool = False
-    SONAR_MAIN_CUDA_VERSION: str = "13.0"
+    SONAR_MAIN_CUDA_VERSION: str = "13.2"
     SONAR_FLOAT32_MATMUL_PRECISION: Literal["highest", "high", "medium"] = "highest"
     SONAR_BATCH_INVARIANT: bool = False
     SONAR_TRITON_USE_TD: bool | None = None
@@ -131,7 +132,8 @@ if TYPE_CHECKING:
     SONAR_TRITON_FORCE_FIRST_CONFIG: bool = False
     SONAR_TRITON_JIT_WARMUP_NUM_THREADS: int = 4
     SONAR_ALLOW_RUNTIME_LORA_UPDATING: bool = False
-    SONAR_SKIP_P2P_CHECK: bool = False
+    SONAR_SKIP_P2P_CHECK: bool = True
+    SONAR_PP_TRANSPORT: Literal["auto", "nccl", "copy_engine"] = "auto"
     SONAR_DISABLED_KERNELS: list[str] = []
     SONAR_USE_HW_AGNOSTIC: bool = False
     SONAR_ENABLE_FLA_PACKED_RECURRENT_DECODE: bool = True
@@ -156,6 +158,8 @@ if TYPE_CHECKING:
     SONAR_ROCM_AITER_MLA_ASM_PADDING: Literal["auto", "gluon", "asm"] = "auto"
     SONAR_ROCM_USE_AITER_MHA: bool = True
     SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA: bool = False
+    SONAR_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: bool = False
+    SONAR_ROCM_AITER_FLYDSL_SPARSE_MLA_MIN_TOKENS: int = 160
     SONAR_ROCM_USE_AITER_TRITON_ROPE: bool = False
     SONAR_ROCM_USE_AITER_FP8BMM: bool = False
     SONAR_ROCM_USE_AITER_FP4BMM: bool = False
@@ -166,6 +170,7 @@ if TYPE_CHECKING:
     SONAR_ROCM_FP8_PADDING: bool = True
     SONAR_ROCM_MOE_PADDING: bool = True
     SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT: bool = False
+    SONAR_ROCM_PARALLEL_INDEX_TOPK: bool = False
     SONAR_ENABLE_V1_MULTIPROCESSING: bool = True
     SONAR_LOG_BATCHSIZE_INTERVAL: float = -1
     SONAR_DISABLE_COMPILE_CACHE: bool = False
@@ -186,7 +191,7 @@ if TYPE_CHECKING:
     SONAR_USE_STANDALONE_COMPILE: bool = True
     SONAR_ENABLE_PREGRAD_PASSES: bool = True
     SONAR_USE_BREAKABLE_CUDAGRAPH: bool = False
-    SONAR_DP_MASTER_IP: str = ""
+    SONAR_DP_MASTER_IP: str = "127.0.0.1"
     SONAR_DP_MASTER_PORT: int = 0
     SONAR_RANDOMIZE_DP_DUMMY_INPUTS: bool = False
     SONAR_RAY_DP_PACK_STRATEGY: Literal["strict", "fill", "span"] = "strict"
@@ -194,7 +199,6 @@ if TYPE_CHECKING:
     SONAR_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY: str = ""
     SONAR_RAY_EXTRA_ENV_VARS_TO_COPY: str = ""
     SONAR_MARLIN_USE_ATOMIC_ADD: bool = False
-    SONAR_MARLIN_INPUT_DTYPE: Literal["int8", "fp8"] | None = None
     SONAR_HUMMING_ONLINE_QUANT_CONFIG: dict[str, Any] | None = None
     SONAR_HUMMING_INPUT_QUANT_CONFIG: dict[str, Any] | None = None
     SONAR_HUMMING_USE_F16_ACCUM: bool = False
@@ -235,7 +239,7 @@ if TYPE_CHECKING:
     SONAR_FLASHINFER_ALLREDUCE_BACKEND: Literal["auto", "trtllm", "mnnvl"] = "auto"
     SONAR_FLASHINFER_WORKSPACE_BUFFER_SIZE: int = 394 * 1024 * 1024
     SONAR_FLASHINFER_MOE_A2A_LOW_PRECISION_COMBINE: bool = False
-    SONAR_XGRAMMAR_CACHE_MB: int = 0
+    SONAR_XGRAMMAR_CACHE_MB: int = 512
     SONAR_REGEX_COMPILATION_TIMEOUT_S: int = 5
     SONAR_MSGPACK_ZERO_COPY_THRESHOLD: int = 256
     SONAR_ALLOW_INSECURE_SERIALIZATION: bool = False
@@ -248,10 +252,11 @@ if TYPE_CHECKING:
     SONAR_P2P_HANDSHAKE_TIMEOUT_S: int = 30
     SONAR_P2P_IDLE_TIMEOUT_S: int = 300
     SONAR_P2P_TRANSFER_STALL_TIMEOUT_S: float = 20.0
-    SONAR_EC_SIDE_CHANNEL_HOST: str = "localhost"
-    SONAR_EC_SIDE_CHANNEL_PORT: int = 5601
+    SONAR_EC_SIDE_CHANNEL_HOST: str = ""
+    SONAR_EC_SIDE_CHANNEL_PORT: int = 0
     SONAR_MOONCAKE_BOOTSTRAP_PORT: int = 8998
     SONAR_MOONCAKE_STORE_TIER_LOG: bool = False
+    SONAR_MOONCAKE_STORE_SELECTIVE_LEASE: bool = False
     SONAR_MOONCAKE_LOAD_RECV_THREADS: int = 1
     SONAR_MOONCAKE_DISK_STAGING_USABLE_RATIO: float = 0.9
     MOONCAKE_PREFERRED_SEGMENT: str | None = None
@@ -267,6 +272,7 @@ if TYPE_CHECKING:
     SONAR_SSM_CONV_STATE_LAYOUT: Literal["SD", "DS"] | None = None
     SONAR_COMPUTE_NANS_IN_LOGITS: bool = False
     SONAR_RAISE_ON_LOGIT_NANS: bool = False
+    SONAR_CONFIDENTIAL_COMPUTE: str | None = None
     SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: Literal["FP", "INT8", "INT6", "INT4", "INT3", "NONE"] = "NONE"
     SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16: bool = True
     SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB: int | None = None
@@ -321,7 +327,6 @@ if TYPE_CHECKING:
     SONAR_MULTI_STREAM_GEMM_TOKEN_THRESHOLD: int = 1024
     SONAR_COHERE2_ATTN_MOE_DUAL_STREAM_TOKEN_THRESHOLD: int = 256
     SONAR_COMPILE_CACHE_SAVE_FORMAT: Literal["binary", "unpacked"] = "binary"
-    SONAR_USE_V2_MODEL_RUNNER: bool | None = None
     SONAR_LOG_MODEL_INSPECTION: bool = False
     SONAR_DEBUG_MFU_METRICS: bool = False
     SONAR_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY: bool = False
@@ -350,6 +355,12 @@ if TYPE_CHECKING:
     SONAR_NIC_SELECTION_VARS: str = ""
     SONAR_ENABLE_HPC_OPS: bool = False
     SONAR_REQUEST_BODY_LOG_LEVEL: str = "DEBUG"
+    SONAR_TEST_FORCE_LOAD_FORMAT: str = "dummy"
+    SONAR_MOE_ROUTING_SIMULATION_STRATEGY: str = ""
+    SONAR_PROCESS_NAME_PREFIX: str = "SONAR"
+    SONAR_USE_SIMPLE_KV_OFFLOAD: bool = False
+    SONAR_USE_SPINLOOP_EXT: bool = False
+    SONAR_SKIP_VERSION_SUFFIX: bool = False
 
 
 def get_default_cache_root():
@@ -632,6 +643,16 @@ def _resolve_rust_cli_path() -> str | None:
     return raw
 
 
+# Environment variables that were removed, mapped to a migration hint. Setting
+# one is an error rather than an "unknown variable" warning.
+removed_environment_variables: dict[str, str] = {
+    "SONAR_MARLIN_INPUT_DTYPE": (
+        "Marlin no longer supports 8-bit activations. Use "
+        "`--quantization humming` and set the activation dtype with "
+        'SONAR_HUMMING_INPUT_QUANT_CONFIG, e.g. \'{"dtype":"int8"}\'.'
+    ),
+}
+
 environment_variables: dict[str, Callable[[], Any]] = {
     # ================== Installation Time Env Vars ==================
     # Target device of Sonar, supporting [cuda (by default),
@@ -651,7 +672,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
         os.getenv("SONAR_SKIP_PRECOMPILED_VERSION_SUFFIX", "").lower() in ("1", "true", "yes")
     ),
     # Main CUDA version of Sonar. This follows PyTorch but can be overridden.
-    "SONAR_MAIN_CUDA_VERSION": lambda: os.getenv("SONAR_MAIN_CUDA_VERSION", "").lower() or "13.0",
+    "SONAR_MAIN_CUDA_VERSION": lambda: os.getenv("SONAR_MAIN_CUDA_VERSION", "").lower() or "13.2",
     # Controls PyTorch float32 matmul precision mode within Sonar workers.
     # Valid options mirror torch.set_float32_matmul_precision
     "SONAR_FLOAT32_MATMUL_PRECISION": env_with_choices(
@@ -663,7 +684,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Enable batch-invariant mode: deterministic results regardless of
     # batch composition. Requires NVIDIA GPU with compute capability >= 9.0.
     "SONAR_BATCH_INVARIANT": lambda: bool(int(os.getenv("SONAR_BATCH_INVARIANT", "0"))),
-    "SONAR_REPLICATE_EMBED": lambda: (os.getenv("SONAR_REPLICATE_EMBED", "0").strip().lower() in ("1", "true")),
+    "SONAR_REPLICATE_EMBED": lambda: os.getenv("SONAR_REPLICATE_EMBED", "0").strip().lower() in ("1", "true"),
     # Use tensor descriptors for Q/K/V loads and output stores in the
     # Triton unified-attention kernel.  Enables HW 2D block reads on
     # Intel XPU; the non-TD branch is dead-code-eliminated at Triton
@@ -737,12 +758,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # multi-processing mode to communicate with the backend engine process.
     "SONAR_RPC_BASE_PATH": lambda: os.getenv("SONAR_RPC_BASE_PATH", tempfile.gettempdir()),
     # If true, will load models from ModelScope instead of Hugging Face Hub.
-    "SONAR_USE_MODELSCOPE": lambda: (os.environ.get("SONAR_USE_MODELSCOPE", "False").strip().lower() in ("1", "true")),
+    "SONAR_USE_MODELSCOPE": lambda: os.environ.get("SONAR_USE_MODELSCOPE", "False").strip().lower() in ("1", "true"),
     # If true, replace the Rust BPE backend that powers HF fast tokenizers
     # with the `fastokens` (https://github.com/crusoecloud/fastokens) shim.
-    # Applies to any tokenizer mode that loads an HF fast tokenizer (`hf`,
-    # `deepseek_v32`, `deepseek_v4`, …). The `fastokens` Python package must be
-    # installed.
+    # Applies to HF fast tokenizers (`hf`, `deepseek_v32`, `deepseek_v4`, …).
+    # Requires the `fastokens` Python package >= 0.3.5.
     "SONAR_USE_FASTOKENS": lambda: bool(int(os.getenv("SONAR_USE_FASTOKENS", "0"))),
     # Interval in seconds to log a warning message when the ring buffer is full
     "SONAR_RINGBUFFER_WARNING_INTERVAL": lambda: int(os.environ.get("SONAR_RINGBUFFER_WARNING_INTERVAL", "60")),
@@ -892,8 +912,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # (Zen CPU backend) eagerly prepack weights into ZenDNN blocked layout
     # at model load time. Eliminates per-inference layout conversion overhead.
     "SONAR_ZENTORCH_WEIGHT_PREPACK": lambda: bool(int(os.getenv("SONAR_ZENTORCH_WEIGHT_PREPACK", "1"))),
-    # (CPU backend only) whether to use SGLang INT4 W4A8 kernels for AWQ, and
-    # on Zen CPUs whether to serve int4 checkpoints as DA8W4 rather than W4A16.
+    # (CPU backend only) whether to use SGLang INT4 W4A8 kernels for AWQ, and on
+    # Zen CPUs zentorch DA8W4 kernels for int4, and DA8W8 for grouped int8 MoE.
     "SONAR_CPU_INT4_W4A8": lambda: bool(int(os.getenv("SONAR_CPU_INT4_W4A8", "1"))),
     # Using a flag to control microbatch on XPU device, users on XPU device can
     # decide to disable it when they needed.
@@ -1031,6 +1051,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Bounds the [M, N] float32 logits tensor to prevent CUDA OOM.
     # Default: 512 MB
     "SONAR_SPARSE_INDEXER_MAX_LOGITS_MB": lambda: int(os.getenv("SONAR_SPARSE_INDEXER_MAX_LOGITS_MB", "512")),
+    # Per-chunk decode logits budget (MiB) for the SM100 sparse indexer;
+    # 0 disables decode chunking.
+    "SONAR_SPARSE_INDEXER_MAX_DECODE_LOGITS_MB": lambda: int(
+        os.getenv("SONAR_SPARSE_INDEXER_MAX_DECODE_LOGITS_MB", "2048")
+    ),
     # KV context length each adaptive-verification profiling request pretends to
     # carry, so the profiled step reads a realistic amount of cache.
     # Raise it for long-context deployments, where step cost is dominated by
@@ -1086,7 +1111,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # a list of plugin names to load, separated by commas.
     # if this is not set, it means all plugins will be loaded
     # if this is set to an empty string, no plugins will be loaded
-    "SONAR_PLUGINS": lambda: (None if "SONAR_PLUGINS" not in os.environ else os.environ["SONAR_PLUGINS"].split(",")),
+    "SONAR_PLUGINS": lambda: None if "SONAR_PLUGINS" not in os.environ else os.environ["SONAR_PLUGINS"].split(","),
     # a local directory to look in for unrecognized LoRA adapters.
     # only works if plugins are enabled and
     # SONAR_ALLOW_RUNTIME_LORA_UPDATING is enabled.
@@ -1119,6 +1144,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # so that Sonar can verify if p2p is actually working.
     # See https://github.com/vllm-project/vllm/blob/a9b15c606fea67a072416ea0ea115261a2756058/vllm/distributed/device_communicators/custom_all_reduce_utils.py#L101-L108 for details. # noqa
     "SONAR_SKIP_P2P_CHECK": lambda: os.getenv("SONAR_SKIP_P2P_CHECK", "1") == "1",
+    # How a PP stage sends its intermediate tensors to the next stage.
+    # "copy_engine" uses CUDA copy engines instead of NCCL kernels; it needs
+    # TP=1 and NVLink-connected PP GPUs on one node, and fails startup without.
+    # "auto" uses copy engines when every PP rank can, and NCCL otherwise.
+    "SONAR_PP_TRANSPORT": env_with_choices("SONAR_PP_TRANSPORT", "auto", ["auto", "nccl", "copy_engine"]),
     # List of quantization kernels that should be disabled, used for testing
     # and performance comparisons. Currently only affects MPLinearKernel
     # selection
@@ -1127,7 +1157,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
         [] if "SONAR_DISABLED_KERNELS" not in os.environ else os.environ["SONAR_DISABLED_KERNELS"].split(",")
     ),
     # Selects hw-agnostic layers for HF transformer backend
-    "SONAR_USE_HW_AGNOSTIC": lambda: (os.getenv("SONAR_USE_HW_AGNOSTIC", "False").lower() in ("true", "1")),
+    "SONAR_USE_HW_AGNOSTIC": lambda: os.getenv("SONAR_USE_HW_AGNOSTIC", "False").lower() in ("true", "1"),
     "SONAR_ENABLE_FLA_PACKED_RECURRENT_DECODE": lambda: bool(
         int(os.getenv("SONAR_ENABLE_FLA_PACKED_RECURRENT_DECODE", "1"))
     ),
@@ -1145,8 +1175,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Optional: enable external Oink custom ops (e.g., Blackwell RMSNorm).
     # Disabled by default.
     "SONAR_USE_OINK_OPS": lambda: os.getenv("SONAR_USE_OINK_OPS", "False").lower() in ("true", "1"),
-    # Disable aiter ops unless specifically enabled.
-    # Acts as a parent switch to enable the rest of the other operations.
     # Set to 1 to dequantize MXFP4 weights to BF16 once at load time and run as
     # a BF16 checkpoint (no per-step weight dequant). This improves emulation
     # latency at the cost of additional device memory. Default off.
@@ -1163,7 +1191,9 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD": lambda: (
         os.getenv("SONAR_MXFP8_EMULATION_DEQUANT_AT_LOAD", "True").lower() in ("true", "1")
     ),
-    "SONAR_ROCM_USE_AITER": lambda: (os.getenv("SONAR_ROCM_USE_AITER", "False").lower() in ("true", "1")),
+    # Disable aiter ops unless specifically enabled.
+    # Acts as a parent switch to enable the rest of the other operations.
+    "SONAR_ROCM_USE_AITER": lambda: os.getenv("SONAR_ROCM_USE_AITER", "False").lower() in ("true", "1"),
     # Use AITER's CustomAllreduce as the custom-allreduce backend inside Sonar's
     # CudaCommunicator on ROCm. Also enables AITER AG/RS for DP communication.
     "SONAR_ROCM_USE_AITER_CUSTOM_AR": lambda: (
@@ -1178,13 +1208,13 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # The following list of related ops
     # - scaled_mm (per-tensor / rowwise)
     # - use aiter tuned gemms for unquantized gemms
-    "SONAR_ROCM_USE_AITER_LINEAR": lambda: (os.getenv("SONAR_ROCM_USE_AITER_LINEAR", "True").lower() in ("true", "1")),
+    "SONAR_ROCM_USE_AITER_LINEAR": lambda: os.getenv("SONAR_ROCM_USE_AITER_LINEAR", "True").lower() in ("true", "1"),
     "SONAR_ROCM_USE_AITER_LINEAR_HIPBMM": lambda: (
         os.getenv("SONAR_ROCM_USE_AITER_LINEAR_HIPBMM", "False").lower() in ("true", "1")
     ),
     # Whether to use aiter moe ops.
     # By default is enabled.
-    "SONAR_ROCM_USE_AITER_MOE": lambda: (os.getenv("SONAR_ROCM_USE_AITER_MOE", "True").lower() in ("true", "1")),
+    "SONAR_ROCM_USE_AITER_MOE": lambda: os.getenv("SONAR_ROCM_USE_AITER_MOE", "True").lower() in ("true", "1"),
     # Activation dtype for the Kimi-K3 SiTU MXFP4 MoE (AITER FlyDSL SiTUv2):
     # auto (= a4w4), a4w4, a8w4 or a16w4. Legacy 1/0 mean a4w4/a16w4.
     "SONAR_ROCM_USE_AITER_MOE_SITUV2": env_with_choices(
@@ -1208,12 +1238,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     #       see PR #39177 for benchmarks)
     "SONAR_ROCM_AITER_MOE_DISPATCH_POLICY": lambda: int(os.getenv("SONAR_ROCM_AITER_MOE_DISPATCH_POLICY", "0")),
     # use aiter rms norm op if aiter ops are enabled.
-    "SONAR_ROCM_USE_AITER_RMSNORM": lambda: (
-        os.getenv("SONAR_ROCM_USE_AITER_RMSNORM", "True").lower() in ("true", "1")
-    ),
+    "SONAR_ROCM_USE_AITER_RMSNORM": lambda: os.getenv("SONAR_ROCM_USE_AITER_RMSNORM", "True").lower() in ("true", "1"),
     # Whether to use aiter mla ops.
     # By default is enabled.
-    "SONAR_ROCM_USE_AITER_MLA": lambda: (os.getenv("SONAR_ROCM_USE_AITER_MLA", "True").lower() in ("true", "1")),
+    "SONAR_ROCM_USE_AITER_MLA": lambda: os.getenv("SONAR_ROCM_USE_AITER_MLA", "True").lower() in ("true", "1"),
     # Small-head (<16) AITER MLA decode kernel selection. Small head counts
     # (e.g. Kimi-K3: 12 heads/rank at TP8, 6 at TP16) can decode either through
     # the Gluon small-head kernel or through the padded persistent-scheduling
@@ -1230,13 +1258,25 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Whether to use aiter mha ops.
     # By default is enabled.
-    "SONAR_ROCM_USE_AITER_MHA": lambda: (os.getenv("SONAR_ROCM_USE_AITER_MHA", "True").lower() in ("true", "1")),
+    "SONAR_ROCM_USE_AITER_MHA": lambda: os.getenv("SONAR_ROCM_USE_AITER_MHA", "True").lower() in ("true", "1"),
     # Whether sparse MLA prefill and decode run on aiter's Triton kernel, which
     # reads the KV cache as stored (bf16 or fp8, paged or flat). Used by the
     # ROCM_AITER_MLA_SPARSE backend (DeepSeek V3.2, GLM-5.x) and DeepSeek
     # V4 / V4.1. gfx950 only. By default is disabled.
     "SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA": lambda: (
         os.getenv("SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA", "False").lower() in ("true", "1")
+    ),
+    # Run the sparse MLA calls the FlyDSL kernel accepts (bf16 q, fp8_ds_mla
+    # cache, no sinks: Kimi-K3.1 DSA) on it instead of Triton; others stay on
+    # Triton. gfx950 only. Disabled by default.
+    "SONAR_ROCM_USE_AITER_FLYDSL_SPARSE_MLA": lambda: (
+        os.getenv("SONAR_ROCM_USE_AITER_FLYDSL_SPARSE_MLA", "False").lower() in ("true", "1")
+    ),
+    # Smallest query batch SONAR_ROCM_USE_AITER_FLYDSL_SPARSE_MLA sends to the
+    # FlyDSL kernel; smaller ones (decode) stay on Triton, which is faster
+    # there. 160 is the measured gfx950 crossover for 2048-key rows, H 8..16.
+    "SONAR_ROCM_AITER_FLYDSL_SPARSE_MLA_MIN_TOKENS": lambda: int(
+        os.getenv("SONAR_ROCM_AITER_FLYDSL_SPARSE_MLA_MIN_TOKENS", "160")
     ),
     # Whether to use aiter rope.
     # By default is disabled.
@@ -1246,10 +1286,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Whether to use aiter triton fp8 bmm kernel for MLA kv_b_proj.
     # By default is disabled: it re-quantizes the projection weights online,
     # regardless of the precision the checkpoint asked for.
-    "SONAR_ROCM_USE_AITER_FP8BMM": lambda: (os.getenv("SONAR_ROCM_USE_AITER_FP8BMM", "False").lower() in ("true", "1")),
+    "SONAR_ROCM_USE_AITER_FP8BMM": lambda: os.getenv("SONAR_ROCM_USE_AITER_FP8BMM", "False").lower() in ("true", "1"),
     # Whether to use aiter triton fp4 bmm kernel for MLA kv_b_proj.
     # By default is disabled, for the same reason as the fp8 variant above.
-    "SONAR_ROCM_USE_AITER_FP4BMM": lambda: (os.getenv("SONAR_ROCM_USE_AITER_FP4BMM", "False").lower() in ("true", "1")),
+    "SONAR_ROCM_USE_AITER_FP4BMM": lambda: os.getenv("SONAR_ROCM_USE_AITER_FP4BMM", "False").lower() in ("true", "1"),
     # Use AITER triton unified attention for V1 attention
     "SONAR_ROCM_USE_AITER_UNIFIED_ATTENTION": lambda: (
         os.getenv("SONAR_ROCM_USE_AITER_UNIFIED_ATTENTION", "False").lower() in ("true", "1")
@@ -1265,7 +1305,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
         os.getenv("SONAR_ROCM_USE_AITER_TRITON_GEMM", "True").lower() in ("true", "1")
     ),
     # use rocm skinny gemms
-    "SONAR_ROCM_USE_SKINNY_GEMM": lambda: (os.getenv("SONAR_ROCM_USE_SKINNY_GEMM", "True").lower() in ("true", "1")),
+    "SONAR_ROCM_USE_SKINNY_GEMM": lambda: os.getenv("SONAR_ROCM_USE_SKINNY_GEMM", "True").lower() in ("true", "1"),
     # Pad the fp8 weights to 256 bytes for ROCm
     "SONAR_ROCM_FP8_PADDING": lambda: bool(int(os.getenv("SONAR_ROCM_FP8_PADDING", "1"))),
     # Pad the weights for the moe kernel
@@ -1311,6 +1351,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB": lambda: maybe_convert_int(
         os.environ.get("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB", None)
     ),
+    # Enable parallel decode top-16 selection for the MiniMax-M3.1 NVFP4
+    # indexer on ROCm gfx950 (MI355X). Set to 1 to enable; disabled by default.
+    # Uses runtime shape metadata for mixed batches. FP8 indexers (including
+    # mono decode) bypass this path. Requires an image containing this kernel;
+    # select the recipe's parallel_topk feature or set this variable explicitly.
+    "SONAR_ROCM_PARALLEL_INDEX_TOPK": lambda: os.getenv("SONAR_ROCM_PARALLEL_INDEX_TOPK", "0") == "1",
     # If set, enable multiprocessing in LLM for the V1 code path.
     "SONAR_ENABLE_V1_MULTIPROCESSING": lambda: bool(int(os.getenv("SONAR_ENABLE_V1_MULTIPROCESSING", "1"))),
     "SONAR_LOG_BATCHSIZE_INTERVAL": lambda: float(os.getenv("SONAR_LOG_BATCHSIZE_INTERVAL", "-1")),
@@ -1329,7 +1375,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "SONAR_RUST_FRONTEND_PATH": lambda: _resolve_rust_cli_path(),
     # If set, sonar will run in development mode, which will enable
     # some additional endpoints for developing and debugging,
-    # e.g. `/reset_prefix_cache`
+    # e.g. `/reset_prefix_cache`, and default `--enable-scale-out` to on
     "SONAR_SERVER_DEV_MODE": lambda: bool(int(os.getenv("SONAR_SERVER_DEV_MODE", "0"))),
     # Controls the maximum number of requests to handle in a
     # single asyncio task when processing per-token outputs in the
@@ -1341,7 +1387,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "SONAR_V1_OUTPUT_PROC_CHUNK_SIZE": lambda: int(os.getenv("SONAR_V1_OUTPUT_PROC_CHUNK_SIZE", "128")),
     # If set, Sonar will disable the MLA attention optimizations.
     "SONAR_MLA_DISABLE": lambda: bool(int(os.getenv("SONAR_MLA_DISABLE", "0"))),
-    # If set, Sonar will pick up the provided Flash Attention MLA
     # Number of GPUs per worker in Ray, if it is set to be a fraction,
     # it allows ray to schedule multiple actors on a single GPU,
     # so that users can colocate other actors on the same GPUs as Sonar.
@@ -1401,8 +1446,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "SONAR_MODEL_REDIRECT_PATH": lambda: os.environ.get("SONAR_MODEL_REDIRECT_PATH", None),
     # Whether to use atomicAdd reduce in gptq/awq marlin kernel.
     "SONAR_MARLIN_USE_ATOMIC_ADD": lambda: os.environ.get("SONAR_MARLIN_USE_ATOMIC_ADD", "0") == "1",
-    # The activation dtype for marlin kernel
-    "SONAR_MARLIN_INPUT_DTYPE": env_with_choices("SONAR_MARLIN_INPUT_DTYPE", None, ["int8", "fp8"]),
     # The online quantization dtype for humming kernel
     "SONAR_HUMMING_ONLINE_QUANT_CONFIG": lambda: maybe_convert_json_str_or_file(
         os.environ.get("SONAR_HUMMING_ONLINE_QUANT_CONFIG", None)
@@ -1467,6 +1510,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # ids to -1 so the dispatch and experts drop them. Requires a MoE kernel that
     # treats topk_id == -1 as a skip sentinel. Supported CUDA grouped routers
     # fuse this into routing; the existing backend opt-in is still required.
+    # Under DP, TRT-LLM block-FP8/MXFP8 monolithic MoE then takes Sonar's
+    # routing instead of routing from logits; 0 restores the kernel's routing.
     "SONAR_MOE_SKIP_PADDING": lambda: bool(int(os.getenv("SONAR_MOE_SKIP_PADDING", "1"))),
     # Step5 SP dense/shared MLPs: opt into TP-sharded weights with AG/RS
     # instead of replicated weights and local-token computation.
@@ -1573,12 +1618,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # The stalled transfer and its pins are held until it stops. Default:
     # 20. Set to 0 to disable.
     "SONAR_P2P_TRANSFER_STALL_TIMEOUT_S": lambda: float(os.getenv("SONAR_P2P_TRANSFER_STALL_TIMEOUT_S", "20")),
-    # IP address used for the EC connector's ZMQ side channel
-    # (producer ROUTER bind, consumer DEALER dial).
-    "SONAR_EC_SIDE_CHANNEL_HOST": lambda: os.getenv("SONAR_EC_SIDE_CHANNEL_HOST", "localhost"),
-    # Port for the EC connector's ZMQ side channel; advertised to peers
-    # via `ec_transfer_params.peer_port` on the producer's response.
-    "SONAR_EC_SIDE_CHANNEL_PORT": lambda: int(os.getenv("SONAR_EC_SIDE_CHANNEL_PORT", "5601")),
+    # Optional EC control address override; otherwise use get_ip().
+    "SONAR_EC_SIDE_CHANNEL_HOST": lambda: os.getenv("SONAR_EC_SIDE_CHANNEL_HOST", ""),
+    # EC control base port plus DP index. Zero requests an OS-assigned port.
+    "SONAR_EC_SIDE_CHANNEL_PORT": lambda: int(os.getenv("SONAR_EC_SIDE_CHANNEL_PORT", "0")),
     # Per-request timeout (seconds) when a prefiller worker registers with
     # the Mooncake bootstrap server.
     "SONAR_MOONCAKE_CONNECTOR_TIMEOUT": lambda: float(os.getenv("SONAR_MOONCAKE_CONNECTOR_TIMEOUT", "30.0")),
@@ -1587,6 +1630,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Log per-batch memory/disk tier breakdown on external GETs.
     "SONAR_MOONCAKE_STORE_TIER_LOG": lambda: (
         os.getenv("SONAR_MOONCAKE_STORE_TIER_LOG", "False").lower() in ("true", "1")
+    ),
+    # Probe prefix-lookup keys without a read lease and lease only the keys the
+    # hit loads. Requires Mooncake >= 0.3.14.
+    "SONAR_MOONCAKE_STORE_SELECTIVE_LEASE": lambda: (
+        os.getenv("SONAR_MOONCAKE_STORE_SELECTIVE_LEASE", "False").lower() in ("true", "1")
     ),
     # Number of parallel KV-load receive threads per worker rank. Lets the
     # per-request control overhead (Python prep + master key lookup) of one
@@ -1690,6 +1738,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Raise an exception when generated logits contain NaNs. Enabling this
     # also enables the NaN computation required to detect them.
     "SONAR_RAISE_ON_LOGIT_NANS": lambda: bool(int(os.getenv("SONAR_RAISE_ON_LOGIT_NANS", "0"))),
+    # Override NVIDIA Confidential Computing detection. Unset (default)
+    # auto-detects via NVML; "1" forces it on, "0" forces it off. Gates the
+    # Confidential Computing copy paths (see sonar.v1.conf_compute_utils).
+    "SONAR_CONFIDENTIAL_COMPUTE": lambda: os.getenv("SONAR_CONFIDENTIAL_COMPUTE"),
     # Timeout (in seconds) for MooncakeConnector in PD disaggregated setup.
     "SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT": lambda: int(os.getenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "480")),
     # If set, it means we pre-downloaded cubin files and flashinfer will
@@ -1706,12 +1758,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # The default value is "SONAR".
     "SONAR_PROCESS_NAME_PREFIX": lambda: os.getenv("SONAR_PROCESS_NAME_PREFIX", "SONAR"),
     # Allow chunked local attention with hybrid kv cache manager.
-    # Currently using the Hybrid KV cache manager with chunked local attention
-    # in the Llama4 models (the only models currently using chunked local attn)
-    # causes a latency regression. For this reason, we disable it by default.
-    # This flag is used to allow users to enable it if they want to (to save on
-    # kv-cache memory usage and enable longer contexts)
-    # TODO(lucas): Remove this flag once latency regression is resolved.
+    # Enabled by default; set to 0 to disable chunked local attention when using
+    # the hybrid KV cache manager.
     "SONAR_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE": lambda: bool(
         int(os.getenv("SONAR_ALLOW_CHUNKED_LOCAL_ATTN_WITH_HYBRID_KV_CACHE", "1"))
     ),
@@ -1919,8 +1967,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "SONAR_COMPILE_CACHE_SAVE_FORMAT": env_with_choices(
         "SONAR_COMPILE_CACHE_SAVE_FORMAT", "binary", ["binary", "unpacked"]
     ),
-    # Flag to control the v2 model runner. If unset, use config defaults.
-    "SONAR_USE_V2_MODEL_RUNNER": lambda: maybe_convert_bool(os.getenv("SONAR_USE_V2_MODEL_RUNNER", None)),
     # Log model inspection after loading.
     # If enabled, logs a transformers-style hierarchical view of the model
     # with quantization methods and attention backends.
@@ -2106,6 +2152,7 @@ def compile_factors() -> dict[str, object]:
     hash everything else. This keeps the cache key aligned across workers."""
     ignored_factors: set[str] = {
         "MAX_JOBS",
+        "SONAR_PP_TRANSPORT",
         "SONAR_TRITON_JIT_WARMUP_NUM_THREADS",
         "SONAR_RPC_BASE_PATH",
         "SONAR_USE_MODELSCOPE",
@@ -2179,6 +2226,7 @@ def compile_factors() -> dict[str, object]:
         "SONAR_MAX_AUDIO_PREPROCESS_WORKERS",
         "SONAR_MAX_EMBED_DECODE_BYTES",
         "SONAR_MAX_IMAGE_PIXELS",
+        "SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB",
         "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES",
         "SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB",
         "SONAR_VIDEO_LOADER_BACKEND",
@@ -2190,7 +2238,6 @@ def compile_factors() -> dict[str, object]:
         "SONAR_ENABLE_V1_MULTIPROCESSING",
         "SONAR_V1_OUTPUT_PROC_CHUNK_SIZE",
         "SONAR_CPU_KVCACHE_SPACE",
-        "SONAR_CPU_MOE_PREPACK",
         "SONAR_ZENTORCH_WEIGHT_PREPACK",
         "SONAR_TEST_FORCE_LOAD_FORMAT",
         "SONAR_RELOAD_MODE",

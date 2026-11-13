@@ -154,7 +154,7 @@ def compilation(tmp_path, monkeypatch):
     monkeypatch.setattr(
         producer,
         "device_symbols",
-        lambda obj, tools: (([SYMBOL], ["hipv4-amdgcn-amd-amdhsa--gfx942"]) if obj == objects[0] else ([], [])),
+        lambda obj, tools: ([SYMBOL], ["hipv4-amdgcn-amd-amdhsa--gfx942"]) if obj == objects[0] else ([], []),
     )
     monkeypatch.setattr(producer, "device_dependencies", lambda *args: set())
     return {

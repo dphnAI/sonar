@@ -58,7 +58,7 @@ class B12xMxFp4LinearKernel(MxFp4LinearKernel):
             return False, "B12X MXFP4 kernels require a Blackwell 12x device"
         blockscaled = _import_b12x_blockscaled()
         if blockscaled is None or _import_b12x_intrinsics() is None:
-            return False, "Install sonar[b12x] from the Sonar wheel index"
+            return False, "The b12x backend requires flashinfer-python>=0.7.2 from the Sonar wheel index"
         if not blockscaled.is_supported():
             return False, "b12x native MXFP4 GEMM is not supported"
         return True, None

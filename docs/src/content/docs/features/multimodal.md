@@ -43,6 +43,10 @@ and can access unexpectedly large files.
 Use `--allowed-local-media-path` only for a trusted application. Point it at a
 dedicated read-only directory.
 
+Set `SONAR_MEDIA_CACHE` to a directory to cache URL downloads on disk. It is
+disabled by default. Keep source URLs accessible because an evicted entry may
+need to be downloaded again.
+
 ## Limit items per prompt
 
 ```bash
@@ -58,6 +62,19 @@ can impose a lower limit.
 `--mm-processor-kwargs` passes model-specific settings to the processor. Use
 settings documented by the model implementation. Image resolution, video frame
 count, and audio duration affect both latency and memory.
+
+For Qwen2-VL-family models, a larger `--max-model-len` can increase the video
+size used for memory profiling. Set video hints in `--limit-mm-per-prompt` to
+profile the workload you expect, within the processor's pixel and frame limits.
+
+Offline audio inputs can be one-dimensional PyTorch tensors, including CUDA
+tensors or tensors requiring gradients. Sonar detaches them and moves them to
+CPU for preprocessing.
+
+For supported encoder CUDA graphs,
+`compilation_config.encoder_cudagraph_max_token_budget` caps automatically
+generated capture budgets at `5120` tokens by default. Larger batches run
+eagerly. Explicit `encoder_cudagraph_token_budgets` override this cap.
 
 ## Configure video decoding
 
@@ -121,6 +138,16 @@ sonar serve Qwen/Qwen3-VL-30B-A3B-Instruct \
 Choose a budget large enough for the largest sampled video that a single API
 server process must decode. When using multiple API server processes,
 Sonar divides the configured budget evenly among them.
+
+To select keyframes nearest to uniformly spaced positions, set
+`"keyframe_sampling": "nearest"` in the video options. Frames remain distinct
+and chronological. Videos with too few keyframes use uniform sampling instead:
+
+```bash
+sonar serve Qwen/Qwen3-VL-8B-Instruct \
+  --media-io-kwargs '{"video": {"backend": "pynvvideocodec", "keyframe_sampling": "nearest"}}' \
+  --mm-ipc-gpu-memory-gb 1
+```
 
 For streaming video sources, use the `deepstream` backend instead.
 

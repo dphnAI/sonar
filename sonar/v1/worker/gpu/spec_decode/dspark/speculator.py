@@ -2,18 +2,18 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """DSpark speculator: semi-autoregressive parallel drafting.
 
-DSpark drafts a block of ``num_speculative_tokens`` tokens in one parallel pass
+DSpark drafts a block of `num_speculative_tokens` tokens in one parallel pass
 (reusing the DFlash machinery: context-KV precompute + a query-block forward),
 then injects intra-block dependency with a lightweight sequential Markov head.
 
 Differences from DFlash:
-  * Anchor-as-first-prediction: each request emits exactly ``N =
-    num_speculative_tokens`` query tokens (anchor + N-1 noise), NOT ``1 + N``.
+  * Anchor-as-first-prediction: each request emits exactly `N =
+    num_speculative_tokens` query tokens (anchor + N-1 noise), NOT `1 + N`.
     Every query position is a prediction (the anchor predicts the first draft
-    token), so we sample at all N positions and ``sample_pos = query_pos + 1``
+    token), so we sample at all N positions and `sample_pos = query_pos + 1`
     (standard next-token), whereas DFlash's masks sit AT the predicted position.
-    This is the ``sample_from_anchor`` path in the shared prepare-inputs kernel.
-    Speculators-format checkpoints instead use the DFlash ``1 + N`` fill-in
+    This is the `sample_from_anchor` path in the shared prepare-inputs kernel.
+    Speculators-format checkpoints instead use the DFlash `1 + N` fill-in
     layout (anchor is the bonus token).
   * Sequential Markov sampling: instead of DFlash's single parallel sample, we
     sample left-to-right, adding a prefix-dependent Markov bias derived from the
@@ -24,7 +24,7 @@ backbone forward AND the sequential Markov sampling.
 
 Under batch-sharded sampling, draft steps also shard the sequential sampling
 across TP ranks: each rank runs the Markov loop only for the requests it owns
-(the same owners as verification), see ``_sample_sequential_sharded``.
+(the same owners as verification), see `_sample_sequential_sharded`.
 """
 
 from typing import Any
@@ -91,11 +91,22 @@ class DSparkSpeculator(DFlashSpeculator):
         # Set when the sequential sampling can be batch-sharded across TP.
         self._sharded_sequential_comm: PyNcclCommunicator | None = None
 
+        # Whether the markov bias is fused into the Gumbel sample kernel.
+        self._fuse_markov_bias: bool = False
+
     def load_model(self, target_model: torch.nn.Module) -> None:
         super().load_model(target_model)
         tp_size = get_tp_group().world_size
         if tp_size > 1 and batch_sharded_sampling_enabled(self.sonar_config, target_model):
             self._try_enable_sharded_sequential_sampling()
+
+        self._fuse_markov_bias = (
+            self.draft_logits is not None
+            and self._d2t_scatter_index is None
+            and self.draft_watermarker is None
+            and self.acceptance_estimator is None
+            and not hasattr(self.model, "apply_output_logit_transform")
+        )
 
     def _try_enable_sharded_sequential_sampling(self) -> None:
         tp_size = get_tp_group().world_size
@@ -240,7 +251,11 @@ class DSparkSpeculator(DFlashSpeculator):
                 )
                 if sampled is not None:
                     return sampled
-            logits = logits + bias
+            # Gumbel rounds the fused sum to the logits dtype. Materialize
+            # other cases before processing, preserving PyTorch promotion.
+            if not self._fuse_markov_bias or bias.dtype != logits.dtype:
+                logits = logits + bias
+                bias = None
         self._maybe_predict_acceptance(logits, idx_map, self._step_cols[step])
         if self.draft_logits is None:
             draft_ids = greedy_argmax(logits)
@@ -281,7 +296,23 @@ class DSparkSpeculator(DFlashSpeculator):
             logits_cache_col=self._step_cols[step],
             use_fp64=self.use_fp64_gumbel,
             logits_cache_row_mapping=self.draft_logits.row_mapping,
+            bias=bias,
         )
+
+    def _markov_step(
+        self,
+        prev: torch.Tensor,
+        draft_hidden: torch.Tensor,
+        state: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Markov embedding of the previous token at one draft position.
+
+        Recurrent heads also read the backbone hidden state and carry a state
+        across the positions of one proposal, starting from None (zeros).
+        """
+        if getattr(self.model, "has_recurrent_markov_head", False):
+            return self.model.markov_step(prev, draft_hidden, state)
+        return self.model.markov_embed(prev), None
 
     def _sample_sequential(self, num_reqs: int, head_hidden: torch.Tensor) -> None:
         if self._draft_topk is not None:
@@ -314,10 +345,11 @@ class DSparkSpeculator(DFlashSpeculator):
         confidence = self._sample_markov_chain(
             base_logits,
             sample_hidden,
-            self.input_buffers.input_ids[self._anchor_idx[:num_reqs]],
+            self.input_buffers.input_ids,
             self.sample_idx_mapping[:num_sample].view(num_reqs, n_spec),
             self.sample_pos[:num_sample].view(num_reqs, n_spec),
             self.draft_tokens[:num_reqs],
+            prev_indices=self._anchor_idx[:num_reqs],
         )
         if confidence is not None:
             self.draft_token_confidence_probs[:num_reqs] = confidence
@@ -330,6 +362,8 @@ class DSparkSpeculator(DFlashSpeculator):
         idx_map: torch.Tensor,
         sample_pos: torch.Tensor,
         out_tokens: torch.Tensor,
+        *,
+        prev_indices: torch.Tensor | None = None,
     ) -> torch.Tensor | None:
         """Run the sequential Markov steps for a block of requests, writing the
         drafts to `out_tokens`.
@@ -339,10 +373,28 @@ class DSparkSpeculator(DFlashSpeculator):
             without a confidence head.
 
         """
+        fused_chain = getattr(self.model, "sample_markov_chain", None)
+        if fused_chain is not None:
+            # The per-step Markov embeddings, or None where it does not apply.
+            fused_embeds = fused_chain(
+                self,
+                base_logits,
+                prev,
+                idx_map,
+                sample_pos,
+                out_tokens,
+                prev_indices=prev_indices,
+            )
+            if fused_embeds is not None:
+                return self._confidence(hidden, fused_embeds, out_tokens.shape)
+        if prev_indices is not None:
+            prev = prev[prev_indices]
         markov_embeds = []
+        hidden_by_step = hidden.view(*out_tokens.shape, -1)
+        state: torch.Tensor | None = None
         for i in range(self.num_speculative_steps):
             # Sequential stage: Markov bias from the previously sampled token.
-            markov_embed = self.model.markov_embed(prev)
+            markov_embed, state = self._markov_step(prev, hidden_by_step[:, i], state)
             if self.use_confidence_head:
                 markov_embeds.append(markov_embed)
             if self.draft_vocab_shard is not None:
@@ -361,12 +413,22 @@ class DSparkSpeculator(DFlashSpeculator):
             out_tokens[:, i] = draft_sampled_i
             prev = draft_sampled_i
 
-        confidence = None
-        if self.use_confidence_head:
-            confidence = self.model.compute_confidence(hidden, torch.stack(markov_embeds, dim=1).flatten(0, 1)).view(
-                out_tokens.shape
-            )
-        return confidence
+        if not self.use_confidence_head:
+            return None
+        return self._confidence(hidden, torch.stack(markov_embeds, dim=1), out_tokens.shape)
+
+    def _confidence(
+        self,
+        hidden: torch.Tensor,
+        markov_embeds: torch.Tensor,
+        shape: torch.Size,
+    ) -> torch.Tensor | None:
+        """Draft confidences from `[num_rows, num_steps, rank]` Markov
+        embeddings, or None without a confidence head."""
+        if not self.use_confidence_head:
+            return None
+        confidence = self.model.compute_confidence(hidden, markov_embeds.flatten(0, 1))
+        return confidence.view(shape)
 
     def _sample_sequential_sharded(self, num_reqs: int, head_hidden: torch.Tensor) -> None:
         """_sample_sequential with each TP rank sampling only its own requests.
@@ -439,7 +501,7 @@ class DSparkSpeculator(DFlashSpeculator):
 
         Candidate selection is done once for all draft positions. At each
         sequential step, the selected logits are corrected in place and every
-        other entry is set to ``-inf``. The normal dense sampling and rejection
+        other entry is set to `-inf`. The normal dense sampling and rejection
         paths then consume that truncated distribution unchanged.
         """
         assert self._draft_topk is not None
@@ -457,9 +519,11 @@ class DSparkSpeculator(DFlashSpeculator):
         sample_pos = self.sample_pos[:num_sample].view(num_reqs, n_spec)
         confidence_markov_embeds = []
         prev = self.input_buffers.input_ids[self._anchor_idx[:num_reqs]]
+        hidden_by_step = sample_hidden.view(num_reqs, n_spec, -1)
+        state: torch.Tensor | None = None
 
         for i in range(n_spec):
-            markov_embed = self.model.markov_embed(prev)
+            markov_embed, state = self._markov_step(prev, hidden_by_step[:, i], state)
             if self.use_confidence_head:
                 confidence_markov_embeds.append(markov_embed)
             logits_i = self.model.apply_markov_bias_gathered(

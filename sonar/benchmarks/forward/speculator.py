@@ -7,7 +7,6 @@ import torch
 
 from sonar.v1.worker.gpu.dp_utils import DPSyncState
 from sonar.v1.worker.gpu.spec_decode.utils import get_drafter_hidden_states
-from sonar.v1.worker.workspace import use_workspace_lane
 
 
 class DraftBench:
@@ -28,7 +27,7 @@ class DraftBench:
         accepted = np.ones(self.batch.num_reqs, dtype=np.int32) if drafts is None else drafts.astype(np.int32) + 1
         self.num_sampled = torch.tensor(accepted, device=runner.device)
         self.num_rejected = torch.zeros_like(self.num_sampled)
-        # Fixed valid bonus token: target logits and rejection sampling are not timed.
+        # Fixed valid bonus token, independent of the timed target sampling.
         self.last_sampled = torch.zeros_like(runner.req_states.last_sampled_tokens)
         self.dp_sync_state = (
             DPSyncState(
@@ -55,7 +54,7 @@ class DraftBench:
         draft_hidden = get_drafter_hidden_states(runner.model, hidden)
         if runner.pcp_manager is not None and aux is not None:
             aux = [runner.pcp_manager.restore_hidden_states(states) for states in aux]
-        with use_workspace_lane(runner._draft_workspace_lane):
+        with runner.draft_context():
             self.tokens = self.speculator.propose(
                 self.batch,
                 self.context.attn_metadata,

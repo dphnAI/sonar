@@ -28,7 +28,7 @@ def _clear_cgroup_cache():
 
 
 def _stub_files(monkeypatch, files: dict):
-    """Stub ``open()`` for a fixed set of paths; ``None`` -> OSError."""
+    """Stub `open()` for a fixed set of paths; `None` -> OSError."""
     real_open = open
 
     def fake_open(path, *args, **kwargs):
@@ -219,6 +219,25 @@ def test_visible_memory_node_assigned_ids_are_limited_to_allowed_nodes(six_numa_
     assert cru.get_visible_memory_node([1, 4]) == [1]
 
 
+def test_worker_memory_nodes_keep_available_assigned_nodes(six_numa_nodes):
+    assert cru.get_worker_memory_nodes([2, 3]) == [2, 3]
+
+
+def test_worker_memory_nodes_raise_when_assigned_nodes_are_missing(six_numa_nodes, monkeypatch):
+    """DP=2 x TP=2 on a 2-node host assigns DP rank 1 nodes [2, 3]. The worker
+    must stop with an error that names the cause, not an IndexError."""
+    monkeypatch.setattr(cru, "get_memory_affinity", lambda: [0, 1])
+    assert cru.get_visible_memory_node([2, 3]) == []
+    with pytest.raises(ValueError, match="SONAR_CPU_SIM_MULTI_NUMA"):
+        cru.get_worker_memory_nodes([2, 3])
+
+
+def test_worker_memory_nodes_sim_multi_numa_shares_nodes(six_numa_nodes, monkeypatch):
+    monkeypatch.setattr(cru, "get_memory_affinity", lambda: [0, 1])
+    monkeypatch.setenv("SONAR_CPU_SIM_MULTI_NUMA", "1")
+    assert cru.get_worker_memory_nodes([2, 3]) == [0, 1]
+
+
 def test_visible_memory_node_sim_multi_numa_ignores_assigned_ids(six_numa_nodes, monkeypatch):
     monkeypatch.setenv("SONAR_CPU_SIM_MULTI_NUMA", "1")
     assert cru.get_visible_memory_node([2]) == [0, 1, 2, 3, 4, 5]
@@ -254,3 +273,24 @@ def test_omp_manager_binds_each_dp_rank_to_its_assigned_node(monkeypatch):
     assert rank0 and rank1
     assert rank0 <= set(range(8))
     assert rank1 <= set(range(8, 16))
+
+
+def test_omp_manager_sim_multi_numa_requires_auto_binding(monkeypatch):
+    """Explicit binds with SONAR_CPU_SIM_MULTI_NUMA stop with a message, not a
+    bare AssertionError."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(
+        omp,
+        "current_platform",
+        SimpleNamespace(is_cpu=lambda: True, get_cpu_architecture=lambda: CpuArchEnum.X86),
+    )
+    monkeypatch.setenv("SONAR_CPU_OMP_THREADS_BIND", "0-3|8-11")
+    monkeypatch.setenv("SONAR_CPU_SIM_MULTI_NUMA", "1")
+    parallel_config = SimpleNamespace(
+        local_world_size=2,
+        data_parallel_rank_local=0,
+        _api_process_count=1,
+        assigned_physical_gpu_ids=[0, 1],
+    )
+    with pytest.raises(AssertionError, match="SONAR_CPU_OMP_THREADS_BIND=auto"):
+        omp.OMPProcessManager(SimpleNamespace(parallel_config=parallel_config, kv_transfer_config=None))

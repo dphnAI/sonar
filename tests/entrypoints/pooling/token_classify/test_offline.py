@@ -8,7 +8,7 @@ from sonar import LLM, PoolingRequestOutput
 from sonar.config import PoolerConfig
 from sonar.tasks import PoolingTask
 
-MODEL_NAME = "jason9693/Qwen2.5-1.5B-apeach"
+MODEL_NAME = "vllm-project/Qwen2.5-1.5B-apeach"
 
 prompt = "The chef prepared a delicious meal."
 prompt_token_ids = [785, 29706, 10030, 264, 17923, 15145, 13]

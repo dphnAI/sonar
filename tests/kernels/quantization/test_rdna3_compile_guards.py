@@ -65,6 +65,9 @@ RDNA3_CU_FILES = [
     "moe_q_gemm_rdna3.cu",
     "mxfp4_w4a8_gemv_rdna3.cu",
 ]
+# torch_bindings.cpp guards that keep RDNA ops out of CDNA builds: gfx1100
+# for the W4A16 kernels above, gfx115x for the RDNA3.5-only ones.
+RDNA_GUARDS = ("#ifdef SONAR_ROCM_GFX1100", "#ifdef SONAR_ROCM_GFX115X")
 
 
 def _find_repo_root() -> Path | None:
@@ -225,7 +228,7 @@ class TestCMakeGuards:
 
     def test_rdna3_cu_files_inside_gfx1100_conditional(self):
         """All RDNA3 .cu files must be listed inside the
-        ``if(SONAR_GPU_ARCHES MATCHES "gfx1100")`` block, not unconditionally.
+        `if(SONAR_GPU_ARCHES MATCHES "gfx1100")` block, not unconditionally.
         """
         cmake = self._read_cmake()
         for cu_file in RDNA3_CU_FILES:
@@ -272,9 +275,10 @@ class TestTorchBindingsGuards:
         return _read_source_or_skip("csrc", "rocm", "torch_bindings.cpp")
 
     def test_all_rdna3_ops_inside_ifdef(self):
-        """Every rdna3 op def/impl must be between #ifdef SONAR_ROCM_GFX1100
-        and #endif. If any is outside, a CDNA build would try to register
-        the op and link a symbol that doesn't exist.
+        """Every rdna3 op def/impl must be between an RDNA guard
+        (#ifdef SONAR_ROCM_GFX1100 or SONAR_ROCM_GFX115X) and #endif. If any is
+        outside, a CDNA build would try to register the op and link a symbol
+        that doesn't exist.
         """
         src = self._read_bindings()
         lines = src.splitlines()
@@ -283,7 +287,7 @@ class TestTorchBindingsGuards:
         rdna3_lines_outside = []
 
         for i, line in enumerate(lines, 1):
-            if "#ifdef SONAR_ROCM_GFX1100" in line:
+            if any(guard in line for guard in RDNA_GUARDS):
                 inside_guard = True
             elif line.strip() == "#endif" and inside_guard:
                 inside_guard = False
@@ -292,9 +296,9 @@ class TestTorchBindingsGuards:
                 rdna3_lines_outside.append((i, line.strip()))
 
         assert not rdna3_lines_outside, (
-            "RDNA3 op references found OUTSIDE #ifdef SONAR_ROCM_GFX1100 "
-            "in torch_bindings.cpp — these would break CDNA builds:\n"
-            + "\n".join(f"  L{n}: {s}" for n, s in rdna3_lines_outside)
+            "RDNA3 op references found OUTSIDE the RDNA guards "
+            f"({', '.join(RDNA_GUARDS)}) in torch_bindings.cpp — these would "
+            "break CDNA builds:\n" + "\n".join(f"  L{n}: {s}" for n, s in rdna3_lines_outside)
         )
 
     def test_no_unconditional_rdna3_includes(self):
@@ -304,13 +308,13 @@ class TestTorchBindingsGuards:
 
         inside_guard = False
         for i, line in enumerate(lines, 1):
-            if "#ifdef SONAR_ROCM_GFX1100" in line:
+            if any(guard in line for guard in RDNA_GUARDS):
                 inside_guard = True
             elif line.strip() == "#endif" and inside_guard:
                 inside_guard = False
 
             if "#include" in line and "rdna3" in line.lower():
-                assert inside_guard, f"L{i}: RDNA3 include outside gfx1100 guard: {line.strip()}"
+                assert inside_guard, f"L{i}: RDNA3 include outside the RDNA guards: {line.strip()}"
 
 
 class TestCustomOpsGuards:
@@ -345,7 +349,7 @@ class TestCustomOpsGuards:
             )
 
     def test_no_toplevel_rocm_c_import(self):
-        """No top-level ``from sonar._rocm_C import`` — would crash on CDNA."""
+        """No top-level `from sonar._rocm_C import` — would crash on CDNA."""
         src = self._read_custom_ops()
         for line in src.splitlines():
             stripped = line.strip()

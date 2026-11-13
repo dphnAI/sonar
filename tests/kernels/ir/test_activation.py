@@ -22,7 +22,7 @@ def test_gelu_and_mul_sparse_registration():
     assert actual == expected
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="GPU-only provider")
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])
 @pytest.mark.parametrize("num_tokens", [1, 8, 64])
 @pytest.mark.parametrize("intermediate_size", [2048, 4096, 8192, 13824, 16384, 32768])
@@ -45,7 +45,7 @@ def test_gelu_and_mul_sparse_triton(dtype: torch.dtype, num_tokens: int, interme
     assert mask_mismatch / actual.numel() < 1e-3
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="GPU-only provider")
 def test_gelu_and_mul_sparse_triton_second_seed():
     torch.manual_seed(1)
     torch.set_default_device("cuda")
@@ -60,7 +60,7 @@ def test_gelu_and_mul_sparse_triton_second_seed():
     assert_close(ir.ops.gelu_and_mul_sparse, actual, expected)
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="GPU-only provider")
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])
 @pytest.mark.parametrize("intermediate_size", [1, 31, 128])
 def test_gelu_and_mul_sparse_triton_small_sizes(dtype: torch.dtype, intermediate_size: int):
@@ -78,7 +78,7 @@ def test_gelu_and_mul_sparse_triton_small_sizes(dtype: torch.dtype, intermediate
     assert torch.equal(actual == 0, expected == 0)
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="GPU-only provider")
 def test_gelu_and_mul_sparse_triton_nd_and_empty():
     torch.set_default_device("cuda")
     impl = ir.ops.gelu_and_mul_sparse.impls["triton"]
@@ -96,7 +96,7 @@ def test_gelu_and_mul_sparse_triton_nd_and_empty():
     assert empty_out.dtype == empty.dtype
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="GPU-only provider")
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])
 def test_gelu_and_mul_sparse_triton_constant_rows(dtype: torch.dtype):
     torch.set_default_device("cuda")
@@ -111,7 +111,7 @@ def test_gelu_and_mul_sparse_triton_constant_rows(dtype: torch.dtype):
     assert torch.count_nonzero(actual) == 0
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="GPU-only provider")
 @pytest.mark.parametrize("nonfinite", [float("nan"), float("inf")])
 def test_gelu_and_mul_sparse_triton_nonfinite_gate(nonfinite: float):
     torch.set_default_device("cuda")
@@ -124,7 +124,7 @@ def test_gelu_and_mul_sparse_triton_nonfinite_gate(nonfinite: float):
     torch.testing.assert_close(actual, expected, equal_nan=True)
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="GPU-only provider")
 def test_gelu_and_mul_sparse_triton_fallback_conditions():
     torch.set_default_device("cuda")
     impl = ir.ops.gelu_and_mul_sparse.impls["triton"]
@@ -155,7 +155,7 @@ def test_gelu_and_mul_sparse_triton_dispatch_and_opcheck():
     torch.testing.assert_close(dispatched, direct, rtol=0.0, atol=0.0)
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-only provider")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="GPU-only provider")
 def test_gelu_and_mul_sparse_triton_cudagraph():
     torch.set_default_device("cuda")
     x = torch.randn(16, 32768, dtype=torch.bfloat16)

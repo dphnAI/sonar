@@ -41,8 +41,8 @@ from .model import DeepseekV41LLMForCausalLM
 class DeepseekV41ForCausalLM(UpstreamDeepseekV41ForCausalLM):
     """Multimodal entry point for DeepSeek-V4.1 checkpoints with a vision tower.
 
-    ``SupportsEagle3`` (aux hidden-state plumbing for MTP/DSpark drafters)
-    delegates through ``language_model`` via the protocol defaults.
+    `SupportsEagle3` (aux hidden-state plumbing for MTP/DSpark drafters)
+    delegates through `language_model` via the protocol defaults.
     """
 
     supports_encoder_tp_data = True
@@ -121,6 +121,3 @@ class DeepseekV41ForCausalLM(UpstreamDeepseekV41ForCausalLM):
         # Prefix groups may recur across checkpoint files. Consume each tensor
         # immediately; sorting payloads retains the entire checkpoint on device.
         return AutoWeightsLoader(self).load_weights(weights, mapper=self.hf_to_sonar_mapper)
-
-    def process_weights_after_loading(self) -> None:
-        self.language_model.process_weights_after_loading()

@@ -113,7 +113,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ## Launch command
@@ -121,7 +121,7 @@ guide: |
   Serve on a single H200 node with TP8 (vision encoder in data-parallel mode):
 
   ```bash
-  sonar serve moonshotai/Kimi-K2.7-Code \
+  sonar run moonshotai/Kimi-K2.7-Code \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --trust-remote-code \
@@ -147,7 +147,7 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve moonshotai/Kimi-K2.7-Code \
+  sonar run moonshotai/Kimi-K2.7-Code \
     --host 0.0.0.0 \
     --port 8000 \
     --trust-remote-code \
@@ -167,7 +167,7 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve moonshotai/Kimi-K2.7-Code \
+  sonar run moonshotai/Kimi-K2.7-Code \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --mm-encoder-tp-mode data \
@@ -232,7 +232,7 @@ guide: |
 
   ## Troubleshooting
 
-  - **OOM errors:** Lower `--gpu-memory-utilization` or adjust TP/EP to match your GPU count.
+  - **OOM errors:** Lower `--max-num-seqs` or `--max-model-len`, or adjust TP/EP to match your GPU count.
   - **Vision encoder performance:** Use `--mm-encoder-tp-mode data` to run the vision encoder
     in data-parallel mode. The encoder is small, so TP adds communication overhead with little gain.
   - **Unique multimodal inputs:** Pass `--mm-processor-cache-gb 0` to avoid caching overhead.

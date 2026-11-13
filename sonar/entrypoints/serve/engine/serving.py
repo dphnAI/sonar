@@ -11,10 +11,10 @@ from sonar.entrypoints.openai.models.serving import (
     OpenAIModelRegistry,
     OpenAIServingModels,
 )
-from sonar.entrypoints.pooling.typing import AnyPoolingRequest
+from sonar.entrypoints.pooling.types import AnyPoolingRequest
 from sonar.entrypoints.serve import create_error_response
 from sonar.entrypoints.serve.engine.protocol import ErrorResponse
-from sonar.entrypoints.serve.engine.typing import AnyRequest
+from sonar.entrypoints.serve.engine.types import AnyRequest
 from sonar.entrypoints.serve.utils.request_logger import RequestLogger
 from sonar.exceptions import SonarNotFoundError
 from sonar.inputs import EngineInput
@@ -148,7 +148,11 @@ class BaseServing:
             if isinstance(message, dict) and "content" in message and isinstance(message["content"], list):
                 for content_dict in message["content"]:
                     if "type" in content_dict:
-                        message_types.add(content_dict["type"].split("_")[0])
+                        content_type = content_dict["type"]
+                        if content_type.startswith("input_"):
+                            message_types.add(content_type.removeprefix("input_"))
+                        else:
+                            message_types.add(content_type.split("_")[0])
         return message_types
 
     def _get_active_default_mm_loras(self, request: AnyRequest | AnyPoolingRequest) -> LoRARequest | None:

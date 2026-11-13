@@ -21,6 +21,7 @@ from sonar.config.speculative import SpeculativeConfig
 from sonar.config.structured_outputs import StructuredOutputsBackend
 from sonar.parser.engine.adapters import ParserEngineReasoningAdapter
 from sonar.parser.engine.parser_engine import ReasoningEnd
+from sonar.reasoning import ReasoningParser
 from sonar.sampling_params import SamplingParams, StructuredOutputsParams
 from sonar.v1.request import Request
 from sonar.v1.structured_output import StructuredOutputManager
@@ -60,8 +61,9 @@ class FlowCase:
     xfail_guidance: str | None = None
 
 
-class MockReasoner:
+class MockReasoner(ReasoningParser):
     def __init__(self, tokenizer, marker: int | None = None):
+        super().__init__(tokenizer)
         self.marker = marker
 
     def is_reasoning_end(self, input_ids):
@@ -74,8 +76,8 @@ class MockReasoner:
 
 
 class MockEngineReasoner(ParserEngineReasoningAdapter):
-    """Ends reasoning implicitly on ``marker``, which is also content, and
-    explicitly on ``end_marker`` when one is given."""
+    """Ends reasoning implicitly on `marker`, which is also content, and
+    explicitly on `end_marker` when one is given."""
 
     def __init__(self, tokenizer, marker: int, end_marker: int | None = None):
         self.marker = marker

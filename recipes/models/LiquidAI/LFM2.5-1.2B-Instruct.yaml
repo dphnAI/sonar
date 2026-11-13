@@ -98,24 +98,24 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ## Deployment Configurations
 
   ### Quick Start (Single GPU, BF16)
   ```bash
-  sonar serve LiquidAI/LFM2.5-1.2B-Instruct
+  sonar run LiquidAI/LFM2.5-1.2B-Instruct
   ```
   Cap the context to fit a smaller GPU (the model supports up to 32K):
   ```bash
-  sonar serve LiquidAI/LFM2.5-1.2B-Instruct --max-model-len 32768
+  sonar run LiquidAI/LFM2.5-1.2B-Instruct --max-model-len 32768
   ```
 
   ### Full-Featured Server Launch
   Enables tool calling:
   ```bash
-  sonar serve LiquidAI/LFM2.5-1.2B-Instruct \
+  sonar run LiquidAI/LFM2.5-1.2B-Instruct \
     --enable-auto-tool-choice \
     --tool-call-parser lfm2 \
     --host 0.0.0.0 --port 8000
@@ -175,9 +175,8 @@ guide: |
 
   ## Configuration Tips
   - Set `--max-model-len` to match your workload (up to 32K); lowering it frees VRAM for KV cache.
-  - `--gpu-memory-utilization 0.90–0.95` maximizes KV cache capacity.
   - FP8 KV cache (`--kv-cache-dtype fp8`) roughly halves KV memory.
-  - Sampling presets are per-request client defaults — don't bake them into `sonar serve`.
+  - Sampling presets are per-request client defaults — don't bake them into `sonar run`.
 
   ## References
   - [Model card](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct)

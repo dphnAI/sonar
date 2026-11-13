@@ -12,7 +12,6 @@ from sonar.v1.worker.gpu.spec_decode.eagle.utils import (
     get_target_lm_head,
     maybe_share_target_embed,
 )
-from sonar.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
 
 logger = init_logger(__name__)
 
@@ -115,7 +114,7 @@ def load_dflash_model(target_model: nn.Module, sonar_config: SonarConfig) -> nn.
             sonar_config.cache_config,
             cache_dtype=resolve_dflash_cache_dtype(sonar_config),
         ),
-        load_config=get_pp_safe_draft_load_config(get_draft_load_config(sonar_config)),
+        load_config=get_draft_load_config(sonar_config),
     )
     with set_model_tag("dflash_head"):
         dflash_model = get_model(sonar_config=draft_sonar_config, model_config=draft_model_config)

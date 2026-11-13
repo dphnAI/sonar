@@ -117,7 +117,6 @@ class HyperCLOVAXAttention(nn.Module):
         bias: bool = False,
         cache_config: CacheConfig | None = None,
         prefix: str = "",
-        dual_chunk_attention_config: dict | None = None,
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
@@ -163,7 +162,6 @@ class HyperCLOVAXAttention(nn.Module):
             max_position=max_position_embeddings,
             is_neox_style=True,
             rope_parameters=config.rope_parameters,
-            dual_chunk_attention_config=dual_chunk_attention_config,
         )
 
         self.attn = Attention(
@@ -208,11 +206,6 @@ class HyperCLOVAXDecoderLayer(nn.Module):
             "max_position_embeddings",
             8192,
         )
-        dual_chunk_attention_config = getattr(
-            config,
-            "dual_chunk_attention_config",
-            None,
-        )
 
         self.self_attn = HyperCLOVAXAttention(
             config=config,
@@ -224,7 +217,6 @@ class HyperCLOVAXDecoderLayer(nn.Module):
             bias=config.attention_bias,
             cache_config=cache_config,
             prefix=f"{prefix}.self_attn",
-            dual_chunk_attention_config=dual_chunk_attention_config,
         )
         self.mlp = HyperCLOVAXMLP(
             hidden_size=self.hidden_size,

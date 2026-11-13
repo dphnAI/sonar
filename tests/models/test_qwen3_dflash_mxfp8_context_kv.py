@@ -19,8 +19,9 @@ from sonar.model_executor.models.qwen3_dflash import DFlashQwen3Model
 from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
-    not current_platform.is_cuda() or not current_platform.is_device_capability_family(100),
-    reason="Native MXFP8 kernels require SM100-family CUDA",
+    (not current_platform.is_cuda() or not current_platform.is_device_capability_family(100))
+    and not current_platform.is_xpu(),
+    reason="Requires SM100-family CUDA or XPU",
 )
 
 HIDDEN, HEAD_DIM, NUM_HEADS, NUM_LAYERS, NUM_TOKENS = 256, 128, 2, 2, 7
@@ -28,10 +29,10 @@ Q_SIZE, KV_SIZE = NUM_HEADS * HEAD_DIM, HEAD_DIM  # one KV head
 
 
 @pytest.fixture
-def bf16_on_cuda(default_sonar_config, dist_init):
+def bf16_on_device(default_sonar_config, dist_init):
     old_dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch.bfloat16)
-    with torch.device("cuda"):
+    with torch.device(current_platform.device_type):
         yield
     torch.set_default_dtype(old_dtype)
 
@@ -105,9 +106,9 @@ def _build_model(mode: str, has_bias: bool) -> tuple[DFlashQwen3Model, list]:
 @pytest.mark.parametrize("mode", ["bf16", "mxfp8", "mixed"])
 @pytest.mark.parametrize("has_bias", [False, True])
 @torch.inference_mode()
-def test_context_kv_matches_qkv_projection(bf16_on_cuda, mode, has_bias):
+def test_context_kv_matches_qkv_projection(bf16_on_device, mode, has_bias):
     """The context K/V must equal the K/V slice of each layer's own QKV output
-    after kernel repacking, eagerly and under CUDA graph replay."""
+    after kernel repacking, eagerly and under device graph replay."""
     torch.manual_seed(0)
     model, attentions = _build_model(mode, has_bias)
     context_kv_proj = model._context_kv_proj
@@ -132,8 +133,8 @@ def test_context_kv_matches_qkv_projection(bf16_on_cuda, mode, has_bias):
 
     torch.testing.assert_close(project(), expected, rtol=0.02, atol=0.02)
 
-    graph = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(graph):
+    graph = torch.accelerator.Graph()
+    with graph:
         captured = project()
     x.normal_()
     graph.replay()

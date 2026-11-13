@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from sonar.entrypoints.pooling.scoring.serving import ServingScores
-from sonar.entrypoints.pooling.typing import PoolingEngineInput, PoolingServeContext
+from sonar.entrypoints.pooling.types import PoolingEngineInput, PoolingServeContext
 from sonar.inputs import tokens_input
 from sonar.pooling_params import PoolingParams
 

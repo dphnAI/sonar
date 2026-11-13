@@ -17,7 +17,7 @@ pub(crate) struct VersionResponse {
 
 /// Get engine and Rust frontend version metadata.
 pub async fn version(State(state): State<Arc<AppState>>) -> Json<VersionResponse> {
-    let version = state.engine_core_client().sonar_version().to_string();
+    let version = state.llm().info().sonar_version.clone();
 
     Json(VersionResponse {
         version,

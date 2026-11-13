@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+import json
 from collections.abc import Callable
 from contextlib import contextmanager, nullcontext
 
@@ -11,7 +12,6 @@ from sonar.config import CUDAGraphMode
 from sonar.engine.arg_utils import EngineArgs
 from sonar.platforms import current_platform
 from sonar.sampling_params import SamplingParams
-from sonar.v1.cudagraph_dispatcher import CudagraphDispatcher
 from tests.models.registry import HF_EXAMPLE_MODELS
 from tests.utils import multi_gpu_test
 
@@ -31,7 +31,7 @@ SSM_MODELS = [
     "tiiuae/falcon-mamba-tiny-dev",
     # mamba2-codestral in transformers is broken pending:
     # https://github.com/huggingface/transformers/pull/40861
-    # "yujiepan/mamba2-codestral-v0.1-tiny-random",
+    # "vllm-project/mamba2-codestral-v0.1-tiny-random",
 ]
 
 HYBRID_MODELS = [
@@ -196,11 +196,10 @@ def test_mamba_cache_cg_padding(
     _set_conv_state_layout(monkeypatch, conv_state_layout)
 
     sonar_config = EngineArgs(model=model, trust_remote_code=True).create_engine_config()
-    cudagraph_dispatcher = CudagraphDispatcher(sonar_config)
-    cudagraph_dispatcher.initialize_cudagraph_keys(sonar_config.compilation_config.cudagraph_mode)
-    if cudagraph_dispatcher.cudagraph_mode == CUDAGraphMode.NONE:
+    compilation_config = sonar_config.compilation_config
+    if compilation_config.cudagraph_mode == CUDAGraphMode.NONE:
         pytest.skip("CUDA/XPU graph is disabled. Please enable it to run this test.")
-    while len(example_prompts) == cudagraph_dispatcher.dispatch(len(example_prompts))[1].num_tokens:
+    while len(example_prompts) in (compilation_config.decode_cudagraph_capture_request_sizes or ()):
         example_prompts.append(example_prompts[0])
 
     try:
@@ -288,6 +287,42 @@ def test_distributed_correctness(
         outputs_1_lst=sonar_outputs_tp_2,
         name_0="sonar_tp_1",
         name_1="sonar_tp_2",
+    )
+
+
+@multi_gpu_test(num_gpus=2)
+@pytest.mark.parametrize("model", ["ibm-granite/granite-4.0-tiny-preview"])
+@pytest.mark.parametrize("max_tokens", [64])
+@pytest.mark.parametrize("num_logprobs", [5])
+def test_pipeline_parallel_correctness(
+    sonar_runner,
+    example_prompts,
+    model: str,
+    max_tokens: int,
+    num_logprobs: int,
+) -> None:
+    """Each pipeline stage must load and run only its own layers. A MoE
+    checkpoint also covers the router-to-gate weight rename."""
+    with sonar_runner(
+        model,
+        max_num_seqs=MAX_NUM_SEQS,
+        enable_chunked_prefill=True,
+    ) as sonar_model:
+        sonar_outputs_pp_1 = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+
+    with sonar_runner(
+        model,
+        pipeline_parallel_size=2,
+        max_num_seqs=MAX_NUM_SEQS,
+        enable_chunked_prefill=True,
+    ) as sonar_model:
+        sonar_outputs_pp_2 = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+
+    check_logprobs_close(
+        outputs_0_lst=sonar_outputs_pp_1,
+        outputs_1_lst=sonar_outputs_pp_2,
+        name_0="sonar_pp_1",
+        name_1="sonar_pp_2",
     )
 
 
@@ -865,3 +900,79 @@ def test_apc_common_prefix_same_batch(
     outputs = llm.generate(prompts, sampling_params)
     for output in outputs:
         assert "two" in output.outputs[0].text
+
+
+@pytest.fixture(scope="module")
+def zaya_tiny_random(tmp_path_factory) -> str:
+    """A random tiny ZAYA1 checkpoint with both full and sliding window layers.
+
+    The published tiny ZAYA1 checkpoints predate the released config format.
+    """
+    import torch
+    from transformers import AutoTokenizer, ZayaConfig, ZayaForCausalLM
+
+    config = ZayaConfig(
+        hidden_size=128,
+        num_hidden_layers=4,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=32,
+        num_experts=4,
+        moe_intermediate_size=64,
+        router_hidden_size=32,
+        layer_types=["hybrid", "hybrid_sliding"] * 2,
+        sliding_window=16,
+        initializer_range=0.2,
+    )
+    torch.manual_seed(0)
+    model = ZayaForCausalLM(config).to(torch.bfloat16)
+    with torch.no_grad():
+        for name, tensor in model.state_dict().items():
+            if name.endswith("qk_norm.temp"):
+                tensor.fill_(3.0)
+            elif name.endswith("balancing_biases"):
+                tensor.normal_(0, 0.1)
+                # Transformers pins the skip expert's bias, as in the checkpoints
+                tensor[-1] = -1.0
+    path = tmp_path_factory.mktemp("zaya_tiny_random")
+    model.save_pretrained(path)
+    AutoTokenizer.from_pretrained("Zyphra/ZAYA1-8B").save_pretrained(path)
+    # The checkpoint names a `processor_class` it has no image processor for
+    tokenizer_config = path / "tokenizer_config.json"
+    tokenizer_config.write_text(
+        json.dumps({k: v for k, v in json.loads(tokenizer_config.read_text()).items() if k != "processor_class"})
+    )
+    return str(path)
+
+
+def test_zaya_cca_state(
+    hf_runner,
+    sonar_runner,
+    example_prompts,
+    zaya_tiny_random,
+) -> None:
+    """ZAYA1's CCA carries the previous tokens' q/k and delayed value in
+    per-request state, which must survive decode, chunked prefill and prefix
+    cache hits. Runs in fp32 so only the hard router's near-ties differ."""
+    max_tokens, num_logprobs = 32, 5
+    with hf_runner(zaya_tiny_random, dtype="float32") as hf_model:
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
+
+    with sonar_runner(
+        zaya_tiny_random,
+        dtype="float32",
+        moe_backend="triton",
+        max_num_seqs=MAX_NUM_SEQS,
+        enable_chunked_prefill=True,
+        max_num_batched_tokens=32,
+        enable_prefix_caching=True,
+    ) as sonar_model:
+        # The first pass prefills cold, the second hits the prefix cache
+        for _ in range(2):
+            sonar_outputs = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+            check_logprobs_close(
+                outputs_0_lst=hf_outputs,
+                outputs_1_lst=sonar_outputs,
+                name_0="hf",
+                name_1="sonar",
+            )

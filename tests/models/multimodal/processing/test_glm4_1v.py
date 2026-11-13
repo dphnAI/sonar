@@ -43,7 +43,7 @@ def test_get_max_video_frames_matches_glm_resize(
     vision_config.patch_size = 14
     vision_config.spatial_merge_size = 2
     vision_config.temporal_patch_size = 2
-    info._get_vision_info.side_effect = lambda **kwargs: (Glm4vProcessingInfo._get_vision_info(info, **kwargs))
+    info._get_vision_info.side_effect = lambda **kwargs: Glm4vProcessingInfo._get_vision_info(info, **kwargs)
 
     num_frames = Glm4vProcessingInfo._get_max_video_frames(
         info,

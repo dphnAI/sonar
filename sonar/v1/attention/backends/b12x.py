@@ -187,7 +187,8 @@ class B12xPagedAttentionBackend(AttentionBackend):
 
     @classmethod
     def get_supported_head_sizes(cls) -> list[int]:
-        return [64, 128, 192, 256]
+        # head_dim 64 is excluded until flashinfer-ai/flashinfer#6977 is fixed.
+        return [128, 192, 256]
 
     @classmethod
     def supports_sink(cls) -> bool:
@@ -228,7 +229,7 @@ class B12xPagedAttentionBackend(AttentionBackend):
             return "b12x currently supports only fp8/fp8_e4m3 quantized KV cache dtypes"
         paged_attention = get_b12x_paged_attention()
         if paged_attention is None:
-            return "Install sonar[b12x] from the Sonar wheel index"
+            return "The b12x backend requires flashinfer-python>=0.7.2"
         if not paged_attention.is_supported():
             return "b12x paged attention is not supported on the current device"
         return None
@@ -368,13 +369,11 @@ class B12xPagedAttentionImpl(AttentionImpl[B12xPagedMetadata]):
         sonar_config = get_current_sonar_config()
         scheduler_config = sonar_config.scheduler_config
         model_config = sonar_config.model_config
-        cache_config = sonar_config.cache_config
         spec_config = sonar_config.speculative_config
-        default_block_size = int(cache_config.block_size)
-        if default_block_size not in _B12X_SUPPORTED_PAGE_SIZES:
-            raise ValueError(
-                f"b12x requires --block-size in {_B12X_SUPPORTED_PAGE_SIZES}, got {cache_config.block_size}."
-            )
+        # cache_config.block_size is not final here: the platform applies
+        # get_preferred_block_size() after the model is constructed. Unsupported
+        # user-specified sizes are rejected at backend selection, and the runtime
+        # page size comes from the cache tensors (_kv_page_size).
 
         self.device = torch.device("cuda", torch.accelerator.current_device_index())
         self.dtype = model_config.dtype

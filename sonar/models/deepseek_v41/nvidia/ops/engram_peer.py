@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import torch
 import torch.distributed as dist
-from torch import nn
 
 from sonar.distributed import get_engram_dp_group
 from sonar.platforms import current_platform
@@ -62,16 +61,12 @@ def _peer_lookup_kernel(
     tl.store(output + dst[:, None] + DIM + scale_cols[None, :], scale, valid[:, None])
 
 
-class EngramPeerExchange(nn.Module):
-    """Two phase barriers fence reuse of each other's buffers across forwards.
-
-    Pointer tables are buffers so level-2 sleep restores them on wake-up.
-    """
+class EngramPeerExchange:
+    """Two phase barriers fence reuse of each other's buffers across forwards."""
 
     def __init__(self, layers: list["Engram"], max_tokens: int):
         import torch.distributed._symmetric_memory as symm_mem
 
-        super().__init__()
         group = get_engram_dp_group()
         assert group is not None
         self.dp_size, self.dp_rank = group.world_size, group.rank_in_group
@@ -109,16 +104,9 @@ class EngramPeerExchange(nn.Module):
                     table.vocab_end_idx,
                 )
             )
-        for name, data in (
-            ("metadata", metadata),
-            ("id_ptrs", self.id_handle.buffer_ptrs),
-            ("row_ptrs", self.row_handle.buffer_ptrs),
-        ):
-            self.register_buffer(
-                name,
-                torch.tensor(data, dtype=torch.int64, device=device),
-                persistent=False,
-            )
+        self.metadata = torch.tensor(metadata, dtype=torch.int64, device=device)
+        self.id_ptrs = torch.tensor(self.id_handle.buffer_ptrs, dtype=torch.int64, device=device)
+        self.row_ptrs = torch.tensor(self.row_handle.buffer_ptrs, dtype=torch.int64, device=device)
 
     @classmethod
     def create(cls, layers: list["Engram"], max_tokens: int) -> "EngramPeerExchange | None":

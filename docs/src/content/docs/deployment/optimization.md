@@ -25,31 +25,34 @@ sampling parameters, and concurrency for each comparison.
 
 ## Set the GPU memory budget
 
-`--gpu-memory-utilization` controls the memory budget for one Sonar instance.
-The default is `0.92`.
+On CUDA and ROCm, the extensible KV cache sizes itself from memory free after
+graph capture and warmup, reserving measured transient memory and a safety
+margin. With this path, `--gpu-memory-utilization` defaults to `1.0`.
+Leave it unset unless other work needs memory.
 
-The fraction applies to the GPU's maximum memory capacity. It does not apply to
-the memory that happens to be free when Sonar starts. On an 80 GiB GPU, the
-default requests about 73.6 GiB for the model executor.
-
-Sonar checks the free memory during startup. Startup fails if the requested
-fraction of total capacity is not free. For example, a second process that
-already uses 20 GiB can make `--gpu-memory-utilization 0.92` fail on an 80 GiB
-GPU. Sonar does not reinterpret `0.92` as 92 percent of the remaining 60 GiB.
-
-Use a lower value when another process shares the GPU:
+An explicit fraction caps the instance's use of total device memory. Lower it
+for other processes, weight-transfer buffers, or KV connectors that allocate
+additional buffers after startup. On unified-memory devices such as Jetson and
+DGX Spark, also leave room for the CPU and operating system:
 
 ```bash
 sonar serve MODEL --gpu-memory-utilization 0.75
 ```
 
-After model loading, Sonar profiles model activations and CUDA graph memory. It
-assigns the remainder of the requested budget to the KV cache. A higher value
-usually increases the KV cache capacity. It also leaves less safety margin for
-other CUDA allocations.
+The cache is sized once after warmup. It cannot anticipate later allocations by
+other processes.
 
-Use `--kv-cache-memory-bytes` only when you need an explicit KV cache size. This
-setting overrides `--gpu-memory-utilization` for KV cache sizing.
+Other platforms and estimate-based fallback paths default to `0.92`. Fallback
+applies with `--no-enable-extensible-kv-cache`, explicit cache sizing, or
+incompatible connectors. These include LMCache's multi-process connector,
+NIXL/Mooncake/MoRIIO on ROCm, and same-host NIXL without an IMEX channel.
+In estimate-based mode, the requested fraction of total memory must be free at
+startup.
+
+Use `--kv-cache-memory` for an explicit KV cache size. It overrides the fraction
+for cache sizing and disables the extensible cache. Reusing the value printed
+at startup skips memory profiling, but remove it and re-profile if the GPU or
+other memory users change.
 
 ## Choose the maximum model length
 
@@ -141,7 +144,7 @@ Apply these changes in order:
 
 1. Reduce `--max-num-seqs`.
 2. Reduce `--max-model-len`.
-3. Increase `--gpu-memory-utilization` when the GPU has safe headroom.
+3. Remove an unnecessary `--gpu-memory-utilization` cap when the GPU has headroom.
 4. Use FP8 KV cache when the model and platform support it.
 5. Add model parallelism when model weights consume most device memory.
 
@@ -153,6 +156,11 @@ sonar serve MODEL --kv-cache-dtype fp8
 
 Test output quality. Some checkpoints provide calibrated KV scales. Other
 checkpoints use default scales or need scale calculation.
+
+On SM100, `SONAR_SPARSE_INDEXER_MAX_DECODE_LOGITS_MB` bounds sparse-indexer
+decode logits per chunk (default `2048`, `0` disables chunking). Lower it to
+reduce reserved memory. For models using FP32 indexer logits,
+`--attention-config.indexer_logits_dtype bfloat16` halves their storage.
 
 ## Use prefix caching
 
@@ -190,6 +198,35 @@ checkpoint on the target GPU.
 
 Compare output quality with the unquantized checkpoint. Weight-only formats can
 affect model quality even when the serving interface is unchanged.
+
+### Quantization changes
+
+Marlin uses 16-bit activations. `SONAR_MARLIN_INPUT_DTYPE` is no longer accepted.
+For supported GPTQ, AWQ, or compressed-tensors weight-only checkpoints with
+8-bit activations, select Humming:
+
+```bash
+SONAR_HUMMING_INPUT_QUANT_CONFIG='{"dtype":"int8"}' \
+  sonar serve MODEL --quantization humming
+```
+
+Use `{"dtype":"float8e4m3"}` for FP8 activations. The removed `fp_quant` method
+and QuTLASS backend are replaced by compressed-tensors checkpoints. NVFP4
+checkpoints with supported QuIP Hadamard transforms select Humming on SM100+
+unless another linear backend is requested.
+
+Online quantization also accepts `mxfp4_hadamard32` for linear layers and
+`lut_b_moe` for MoE experts. LUT-B has a native Rubin SM107 path; other GPUs
+emulate its numerics for accuracy checks. Dense layers remain unquantized.
+For online MXFP4, an explicit `activation: null` requests BF16 activations,
+while an omitted activation uses the method's default.
+
+ModelOpt `INT8_PB_WO` checkpoints use `--quantization modelopt_int8` and require
+checkpoint `group_size` metadata. This supports dense linear layers, not MoE.
+
+The b12x backend for SM120/SM121 ships with FlashInfer 0.7.2 or newer.
+No separate b12x package install is needed. Select attention with
+`--attention-backend b12x`.
 
 ### NF12 from BF16 checkpoints
 
@@ -527,6 +564,23 @@ CUDA graph capture also consumes memory. Lower `--max-num-seqs` when graph
 capture causes startup memory pressure. This reduces the range of captured
 batch sizes.
 
+Configure prefill and decode graph coverage separately in `--compilation-config`:
+
+- `prefill_cudagraph_capture_token_sizes` or `max_prefill_cudagraph_capture_tokens`
+  controls mixed-query batches in tokens.
+- `decode_cudagraph_capture_request_sizes` or `max_decode_cudagraph_capture_requests`
+  controls uniform decode batches in requests.
+
+The older `cudagraph_capture_sizes` and `max_cudagraph_capture_size` fields are
+deprecated. Larger graph grids increase startup time and consume cache memory.
+`max_decode_cudagraph_capture_tokens` also caps wide speculative decode graphs
+(default `8192` on SM100). A prefill-only instance can skip decode capture:
+
+```bash
+sonar serve MODEL \
+  --compilation-config '{"decode_cudagraph_capture_request_sizes": []}'
+```
+
 ## Optimize startup
 
 Model download, weight loading, quantization setup, compilation, and CUDA graph
@@ -547,7 +601,7 @@ performance.
 ## A repeatable tuning procedure
 
 1. Set the required context length.
-2. Set a safe GPU memory fraction.
+2. Reserve memory for other processes and unified-memory host workloads.
 3. Test the default scheduler settings.
 4. Tune `--max-num-seqs` for the expected concurrency.
 5. Tune `--max-num-batched-tokens` for the prompt mix.

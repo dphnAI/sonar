@@ -22,7 +22,7 @@ def test_dispatch_prepacks_arm_bf16_causal_conv(monkeypatch):
         pack_inputs.append(weight.clone())
         return packed
 
-    monkeypatch.setattr(utils.ops, "causal_conv1d_weight_pack", pack)
+    monkeypatch.setattr(utils.cpu_ops, "causal_conv1d_weight_pack", pack)
     original = torch.randn(32, 1, 4, dtype=torch.bfloat16)
     layer = torch.nn.Module()
     layer.weight = torch.nn.Parameter(original.clone(), requires_grad=False)
@@ -44,7 +44,7 @@ def test_dispatch_does_not_pack_3d_expert_weight(monkeypatch):
     monkeypatch.setattr(torch.cpu, "_is_avx512_bf16_supported", lambda: False)
     pack_calls = []
     monkeypatch.setattr(
-        utils.ops,
+        utils.cpu_ops,
         "causal_conv1d_weight_pack",
         lambda weight: pack_calls.append(weight),
     )
@@ -74,7 +74,7 @@ def _mock_zentorch_linear_unary():
     lib_impl = torch.library.Library("zentorch", "IMPL", "CPU")
     lib_impl.impl(
         "zentorch_linear_unary",
-        lambda input, weight, bias, is_weight_prepacked=False: (torch.nn.functional.linear(input, weight, bias)),
+        lambda input, weight, bias, is_weight_prepacked=False: torch.nn.functional.linear(input, weight, bias),
     )
 
     yield

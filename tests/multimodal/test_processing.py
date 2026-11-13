@@ -13,6 +13,7 @@ import pytest
 
 from sonar.config import ModelConfig, SchedulerConfig
 from sonar.config.multimodal import MultiModalConfig
+from sonar.exceptions import SonarValidationError
 from sonar.multimodal import MULTIMODAL_REGISTRY
 from sonar.multimodal.hasher import MultiModalHasher
 from sonar.multimodal.parse import MultiModalDataParser
@@ -809,7 +810,7 @@ def test_limit_mm_per_prompt_apply(model_id, num_images, limit, is_valid):
     else:
         mm_data = {"image": [image] * num_images}
 
-    exc_ctx = nullcontext() if is_valid else pytest.raises(ValueError, match="At most")
+    exc_ctx = nullcontext() if is_valid else pytest.raises(SonarValidationError, match="At most")
 
     with exc_ctx:
         processor(
@@ -1556,7 +1557,7 @@ def test_processor_inputs_hashes_ignore_unrelated_kwargs():
 def test_processor_inputs_hashes_distinguish_kwargs_shapes(left, right):
     """Distinct processor kwargs must not share a multi-modal hash.
 
-    ``hf_processor_mm_kwargs`` is per-request input, so both the keys and the
+    `hf_processor_mm_kwargs` is per-request input, so both the keys and the
     values here are caller-controlled. The hash is the identity of the
     processor cache entry and is mixed into the prefix-cache block key, so two
     requests sharing one is a cross-request cache hit.

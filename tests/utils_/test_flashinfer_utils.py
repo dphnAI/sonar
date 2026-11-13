@@ -33,7 +33,7 @@ def flashinfer_without_cubin(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(
         importlib.util,
         "find_spec",
-        lambda name, *args: (object() if name == "flashinfer" else real_find_spec(name, *args)),
+        lambda name, *args: object() if name == "flashinfer" else real_find_spec(name, *args),
     )
     monkeypatch.setattr(fi, "has_flashinfer_cubin", lambda: False)
     fi.has_flashinfer.cache_clear()

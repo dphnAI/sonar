@@ -29,9 +29,9 @@ struct TextOnlyTokenizer;
 
 impl TextOnlyTokenizer {
     fn unavailable<T>() -> sonar_tokenizer::Result<T> {
-        Err(TokenizerError(
-            "the Python tool-parser bridge has no tokenizer vocabulary".to_owned(),
-        ))
+        Err(TokenizerError::Backend {
+            message: "the Python tool-parser bridge has no tokenizer vocabulary".to_owned(),
+        })
     }
 }
 

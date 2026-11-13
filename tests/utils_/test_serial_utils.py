@@ -54,7 +54,7 @@ def _build_integer_tensor(embed_dtype: MmMetadataDType, shape: tuple[int, ...]) 
 @pytest.mark.parametrize("embed_dtype", FLOAT_EMBED_DTYPES)
 @torch.inference_mode()
 def test_encode_and_decode_floats(embed_dtype: EmbedDType, endianness: Endianness):
-    for i in range(10):
+    for _ in range(10):
         tensor = torch.rand(2, 3, 5, 7, 11, 13, device="cpu", dtype=torch.float32)
         shape = tensor.shape
         binary = tensor2binary(tensor, embed_dtype, endianness)
@@ -82,7 +82,7 @@ def test_encode_and_decode_floats(embed_dtype: EmbedDType, endianness: Endiannes
 def test_encode_and_decode_integers(embed_dtype: MmMetadataDType, endianness: Endianness):
     shape = (2, 3, 5, 7, 11, 13)
 
-    for i in range(10):
+    for _ in range(10):
         tensor = _build_integer_tensor(embed_dtype, shape)
         binary = tensor2binary(tensor, embed_dtype, endianness)
         new_tensor = binary2tensor(binary, shape, embed_dtype, endianness)

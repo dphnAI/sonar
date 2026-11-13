@@ -74,7 +74,7 @@ package_dir="${index_dir}/simple/sonar"
 mkdir -p "$package_dir"
 install_command="uv pip install sonar --extra-index-url ${public_root}/simple --index-strategy first-index"
 if [[ "$PLATFORM_BACKEND" == cuda ]]; then
-  install_command+=" --torch-backend cu130"
+  install_command+=" --torch-backend cu132"
 fi
 python3 .github/scripts/generate_nightly_index.py \
   --entry-file "$entries" \

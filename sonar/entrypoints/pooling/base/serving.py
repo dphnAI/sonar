@@ -17,7 +17,7 @@ from sonar.engine.protocol import EngineClient
 from sonar.entrypoints.generate.base.protocol import validate_request_mm_kwargs
 from sonar.entrypoints.openai.models.serving import OpenAIServingModels
 from sonar.entrypoints.serve.engine.serving import BaseServing
-from sonar.entrypoints.serve.engine.typing import AnyRequest
+from sonar.entrypoints.serve.engine.types import AnyRequest
 from sonar.entrypoints.serve.utils.request_logger import RequestLogger
 from sonar.lora.request import LoRARequest
 from sonar.renderers.base import BaseRenderer
@@ -25,7 +25,7 @@ from sonar.renderers.chat_utils import ChatTemplateConfig
 from sonar.utils.async_utils import make_async, merge_async_iterators
 
 from ...serve.engine.protocol import ErrorResponse
-from ..typing import AnyPoolingRequest, PoolingServeContext
+from ..types import AnyPoolingRequest, PoolingServeContext
 from .io_processor import PoolingIOProcessor
 
 

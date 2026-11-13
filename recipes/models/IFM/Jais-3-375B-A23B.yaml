@@ -52,8 +52,6 @@ hardware_overrides:
     extra_args:
       - "--attention-backend"
       - "ROCM_AITER_UNIFIED_ATTN"
-      - "--gpu-memory-utilization"
-      - "0.9"
     extra_env:
       SONAR_ROCM_USE_AITER: "1"
       NCCL_MIN_NCHANNELS: "112"
@@ -83,7 +81,7 @@ guide: |
   ## Launch Commands
 
   ```bash
-  sonar serve IFM/Jais-3-375B-A23B \
+  sonar run IFM/Jais-3-375B-A23B \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --chat-template-content-format string \
@@ -103,13 +101,12 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export NCCL_MIN_NCHANNELS=112
 
-  sonar serve IFM/Jais-3-375B-A23B \
+  sonar run IFM/Jais-3-375B-A23B \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --chat-template-content-format string \
     --dtype bfloat16 \
     --max-model-len 131072 \
-    --gpu-memory-utilization 0.9 \
     --attention-backend ROCM_AITER_UNIFIED_ATTN \
     --generation-config auto \
     --reasoning-parser k2_horizon \

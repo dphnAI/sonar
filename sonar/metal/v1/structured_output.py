@@ -3,8 +3,8 @@
 """Structured output (grammar / JSON-schema bitmask) support for the Metal paged path.
 
 Owns xgrammar bridging, bitmask application, and request-to-logit-row remapping.
-``model_runner.py`` stays orchestration-only and delegates here via
-``MetalStructuredOutputApplier``.
+`model_runner.py` stays orchestration-only and delegates here via
+`MetalStructuredOutputApplier`.
 """
 
 from __future__ import annotations

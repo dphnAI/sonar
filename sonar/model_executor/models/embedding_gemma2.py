@@ -24,6 +24,7 @@ from sonar.distributed import get_tensor_model_parallel_world_size
 from sonar.logger import init_logger
 from sonar.model_executor.layers.activation import get_act_fn
 from sonar.model_executor.layers.attention import EncoderOnlyAttention
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
 from sonar.model_executor.layers.layernorm import RMSNorm
 from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
@@ -914,8 +915,12 @@ class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, SonarModelForPooling):
     _parse_and_validate_audio_input = Gemma4ForConditionalGeneration._parse_and_validate_audio_input
     _parse_and_validate_multimodal_inputs = Gemma4ForConditionalGeneration._parse_and_validate_multimodal_inputs
     _get_max_soft_tokens = Gemma4ForConditionalGeneration._get_max_soft_tokens
-    _process_image_input = Gemma4ForConditionalGeneration._process_image_input
-    _process_video_input = Gemma4ForConditionalGeneration._process_video_input
+    _embed_patches = Gemma4ForConditionalGeneration._embed_patches
+    _normalize_pixel_values = Gemma4ForConditionalGeneration._normalize_pixel_values
+    _process_image_input = Gemma4ForConditionalGeneration._process_image_input_local
+    _process_video_input = Gemma4ForConditionalGeneration._process_video_input_local
+    _process_image_input_local = Gemma4ForConditionalGeneration._process_image_input_local
+    _process_video_input_local = Gemma4ForConditionalGeneration._process_video_input_local
     _process_audio_input = Gemma4ForConditionalGeneration._process_audio_input
     embed_multimodal = Gemma4ForConditionalGeneration.embed_multimodal
     _encoder_chunk = staticmethod(Gemma4ForConditionalGeneration._encoder_chunk)
@@ -953,6 +958,7 @@ class EmbeddingGemma2Model(nn.Module, SupportsMultiModal, SonarModelForPooling):
         if getattr(config, "vision_config", None) is not None:
             with self._mark_tower_model(sonar_config, {"image", "video"}):
                 self.vision_tower = AutoModel.from_config(config=config.vision_config)
+                self.vision_input_norm = build_mm_input_norm(sonar_config.model_config)
                 self.embed_vision = Gemma4MultimodalEmbedder(
                     config.vision_config,
                     config.text_config,

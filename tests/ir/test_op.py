@@ -22,7 +22,7 @@ class CustomError(Exception):
 
 @pytest.fixture
 def custom_add_op(fake_sonar_ir):
-    """Register ``_custom_add`` plus impl_a, impl_b, impl_even for this test."""
+    """Register `_custom_add` plus impl_a, impl_b, impl_even for this test."""
 
     @sonar.ir.register_op(allow_inplace=True)
     def _custom_add(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -412,7 +412,7 @@ def test_set_default_torch_wrap(default: bool):
 
 @pytest.fixture
 def custom_mm_op(fake_sonar_ir):
-    """Fixture that registers ``_custom_mm`` (isolated by ``fake_sonar_ir``)."""
+    """Fixture that registers `_custom_mm` (isolated by `fake_sonar_ir`)."""
 
     @sonar.ir.register_op
     def _custom_mm(x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
@@ -632,7 +632,7 @@ class TestTolerance:
 
 
 def test_naming_validation(fake_sonar_ir):
-    """Test that op and provider names are validated ([a-z_][a-z_0-9]*)."""
+    """Test that op and provider names are validated (`[a-z_][a-z_0-9]*`)."""
 
     # Valid op and provider names
     @sonar.ir.register_op

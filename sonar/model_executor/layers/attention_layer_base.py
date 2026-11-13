@@ -22,6 +22,8 @@ class AttentionLayerBase(ABC):
     impl: "AttentionImpl"
     # Set by the speculator on its draft model's layers.
     is_draft_layer: bool = False
+    # Name of the layer whose KV cache this layer reads instead of owning one.
+    kv_sharing_target_layer_name: str | None = None
 
     def bind_kv_cache(self, kv_cache: torch.Tensor) -> None:
         """Bind the allocated KV cache tensor to this layer.

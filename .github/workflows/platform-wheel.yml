@@ -205,7 +205,7 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           MAX_JOBS: "64"
           NVCC_THREADS: "4"
-          CUDA_VERSION: "13.0.3"
+          CUDA_VERSION: "13.2.1"
           TORCH_CUDA_ARCH_LIST: "8.0 8.6 8.9 9.0 10.0 12.0+PTX"
         run: ./.github/scripts/build_nightly_commits.sh page-index
 
@@ -214,11 +214,11 @@ jobs:
         env:
           MAX_JOBS: "64"
           NVCC_THREADS: "4"
-          CUDA_VERSION: "13.0.3"
+          CUDA_VERSION: "13.2.1"
           TORCH_CUDA_ARCH_LIST: "8.0 8.6 8.9 9.0 10.0 12.0+PTX"
           PLATFORM_BACKEND: cuda
           PLATFORM_ARCHITECTURE: x86_64
-          PLATFORM_VERSION_LOCAL: cu130
+          PLATFORM_VERSION_LOCAL: cu132
         run: ./.github/scripts/build_pr_wheel.sh wheels/main page-index
 
       - name: Upload CUDA index
@@ -249,7 +249,7 @@ jobs:
       DOCKER_HOST: tcp://127.0.0.1:23750
       MAX_JOBS: "64"
       NVCC_THREADS: "4"
-      CUDA_VERSION: "13.0.3"
+      CUDA_VERSION: "13.2.1"
       TORCH_CUDA_ARCH_LIST: "8.0 8.6 8.9 9.0 10.0 11.0 12.0+PTX"
       RCLONE_CONFIG_B2_TYPE: s3
       RCLONE_CONFIG_B2_PROVIDER: Other
@@ -264,7 +264,7 @@ jobs:
       TARGET_COMMIT: ${{ needs.authorize.outputs.target_sha }}
       PLATFORM_BACKEND: cuda
       PLATFORM_ARCHITECTURE: aarch64
-      PLATFORM_VERSION_LOCAL: cu130
+      PLATFORM_VERSION_LOCAL: cu132
     steps:
       - name: Check out target revision
         uses: actions/checkout@v4

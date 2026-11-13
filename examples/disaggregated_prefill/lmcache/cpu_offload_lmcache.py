@@ -27,7 +27,6 @@ def build_llm_with_lmcache(model: str):
         model=model,
         kv_transfer_config=KVTransferConfig(kv_connector="LMCacheConnectorV1", kv_role="kv_both"),
         max_model_len=8000,
-        gpu_memory_utilization=0.8,
         # Attribute reuse to LMCache rather than Sonar's local prefix cache.
         enable_prefix_caching=False,
     )

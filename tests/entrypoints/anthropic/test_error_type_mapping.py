@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Regression tests for Anthropic ``error.type`` translation (issue #57997)."""
+"""Regression tests for Anthropic `error.type` translation (issue #57997)."""
 
 import json
 
@@ -57,7 +57,7 @@ def test_error_type_is_translated_to_anthropic_vocabulary(status_code: int, expe
 )
 @pytest.mark.asyncio
 async def test_stream_error_event_uses_translated_type(status_code: int, expected_type: str):
-    """The SSE error path must translate ``error.type`` the same way as the
+    """The SSE error path must translate `error.type` the same way as the
     non-streaming path, reusing the ErrorResponse status code."""
     from sonar.entrypoints.anthropic.serving import AnthropicServingMessages
 
@@ -86,7 +86,7 @@ async def test_stream_error_event_uses_translated_type(status_code: int, expecte
 @pytest.mark.asyncio
 async def test_stream_mid_stream_exception_maps_to_api_error():
     """An exception raised mid-stream (not an ErrorResponse) surfaces as
-    ``api_error`` in the SSE error event."""
+    `api_error` in the SSE error event."""
     from sonar.entrypoints.anthropic.serving import AnthropicServingMessages
 
     async def failing_generator():

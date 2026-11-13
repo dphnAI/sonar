@@ -29,7 +29,7 @@ model:
 
 dependencies:
   - note: "GLM-4.7 requires the nightly sonar wheel"
-    command: "uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple"
+    command: "uv pip install -U sonar --index-strategy first-index --torch-backend cu132 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple"
   - note: "transformers from source — GLM-4.7 tokenizer is newer than any release"
     command: "uv pip install git+https://github.com/huggingface/transformers.git"
 
@@ -115,7 +115,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu132 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   uv pip install git+https://github.com/huggingface/transformers.git
   ```
 
@@ -130,7 +130,7 @@ guide: |
   ### Tensor Parallel + MTP (FP8 on 4xH200)
 
   ```bash
-  sonar serve zai-org/GLM-4.7-FP8 \
+  sonar run zai-org/GLM-4.7-FP8 \
       --tensor-parallel-size 4 \
       --speculative-config.method mtp \
       --speculative-config.num_speculative_tokens 1 \
@@ -143,9 +143,8 @@ guide: |
 
   ```bash
   SAFETENSORS_FAST_GPU=1 \
-  sonar serve zai-org/GLM-4.7 \
+  sonar run zai-org/GLM-4.7 \
       --tensor-parallel-size 8 \
-      --gpu-memory-utilization 0.9 \
       --no-enable-prefix-caching \
       --trust-remote-code
   ```
@@ -154,7 +153,6 @@ guide: |
 
   - `--max-model-len=65536` is a sensible default; max is 128K.
   - `--max-num-batched-tokens=32768` for prompt-heavy workloads; reduce to 8K-16K for latency-sensitive.
-  - Use `--gpu-memory-utilization=0.95` to maximize KV cache.
 
   ## Client Usage
 
@@ -173,7 +171,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model zai-org/GLM-4.7-FP8 \
     --dataset-name random \
     --random-input-len 8000 \

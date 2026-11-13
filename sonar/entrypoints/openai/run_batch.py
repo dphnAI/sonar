@@ -9,8 +9,8 @@ from sonar.logger import init_logger
 from sonar.version import __version__ as SONAR_VERSION
 
 warnings.warn(
-    "The `python -m sonar.entrypoints.openai.run_batch` command is deprecated "
-    "and may be removed in a future release. Please use `sonar run_batch` instead.",
+    "The `python -m sonar.entrypoints.openai.run_batch` command is deprecated"
+    "and we will remove this file in v0.37.0. Please use `sonar run_batch` instead.",
     DeprecationWarning,
     stacklevel=1,
 )

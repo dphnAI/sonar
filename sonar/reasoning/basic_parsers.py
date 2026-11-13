@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from sonar.entrypoints.generate.base.protocol import DeltaMessage
 from sonar.reasoning.abs_reasoning_parsers import ReasoningParser
 from sonar.tokenizers import TokenizerLike
+from sonar.v1.token_buffer import rfind_tokens
 
 if TYPE_CHECKING:
     from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
@@ -67,15 +68,8 @@ class BaseThinkingReasoningParser(ReasoningParser):
         self.end_token_id: int = end_token_id
 
     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
-        start_token_id = self.start_token_id
-        end_token_id = self.end_token_id
-
-        for i in range(len(input_ids) - 1, -1, -1):
-            if input_ids[i] == start_token_id:
-                return False
-            if input_ids[i] == end_token_id:
-                return True
-        return False
+        i = rfind_tokens(input_ids, (self.start_token_id, self.end_token_id))
+        return i >= 0 and input_ids[i] == self.end_token_id
 
     def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
         end_token_id = self.end_token_id

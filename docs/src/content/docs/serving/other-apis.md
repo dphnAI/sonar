@@ -53,6 +53,32 @@ separately from GPU workers.
 Do not assume token IDs are portable between models. The tokenizer, added
 tokens, chat template, and model revision must match.
 
+Enable these scale-out routes on `sonar serve` with `--enable-scale-out`.
+`SONAR_SERVER_DEV_MODE=1` also enables them unless `--disable-scale-out` is
+passed. Dedicated render and `--tokens-only` modes always register their
+required routes.
+
+Send the render response's `parse_context` back to `/inference/v1/generate`
+with `output_mode: "derender"` to parse reasoning and tool calls inline.
+Streaming is supported, including multiple choices. Each choice carries a
+chat `delta` instead of `text`. Inline derender uses the generate server's
+`--response-role`; use a separate derender call for chat-history role or `echo`
+behavior.
+
+Separate chat derender calls must retain the original request, `prompt_tokens`,
+and full `prompt_token_ids` when a reasoning or tool parser is configured.
+Configure the same parsers, chat template, template kwargs, and response role
+on render and derender servers. Forward every stream chunk, including finish
+and usage-only chunks.
+
+`return_tokens_as_token_ids` on the original request overrides the derender
+server's setting, including an explicit `false`. It changes logprob token
+representation, not decoded response text.
+
+On `/inference/v1/generate`, Python accepts `X-Sonar-Priority` as an override
+for body `priority`; both must fit signed 32-bit integers. Rust uses only the
+body priority on this route.
+
 ### Multimodal Render Features
 
 Multimodal render responses include a `features` object with per-modality
@@ -203,6 +229,10 @@ Anthropic-compatible clients. Confirm that the selected model has a suitable
 chat template. Parser support for reasoning and tool calls remains
 model-specific.
 
+`max_tokens: 0` is rejected with HTTP 400. Use `max_tokens: 1` to warm a prompt
+cache. See [thinking controls](/features/reasoning-and-tools/#anthropic-thinking-controls)
+for the supported `thinking.type` behavior.
+
 ## Transcription
 
 Audio transcription models expose `/v1/audio/transcriptions`. Use multipart
@@ -211,8 +241,9 @@ form data as required by the OpenAI-compatible transcription schema. Check the
 
 The supported response formats are `json`, `text`, `verbose_json`, and, for
 models with diarization support, `diarized_json`. The diarized format returns
-speaker-attributed segments and is currently supported by
-`OpenMOSS-Team/MOSS-Transcribe-Diarize`:
+speaker-attributed segments for supported models, including
+`OpenMOSS-Team/MOSS-Transcribe-Diarize`, `microsoft/VibeVoice-ASR-HF`, and
+`hf-audio/MOSS-Transcribe-Diarize-HF` with `--model-impl transformers`:
 
 ```json
 {
@@ -232,6 +263,16 @@ speaker-attributed segments and is currently supported by
   "usage": {"type": "duration", "seconds": 7}
 }
 ```
+
+Long-form single-pass models need `--max-model-len` large enough for both audio
+and transcript. Above 600 seconds, raise `SONAR_MAX_AUDIO_DECODE_DURATION_S`;
+long recordings may also need a larger `SONAR_MAX_AUDIO_DECODE_BYTES`.
+Uncompressed uploads can reach the 25 MB request limit first.
+`--limit-mm-per-prompt '{"audio": {"length": SAMPLES}}'` changes profiling size,
+not the API's accepted duration.
+
+Transcription through the Transformers backend requires Transformers 5.23+.
+For `nvidia/canary-1b-v2`, pass `language` because the model cannot detect it.
 
 ## Kobold API
 

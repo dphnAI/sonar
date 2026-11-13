@@ -19,11 +19,15 @@ from sonar.config import (
     KernelConfig,
     LoadConfig,
     LoRAConfig,
+    ModelConfig,
     ParallelConfig,
+    SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
 from sonar.model_executor.warmup.jit_warmup import JitWarmupRegistry
 from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.core.sched.output import SchedulerOutput
 from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
@@ -34,9 +38,38 @@ from sonar.v1.kv_cache_interface import (
 )
 from sonar.v1.worker.gpu.async_utils import async_copy_to_np
 from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
 from sonar.v1.worker.gpu.model_runner import ExecuteModelState, GPUModelRunner
+from sonar.v1.worker.gpu.model_states.default import DefaultModelState
 from sonar.v1.worker.gpu.spec_decode.standalone_ar import speculator as ar_module
 from sonar.v1.worker.gpu.spec_decode.utils import get_drafter_hidden_states
+
+
+@pytest.mark.parametrize("eligible,expected_bound", [(True, 8), (False, None)])
+def test_prompt_tail_keeps_decode_graph_bound(monkeypatch, eligible, expected_bound):
+    """A decode-eligible prompt tail must not lose its varlen graph bound."""
+    runner = Mock(
+        lora_config=None,
+        aux_output_connector=None,
+        encoder_cache=None,
+        pcp_manager=None,
+        is_encoder_decoder=False,
+        model_state=SimpleNamespace(max_cudagraph_query_len=None),
+    )
+    runner.gather_batch_req_state.return_value = (
+        SimpleNamespace(num_tokens=8, has_prefill=True, decode_graph_eligible=eligible),
+        None,
+    )
+    scheduler_output = SchedulerOutput.make_empty()
+    scheduler_output.num_scheduled_tokens = {"request": 8}
+    scheduler_output.total_num_scheduled_tokens = 8
+    dispatch = Mock(side_effect=RuntimeError("stop before forward"))
+    monkeypatch.setattr(model_runner_module, "dispatch_cg_and_sync_dp", dispatch)
+
+    with pytest.raises(RuntimeError, match="stop before forward"):
+        GPUModelRunner.execute_model(runner, scheduler_output)
+
+    assert dispatch.call_args.kwargs["max_query_len"] == expected_bound
 
 
 def test_non_last_pp_rank_uses_global_batch_for_sample_feedback(monkeypatch):
@@ -78,6 +111,62 @@ def test_non_last_pp_rank_uses_global_batch_for_sample_feedback(monkeypatch):
     postprocess_num_computed_tokens.assert_called_once_with(global_batch)
     postprocess_state.assert_called_once_with(global_batch.idx_mapping, 0)
     restore_for_sampling.assert_not_called()
+
+
+@pytest.mark.parametrize("speculative", [False, True])
+def test_custom_sampling_state_commits_before_token_history_mutation(monkeypatch, speculative):
+    batch = SimpleNamespace(
+        req_ids=["request"],
+        idx_mapping=torch.tensor([0]),
+        query_start_loc=torch.tensor([0, 1]),
+    )
+    sampled = SimpleNamespace(sampled_token_ids=torch.tensor([[2, 3]] if speculative else [[2]]))
+    num_sampled = torch.tensor([1])
+    num_rejected = torch.tensor([int(speculative)])
+    events = []
+    runner = Mock(
+        is_last_pp_rank=True,
+        pcp_manager=None,
+        pp_handler=None,
+        aux_output_connector=None,
+        _pcie_pull_comm=None,
+        speculator=None,
+    )
+    runner.execute_model_state = ExecuteModelState(
+        input_batch=batch,
+        attn_metadata=None,
+        slot_mappings_by_layer=None,
+        hidden_states=torch.zeros((1, 4)),
+        aux_hidden_states=None,
+        dp_sync_state=None,
+        finished_req_ids=set(),
+        ec_connector_output=None,
+        cudagraph_stats=None,
+        num_spec_tokens_to_schedule=int(speculative),
+    )
+
+    def sample(*args):
+        events.append("sample")
+        return sampled, num_sampled, num_rejected
+
+    def commit(input_batch, output):
+        assert input_batch is batch and output is sampled
+        events.append("commit")
+
+    def postprocess(*args):
+        events.append("mutate")
+        raise RuntimeError("stop at token history mutation")
+
+    runner.sample.side_effect = sample
+    runner.sampler.update_custom_state.side_effect = commit
+    runner.prompt_logprobs_worker.compute_prompt_logprobs.return_value = {}
+    runner.prompt_logprobs_worker.compute_prompt_token_id_logprobs.return_value = {}
+    runner.postprocess_sampled.side_effect = postprocess
+    monkeypatch.setattr(model_runner_module, "AsyncOutput", Mock())
+
+    with pytest.raises(RuntimeError, match="stop at token history mutation"):
+        GPUModelRunner.sample_tokens(runner, None)
+    assert events == ["sample", "commit", "mutate"]
 
 
 @pytest.mark.parametrize(
@@ -343,6 +432,7 @@ def _make_capture_runner(monkeypatch: pytest.MonkeyPatch, captured: bool) -> GPU
     runner.model_state = SimpleNamespace(supports_mm_inputs=False, capture_inner_cudagraphs=Mock())
     runner.cudagraph_manager = SimpleNamespace(
         needs_capture=lambda: captured,
+        planned_token_counts=lambda: [],
         capture=lambda *args, **kwargs: None,
         capture_stream=object(),
     )
@@ -351,6 +441,7 @@ def _make_capture_runner(monkeypatch: pytest.MonkeyPatch, captured: bool) -> GPU
     runner.speculator = None
     runner.adaptive_verification = None
     runner.model = None
+    runner.dtype = torch.bfloat16
     runner.input_buffers = object()
     runner.pcp_manager = None
     runner.intermediate_tensors = None
@@ -432,7 +523,7 @@ def test_capture_model_excludes_adaptive_verification_profiling_cache(monkeypatc
     )
     total, cached = 16 << 30, [0]
 
-    def _dummy_run(num_tokens):
+    def _dummy_run(num_tokens, **kwargs):
         cached[0] = 2 << 30
 
     monkeypatch.setattr(runner, "_dummy_run", _dummy_run)
@@ -504,12 +595,13 @@ def test_standalone_draft_kv_dtype_override(
     target.parallel_config.data_parallel_index = data_parallel_index
     speculator = object.__new__(ar_module.StandaloneARSpeculator)
     speculator.sonar_config = target
-    speculator.draft_model_config = object()
+    speculator.draft_model_config = SimpleNamespace(use_mla=False)
     spec = SimpleNamespace(
         kv_cache_dtype=draft_dtype,
         moe_backend=draft_moe,
         attention_backend=draft_attn,
         draft_parallel_config=ParallelConfig(),
+        draft_model_config=speculator.draft_model_config,
     )
     spec.apply_draft_overrides = partial(SpeculativeConfig.apply_draft_overrides, spec)
     speculator.speculative_config = spec
@@ -517,7 +609,6 @@ def test_standalone_draft_kv_dtype_override(
     monkeypatch.setattr(ar_module, "get_model", get_model)
     monkeypatch.setattr(ar_module, "set_model_tag", lambda _: contextlib.nullcontext())
     monkeypatch.setattr(ar_module, "get_draft_load_config", lambda _: LoadConfig())
-    monkeypatch.setattr(ar_module, "get_pp_safe_draft_load_config", lambda load_config: load_config)
 
     speculator.load_draft_model(object(), set())
 
@@ -531,3 +622,77 @@ def test_standalone_draft_kv_dtype_override(
     assert draft_config.attention_config.backend == (draft_attn or AttentionBackendEnum.FLASHINFER)
     assert target.kernel_config.moe_backend == "flashinfer_cutlass"
     assert target.attention_config.backend == AttentionBackendEnum.FLASHINFER
+
+
+class _EmbeddingModel(torch.nn.Module):
+    def __init__(self, vocab_size: int, hidden_size: int):
+        super().__init__()
+        self.embed_tokens = torch.nn.Embedding(vocab_size, hidden_size)
+
+    def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return self.embed_tokens(input_ids)
+
+
+@pytest.mark.parametrize("multimodal", [True, False])
+def test_dummy_inputs_embeds_holds_random_input_id_embeddings(multimodal):
+    """Models fed inputs_embeds must see the randomized dummy ids, not zeros."""
+    model_config = ModelConfig(model="facebook/opt-125m", dtype="float32", enable_prompt_embeds=True)
+    sonar_config = SonarConfig(
+        model_config=model_config,
+        scheduler_config=SchedulerConfig(
+            max_num_seqs=4,
+            max_num_batched_tokens=16,
+            max_model_len=64,
+            is_encoder_decoder=False,
+        ),
+    )
+    model = _EmbeddingModel(32, model_config.get_inputs_embeds_size())
+    encoder_cache = EncoderCache() if multimodal else None
+    state = DefaultModelState(sonar_config, model, encoder_cache, torch.device("cpu"))
+    input_ids = torch.tensor([3, 7, 7, 1, 30])
+
+    with torch.inference_mode():
+        inputs_embeds = state.dummy_inputs_embeds(6, input_ids)
+        expected = model.embed_input_ids(input_ids)
+
+    assert inputs_embeds.shape == (6, model_config.get_inputs_embeds_size())
+    torch.testing.assert_close(inputs_embeds[:5], expected)
+    torch.testing.assert_close(state.dummy_inputs_embeds(5), expected)
+
+
+@pytest.mark.parametrize("capture_bound,expected", [(None, 1), (8, 8)])
+def test_encoder_decoder_attention_preserves_capture_query_bound(monkeypatch, capture_bound, expected):
+    from sonar.v1.worker.gpu.model_states import encoder_decoder
+
+    state = encoder_decoder.EncoderDecoderModelState.__new__(encoder_decoder.EncoderDecoderModelState)
+    state.model_config = SimpleNamespace(max_model_len=64)
+    monkeypatch.setattr(state, "_get_encoder_seq_lens", lambda *args: {})
+    query_start = torch.tensor([0, 1], dtype=torch.int32)
+    seq_lens = torch.tensor([4], dtype=torch.int32)
+    batch = SimpleNamespace(
+        req_ids=["request"],
+        num_reqs_after_padding=1,
+        num_tokens_after_padding=1,
+        query_start_loc_np=query_start.numpy(),
+        query_start_loc=query_start,
+        max_query_len=capture_bound,
+        num_scheduled_tokens=torch.tensor([1]).numpy(),
+        seq_lens_cpu_upper_bound=seq_lens,
+        seq_lens=seq_lens,
+        dcp_local_seq_lens=None,
+        prompt_lens=None,
+    )
+    build = Mock(return_value={})
+    monkeypatch.setattr(encoder_decoder, "build_attn_metadata", build)
+
+    state.prepare_attn(
+        batch,
+        model_runner_module.CUDAGraphMode.FULL,
+        (),
+        torch.empty(0, dtype=torch.int64),
+        [],
+        Mock(),
+        for_capture=True,
+    )
+    assert build.call_args.kwargs["max_query_len"] == expected
+    assert build.call_args.kwargs["max_seq_len"] == 64

@@ -222,7 +222,10 @@ async def _handle_completions(api: str, request: Request):
             async for chunk in stream_service_response(decode_client_info, api, req_data, request_id=request_id):
                 yield chunk
 
-        return StreamingResponse(generate_stream(), media_type="application/json")
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream" if req_data.get("stream") else "application/json",
+        )
 
     except Exception as e:
         import sys

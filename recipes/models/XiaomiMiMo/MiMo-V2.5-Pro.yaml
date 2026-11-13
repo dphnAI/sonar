@@ -21,7 +21,8 @@ model:
   context_length: 1048576
   base_args:
     - "--trust-remote-code"
-    - "--max-model-len auto"
+    - "--max-model-len"
+    - "auto"
     - "--generation-config"
     - "sonar"
   base_env: {}
@@ -55,14 +56,14 @@ variants:
     extra_args:
       - "--tensor-parallel-size"
       - "8"
-      - "--gpu-memory-utilization"
-      - "0.95"
       - "--max-model-len"
       - "auto"
 
 compatible_strategies:
   - single_node_tp
   - single_node_tep
+  - multi_node_tp
+  - multi_node_tep
   - pd_cluster
 
 hardware_overrides: {}
@@ -95,10 +96,9 @@ guide: |
   Single-node TP8 (H200):
 
   ```bash
-  sonar serve XiaomiMiMo/MiMo-V2.5-Pro \
+  sonar run XiaomiMiMo/MiMo-V2.5-Pro \
     --tensor-parallel-size 8 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.95 \
     --max-model-len auto \
     --generation-config sonar
   ```
@@ -106,10 +106,9 @@ guide: |
   With tool calling + reasoning:
 
   ```bash
-  sonar serve XiaomiMiMo/MiMo-V2.5-Pro \
+  sonar run XiaomiMiMo/MiMo-V2.5-Pro \
     --tensor-parallel-size 8 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.95 \
     --max-model-len auto \
     --reasoning-parser mimo \
     --tool-call-parser mimo \

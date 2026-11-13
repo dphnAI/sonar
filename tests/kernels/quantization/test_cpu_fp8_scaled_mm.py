@@ -12,7 +12,7 @@ Run `pytest tests/kernels/quantization/test_cpu_fp8_scaled_mm.py -v`.
 import pytest
 import torch
 
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 from sonar.model_executor.kernels.linear.scaled_mm.cpu import (
     CPUFp8ChannelWiseScaledMMLinearKernel,
     CPUFp8PerTensorScaledMMLinearKernel,

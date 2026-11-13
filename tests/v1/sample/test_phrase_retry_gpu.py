@@ -31,26 +31,56 @@ def test_retry_mask_only_changes_checkpoint_rows_and_clears_reused_slots():
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
 @pytest.mark.parametrize("guard_first", [False, True])
 @pytest.mark.parametrize("greedy", [False, True])
-def test_v1_retry_in_mixed_speculative_batch(guard_first, greedy):
+def test_retry_in_mixed_speculative_batch(guard_first, greedy):
+    from types import SimpleNamespace
+
     from sonar.sampling_params import SamplingParams
-    from sonar.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
-    from sonar.v1.sample.logits_processor import BatchUpdate, LogitsProcessors
-    from sonar.v1.sample.rejection_sampler import RejectionSampler
-    from sonar.v1.sample.sampler import Sampler
-    from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
-    from tests.v1.sample.test_rejection_sampler import create_sampling_metadata
+    from sonar.v1.phrase_guard.processor import RETRY_KEY
+    from sonar.v1.worker.gpu.sample.sampler import Sampler
+    from sonar.v1.worker.gpu.spec_decode.rejection_sampler import RejectionSampler
+    from sonar.v1.worker.gpu.states import RequestState
 
     device = torch.device("cuda")
     guard_row = 0 if guard_first else 1
     neighbor_row = 1 - guard_row
-    histories: list[list[int]] = [[], []]
-    processor = PhraseRetryProcessor(None, device, False)
-    params = SamplingParams(extra_args={RETRY_KEY: (0, [4])})
-    processor.update_state(BatchUpdate(2, [], [(guard_row, params, [0], histories[guard_row])], []))
-    drafts = [[], [1, 2]] if guard_first else [[1, 2], []]
-    metadata = SpecDecodeMetadata.make_dummy(drafts, device)
-    metadata.target_logits_indices = torch.tensor([1, 2] if guard_first else [0, 1], device=device)
-    metadata.bonus_logits_indices = torch.tensor([0, 3] if guard_first else [2, 3], device=device)
+    states = RequestState(
+        max_num_reqs=2,
+        max_model_len=16,
+        max_num_batched_tokens=4,
+        num_speculative_steps=2,
+        vocab_size=16,
+        device=device,
+    )
+    states.prompt_len.np[:] = 1
+    sampler = Sampler(SimpleNamespace(reasoning_config=None), 2, 16, device, states)
+    for row in range(2):
+        sampler.add_request(
+            row,
+            SamplingParams(
+                temperature=0.0 if greedy else 0.7,
+                seed=17,
+                extra_args={RETRY_KEY: (0, [4])} if row == guard_row else None,
+            ),
+        )
+    sampler.apply_staged_writes()
+    rejection = RejectionSampler(
+        sampler,
+        SimpleNamespace(
+            num_speculative_tokens=2,
+            enable_adaptive_verification=False,
+            rejection_sample_method="standard",
+            fly_entropy_threshold=0.0,
+            fly_entropy_top_k=0,
+        ),
+        device,
+    )
+    counts = [1, 3] if guard_first else [3, 1]
+    mapping = torch.tensor([row for row, count in enumerate(counts) for _ in range(count)], device=device)
+    local_pos = torch.tensor([pos for count in counts for pos in range(count)], device=device)
+    cu_num_logits = torch.tensor([0, counts[0], 4], dtype=torch.int32, device=device)
+    drafts = torch.tensor([0, 0, 1, 2] if guard_first else [0, 1, 2, 0], device=device)
+    idx_mapping_np = np.array([0, 1], dtype=np.int32)
+    idx_mapping = torch.from_numpy(idx_mapping_np).to(device)
     logits = torch.full((4, 16), -torch.inf, device=device)
     retry_index = 0 if guard_first else 3
     logits[retry_index, 4] = 10.0
@@ -58,14 +88,22 @@ def test_v1_retry_in_mixed_speculative_batch(guard_first, greedy):
     start = 1 if guard_first else 0
     for offset, token in enumerate([1, 2, 3]):
         logits[start + offset, token] = 0.0
-    sampling = create_sampling_metadata(
-        all_greedy=greedy,
-        temperature=torch.full((2,), 0.7, device=device),
-        output_token_ids=histories,
-        logitsprocs=LogitsProcessors([processor]),
+    _, sampled, num_sampled = rejection._verify(
+        logits,
+        None,
+        drafts,
+        local_pos,
+        cu_num_logits,
+        idx_mapping,
+        idx_mapping_np,
+        mapping,
+        local_pos,
+        np.array(counts, dtype=np.int32),
     )
-    result = RejectionSampler(Sampler())(metadata, None, logits, sampling).sampled_token_ids.tolist()
-    assert result[guard_row] == [5, -1, -1]
+    result = sampled.tolist()
+    assert num_sampled.tolist()[guard_row] == 1
+    assert num_sampled.tolist()[neighbor_row] == 3
+    assert result[guard_row][0] == 5
     assert result[neighbor_row] == [1, 2, 3]
 
 

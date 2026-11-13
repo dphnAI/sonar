@@ -234,6 +234,13 @@ class LMCacheConnectorV1(KVConnectorBase_V1):
         lmcache_kv_events.add_events(blocks)
         return lmcache_kv_events
 
+    def shutdown(self):
+        """Stop the LMCache engine's services and background threads, which
+        otherwise keep the process alive after Sonar shuts down.
+        """
+        if hasattr(self._lmcache_engine, "shutdown"):
+            self._lmcache_engine.shutdown()
+
     # ==============================
     # Scheduler-side methods
     # ==============================

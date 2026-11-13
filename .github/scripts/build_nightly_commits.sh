@@ -90,7 +90,7 @@ write_commit_index() {
     --commit "$commit" \
     --title "Sonar CUDA wheel for ${commit:0:12}" \
     --install-command \
-      "uv pip install sonar --extra-index-url ${public_base}/commits/${commit} --index-strategy first-index --torch-backend cu130" \
+      "uv pip install sonar --extra-index-url ${public_base}/commits/${commit} --index-strategy first-index --torch-backend cu132" \
     --output "$output"
   "$rclone" copyto \
     "$output" \
@@ -168,7 +168,7 @@ for commit in "${commits[@]}"; do
     IFS=. read -r major minor patch <<<"$release"
     timestamp="$(date -u +%Y%m%d%H%M%S)"
     short_commit="$(git rev-parse --short=9 "$commit")"
-    version="${major}.${minor}.$((patch + 1)).dev${timestamp}+cu130.g${short_commit}"
+    version="${major}.${minor}.$((patch + 1)).dev${timestamp}+cu132.g${short_commit}"
     echo "Building ${version} from ${commit}"
 
     build_with_current_rust_helper "$commit" "$version"
@@ -244,9 +244,9 @@ python3 .github/scripts/generate_nightly_index.py \
   --entry-file "$entries" \
   --commit "$target_commit" \
   --title "Sonar nightly CUDA wheels" \
-  --description "Precompiled CUDA 13.0 wheels for x86_64 from every commit on main." \
+  --description "Precompiled CUDA 13.2 wheels for x86_64 from every commit on main." \
   --install-command \
-  "uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130" \
+  "uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132" \
   --output "${index_dir}/index.html"
 cp "${index_dir}/index.html" "${package_dir}/index.html"
 cp "${index_dir}/index.html" "${legacy_nightly_dir}/index.html"

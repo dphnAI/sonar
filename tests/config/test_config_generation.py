@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import logging
+import os
+
 import pytest
 
 from sonar.engine.arg_utils import EngineArgs
 from sonar.model_executor.layers.quantization.quark.utils import deep_compare
+from sonar.platforms.interface import Platform
 
 
 def test_cuda_empty_vs_unset_configs(monkeypatch: pytest.MonkeyPatch):
@@ -103,9 +107,14 @@ def test_unrecognized_env(monkeypatch):
     )
     engine_args.create_engine_config()
 
+    # Removed env vars always raise, pointing at their replacement
+    monkeypatch.setenv("SONAR_MARLIN_INPUT_DTYPE", "int8")
+    with pytest.raises(ValueError, match="--quantization humming"):
+        EngineArgs().create_engine_config()
+
 
 def test_get_diff_sampling_param_includes_penalties():
-    """``--override-generation-config`` must apply presence_penalty and
+    """`--override-generation-config` must apply presence_penalty and
     frequency_penalty as server-side defaults, like the other sampling
     params. Regression test for the whitelist silently dropping them.
 
@@ -134,11 +143,11 @@ def test_get_diff_sampling_param_includes_penalties():
 
 
 def test_generation_config_penalties_survive_diff_sampling_filter():
-    """``generation_config.json`` penalties must survive the diff-sampling
+    """`generation_config.json` penalties must survive the diff-sampling
     whitelist (regression for #50767, auto path).
 
-    Covers the ``generation_config="auto"`` branch, where the override
-    dict is empty and the values come from ``try_get_generation_config``.
+    Covers the `generation_config="auto"` branch, where the override
+    dict is empty and the values come from `try_get_generation_config`.
     """
     from types import SimpleNamespace
 
@@ -159,3 +168,21 @@ def test_generation_config_penalties_survive_diff_sampling_filter():
     assert diff["presence_penalty"] == 1.1
     assert diff["frequency_penalty"] == 0.7
     assert diff["temperature"] == 0.9
+
+
+@pytest.mark.parametrize("value", ["0", "", "true"])
+def test_model_runner_v1_env_fails_startup(monkeypatch, value):
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", value)
+    with pytest.raises(ValueError, match="Model Runner V1 has been removed"):
+        Platform.validate_environ(hard_fail=False)
+
+
+def test_model_runner_v2_env_only_warns(monkeypatch, caplog_sonar):
+    """Unlike an unknown variable, it must not fail even with hard_fail."""
+    for env in list(os.environ):
+        if env.startswith("SONAR_"):
+            monkeypatch.delenv(env)
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with caplog_sonar.at_level(logging.WARNING, logger="sonar"):
+        Platform.validate_environ(hard_fail=True)
+    assert "SONAR_USE_V2_MODEL_RUNNER=1 is redundant" in caplog_sonar.text

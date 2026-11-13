@@ -44,7 +44,7 @@ def _build(
             if num_speculative_tokens is None
             else SimpleNamespace(
                 num_speculative_tokens=num_speculative_tokens,
-                parallel_drafting=parallel_drafting,
+                speculator_config=SimpleNamespace(parallel_drafting=parallel_drafting),
             )
         ),
         compilation_config=SimpleNamespace(cudagraph_mode=CUDAGraphMode.NONE, static_forward_context={}),

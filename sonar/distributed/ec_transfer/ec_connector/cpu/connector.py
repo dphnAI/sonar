@@ -37,9 +37,6 @@ class ECCPUConnector(ECConnectorBase):
     def __init__(self, sonar_config: "SonarConfig", role: ECConnectorRole) -> None:
         super().__init__(sonar_config=sonar_config, role=role)
 
-        if not sonar_config.use_v2_model_runner:
-            raise ValueError("ECCPUConnector requires the V2 model runner. Set SONAR_USE_V2_MODEL_RUNNER=1.")
-
         self.connector_worker = None
         self.connector_scheduler = None
 

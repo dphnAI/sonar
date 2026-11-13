@@ -134,7 +134,7 @@ def test_get_open_port_ephemeral_skips_reserved_range(
         m.setattr(
             network_utils,
             "_get_open_port",
-            lambda start_port=None, max_attempts=None: (base if start_port is None else start_port),
+            lambda start_port=None, max_attempts=None: base if start_port is None else start_port,
         )
         assert _call_with_timeout(get_open_port) == base + 10
 

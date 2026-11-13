@@ -83,6 +83,8 @@ GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.2}
 PREFILL_BLOCK_SIZE=${PREFILL_BLOCK_SIZE:-128}
 DECODE_BLOCK_SIZE=${DECODE_BLOCK_SIZE:-128}
 ENFORCE_EAGER=${ENFORCE_EAGER:-1}
+# Set to 1 to give the decoder decode-only CUDA graphs without torch.compile.
+DECODER_CUDAGRAPH=${DECODER_CUDAGRAPH:-0}
 # Comma-separated extra args for sonar serve (e.g. --max-model-len,2048)
 SONAR_SERVE_EXTRA_ARGS=${SONAR_SERVE_EXTRA_ARGS:-}
 # Set to 1 to put every instance to sleep and wake it up before the eval.
@@ -254,22 +256,30 @@ run_tests_for_model() {
       DECODER_INTERNAL_PORT_ENV="SONAR_DP_MASTER_PORT=$INTERNAL_PORT"
     fi
 
+    DECODER_EAGER_ARG=""
+    DECODER_CUDAGRAPH_ENV=""
+    if [[ "$ENFORCE_EAGER" == "1" && "$DECODER_CUDAGRAPH" == "1" ]]; then
+      DECODER_CUDAGRAPH_ENV="SONAR_USE_BREAKABLE_CUDAGRAPH=1"
+      DECODER_EAGER_ARG="-cc.cudagraph_mode=FULL_DECODE_ONLY"
+    elif [[ "$ENFORCE_EAGER" == "1" ]]; then
+      DECODER_EAGER_ARG="--enforce-eager"
+    fi
+
     echo "Starting decode instance $i on GPU $GPU_ID, port $PORT"
 
     # Build the command with or without model-specific args
     BASE_CMD="CUDA_VISIBLE_DEVICES=$GPU_ID \
     ${DECODER_KV_LAYOUT:+SONAR_KV_CACHE_LAYOUT=$DECODER_KV_LAYOUT} \
     $DECODER_INTERNAL_PORT_ENV \
+    $DECODER_CUDAGRAPH_ENV \
     UCX_NET_DEVICES=all \
     SONAR_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
     sonar serve $model_name \
     --port $PORT \
     --block-size ${DECODE_BLOCK_SIZE} \
     --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
-    --kv-transfer-config '$KV_CONFIG_D'"
-    if [[ "$ENFORCE_EAGER" == "1" ]]; then
-      BASE_CMD="${BASE_CMD} --enforce-eager"
-    fi
+    --kv-transfer-config '$KV_CONFIG_D' \
+    $DECODER_EAGER_ARG"
     if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
       IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do

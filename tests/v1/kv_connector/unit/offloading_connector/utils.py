@@ -40,6 +40,7 @@ from sonar.v1.kv_cache_interface import (
 )
 from sonar.v1.kv_offload.base import (
     CanonicalKVCaches,
+    DevicePointers,
     GPULoadStoreSpec,
     LoadStoreSpec,
     LookupResult,
@@ -80,7 +81,8 @@ class MockLoadStoreSpec(LoadStoreSpec):
 
 
 class MockOffloadingWorker(OffloadingWorker):
-    def __init__(self):
+    def __init__(self, gpu_spec_map: dict[int, "GPULoadStoreSpec"]):
+        self._gpu_spec_map = gpu_spec_map
         self.transfer_specs: dict[int, tuple[LoadStoreSpec, LoadStoreSpec]] = {}
         self.completed_transfers: list[TransferResult] = []
         self.waiting_jobs: set[int] = set()
@@ -95,8 +97,9 @@ class MockOffloadingWorker(OffloadingWorker):
         self.completed_transfers = []
         return finished
 
-    def submit_store(self, job_id: int, src_spec: LoadStoreSpec, dst_spec: LoadStoreSpec) -> bool:
-        self.transfer_specs[job_id] = (src_spec, dst_spec)
+    def submit_store(self, job_id: int, device_ptrs: DevicePointers, dst_spec: LoadStoreSpec) -> bool:
+        gpu_spec = self._gpu_spec_map.pop(id(device_ptrs))
+        self.transfer_specs[job_id] = (gpu_spec, dst_spec)
         self.waiting_jobs.add(job_id)
         return True
 
@@ -104,10 +107,11 @@ class MockOffloadingWorker(OffloadingWorker):
         self,
         job_id: int,
         src_spec: LoadStoreSpec,
-        dst_spec: LoadStoreSpec,
+        device_ptrs: DevicePointers,
         expedited: bool = False,
     ) -> bool:
-        self.transfer_specs[job_id] = (src_spec, dst_spec)
+        gpu_spec = self._gpu_spec_map.pop(id(device_ptrs))
+        self.transfer_specs[job_id] = (src_spec, gpu_spec)
         self.waiting_jobs.add(job_id)
         if self.fail_loads:
             self._failing_jobs.add(job_id)
@@ -142,7 +146,19 @@ class MockOffloadingSpec(OffloadingSpec):
         self.manager.get_stats.return_value = None
         self.manager.config_info.return_value = [{}]
         self.manager.on_new_request.return_value = RequestOffloadingContext()
-        self.handler = MockOffloadingWorker()
+
+        self._gpu_spec_map: dict[int, GPULoadStoreSpec] = {}
+        self.handler = MockOffloadingWorker(self._gpu_spec_map)
+
+        import sonar.distributed.kv_transfer.kv_connector.v1.offloading.worker as _cm
+        from sonar.v1.kv_offload.pointer_utils import resolve_device_pointers as _orig
+
+        def _tracking_resolve(device_spec: GPULoadStoreSpec, kv_caches: CanonicalKVCaches) -> DevicePointers:
+            result = _orig(device_spec, kv_caches)
+            self._gpu_spec_map[id(result)] = device_spec
+            return result
+
+        _cm.resolve_device_pointers = _tracking_resolve
 
     def get_manager(self) -> OffloadingManager:
         return self.manager
@@ -230,6 +246,7 @@ class RequestRunner:
             kv_role="kv_both",
             kv_connector_extra_config=extra_config,
         )
+        sonar_config.num_hash_lookahead_tokens = sonar_config._resolve_num_hash_lookahead_tokens()
         sonar_config.kv_events_config = KVEventsConfig(
             # Enable so the offloading events tracker is active, but use the
             # null publisher: these tests drain take_events directly and a
@@ -348,7 +365,8 @@ class RequestRunner:
         self.gpu_blocks: dict[int, GPUBlock] = {}
 
         init_none_hash(sha256)
-        self._block_hasher = get_request_block_hasher(block_size, sha256)
+        # Mirror EngineCore's choice of hash protocol.
+        self._block_hasher = get_request_block_hasher(block_size, sha256, self.scheduler.num_hash_lookahead_tokens)
 
         self._dummy_ctx: ForwardContext = ForwardContext(
             no_compile_layers={},
@@ -496,7 +514,7 @@ class RequestRunner:
             # and no pending finished_req_ids awaiting build_connector_meta.
             if (
                 not self.scheduler.requests
-                and not self.connector_scheduler._jobs
+                and not self.connector_scheduler._job_statuses
                 and not self.scheduler.finished_req_ids
             ):
                 break
@@ -553,7 +571,9 @@ class RequestRunner:
             if (
                 prev_token_id == EOS_TOKEN_ID
                 and prev_token_id != token_id
-                and (self.scheduler.requests or self.connector_scheduler._jobs or self.scheduler.finished_req_ids)
+                and (
+                    self.scheduler.requests or self.connector_scheduler._job_statuses or self.scheduler.finished_req_ids
+                )
             ):
                 # continue for one more step to allow offloading to kick off
                 continue
@@ -568,7 +588,7 @@ class RequestRunner:
                     prev_model_runner_output = None
                     if self.scheduler.finished_req_ids:
                         continue
-                if complete_transfers and not self.scheduler.requests and self.connector_scheduler._jobs:
+                if complete_transfers and not self.scheduler.requests and self.connector_scheduler._job_statuses:
                     continue
                 break
 

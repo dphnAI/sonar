@@ -94,7 +94,7 @@ def create_mooncake_embedding_store_client(
     except ImportError as e:
         raise ImportError("Install mooncake with Store support to enable cross_encoder_cache.") from e
 
-    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake import rdma_utils
+    from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store import rdma_utils
 
     config = MooncakeStoreConfig.load_from_config()
     if config.enable_offload:
@@ -181,7 +181,7 @@ class MooncakeEmbeddingStoreClient:
             confirmed = True
 
         try:
-            for owner, addr, size in buffers:
+            for _, addr, size in buffers:
                 ret = self.store.register_buffer(addr, size)
                 if ret != 0:
                     raise EmbeddingStoreOperationError(f"Failed to register embedding buffer: {ret}")

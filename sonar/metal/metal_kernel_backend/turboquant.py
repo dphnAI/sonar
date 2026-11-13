@@ -194,7 +194,7 @@ def get_v_centroids(bits: int) -> mx.array:
 
 
 def lm_quant(x: mx.array, bits: int = 3) -> tuple[mx.array, mx.array]:
-    """Lloyd-Max quantize ``x`` along its last dim.
+    """Lloyd-Max quantize `x` along its last dim.
 
     Args:
         x:    Input tensor, last dim must be divisible by BLOCK_SIZE.
@@ -202,8 +202,8 @@ def lm_quant(x: mx.array, bits: int = 3) -> tuple[mx.array, mx.array]:
               widths compute centroids dynamically via Lloyd-Max.
 
     Returns:
-        (indices, scale) where ``indices`` are uint8 values in [0, 2^bits - 1]
-        and ``scale`` is the per-block RMS normalizer.
+        (indices, scale) where `indices` are uint8 values in [0, 2^bits - 1]
+        and `scale` is the per-block RMS normalizer.
     """
     _, boundaries = lloyd_max_centroids(bits)
     shape = x.shape
@@ -362,8 +362,8 @@ def quantize(x: mx.array, output_type: str = "int8") -> tuple[mx.array, mx.array
         output_type: Key from QUANT_PARAMS.
 
     Returns:
-        (indices, scale, zero_point).  ``scale`` and ``zero_point`` have shape
-        ``(..., head_dim // block_size)`` (one per block). Indices are stored
+        (indices, scale, zero_point).  `scale` and `zero_point` have shape
+        `(..., head_dim // block_size)` (one per block). Indices are stored
         in the dtype declared by QUANT_PARAMS — unsigned for sub-8-bit so they
         can be bit-packed directly.
     """
@@ -417,7 +417,7 @@ def quantize(x: mx.array, output_type: str = "int8") -> tuple[mx.array, mx.array
 
 
 def dequantize(indices: mx.array, scale: mx.array, zero_point: mx.array, block_size: int = 32) -> mx.array:
-    """Asymmetric uniform dequantization: ``x = (indices + zero_point) * scale``.
+    """Asymmetric uniform dequantization: `x = (indices + zero_point) * scale`.
 
     Args:
         indices: Quantized indices (flattened).
@@ -444,7 +444,7 @@ def turbo_quant_encode_value(x: mx.array, bits: int = 3) -> tuple[mx.array, mx.a
               dynamically via Lloyd-Max.
 
     Returns:
-        (indices, scale). ``indices`` are uint8 values in [0, 2^bits - 1]
+        (indices, scale). `indices` are uint8 values in [0, 2^bits - 1]
         (not yet bit-packed).
     """
     x = fwht(x, True)
@@ -476,7 +476,7 @@ def turbo_quant_decode_key(
     output_dtype: mx.Dtype = mx.float32,
     block_size: int = 32,
 ) -> mx.array:
-    """Decode K with asymmetric dequantization: ``x = (indices + zero_point) * scale``."""
+    """Decode K with asymmetric dequantization: `x = (indices + zero_point) * scale`."""
     return dequantize(indices, scale, zero_point, block_size).astype(output_dtype)
 
 
@@ -489,9 +489,9 @@ def turbo_quant_encode(
     """Encode key and value arrays for TurboQuant storage.
 
     Returns:
-        ``(k_quant, v_quant)`` where
-        ``k_quant = (packed_indices, scale, zero_point)`` and
-        ``v_quant = (packed_indices, scale)``. Sub-8-bit indices are bit-packed.
+        `(k_quant, v_quant)` where
+        `k_quant = (packed_indices, scale, zero_point)` and
+        `v_quant = (packed_indices, scale)`. Sub-8-bit indices are bit-packed.
     """
     indices_k, scale_k, zero_k = turbo_quant_encode_key(key, key_quant)
     indices_v, scale_v = turbo_quant_encode_value(value, bits=value_bits)

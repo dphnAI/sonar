@@ -274,7 +274,7 @@ def test_auto_tool_choice_with_reasoning_parser_passes(serve_parser):
     """Auto tool choice combined with a reasoning parser is supported.
 
     See docs/features/tool_calling.md, which documents using
-    ``--tool-call-parser`` together with ``--reasoning-parser``. This
+    `--tool-call-parser` together with `--reasoning-parser`. This
     combination must pass validation as long as a tool call parser is set.
     """
     args = serve_parser.parse_args(
@@ -333,10 +333,10 @@ def test_per_request_metrics_requires_log_stats(serve_parser):
 def _build_launch_render_parser():
     """Mirror `sonar launch render`.
 
-    `sonar/entrypoints/cli/main.py` parses subcommands with ``dest="subparser"``,
+    `sonar/entrypoints/cli/main.py` parses subcommands with `dest="subparser"`,
     and `LaunchSubcommandBase.add_cli_args` builds the component parser with
     `make_arg_parser`, so a launch component carries serve args under
-    ``args.subparser == "launch"``.
+    `args.subparser == "launch"`.
     """
     sonar_parser = FlexibleArgumentParser()
     subparsers = sonar_parser.add_subparsers(required=False, dest="subparser")

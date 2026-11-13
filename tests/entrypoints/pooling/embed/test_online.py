@@ -30,7 +30,7 @@ from tests.models.language.pooling.embed_utils import (
 from tests.models.utils import check_embeddings_close
 from tests.utils import RemoteOpenAIServer
 
-MODEL_NAME = "intfloat/multilingual-e5-small"
+MODEL_NAME = "vllm-project/multilingual-e5-small"
 DUMMY_CHAT_TEMPLATE = (
     """{% for message in messages %}{{message['role'] + ': ' + message['content'] + '\\n'}}{% endfor %}"""  # noqa: E501
 )

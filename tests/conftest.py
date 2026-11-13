@@ -259,16 +259,12 @@ def dist_init():
 
 
 @pytest.fixture
-def default_sonar_config(monkeypatch):
+def default_sonar_config():
     """Set a default SonarConfig for tests that directly test CustomOps or pathways
     that use get_current_sonar_config() outside of a full engine context.
     """
     from sonar.config import SonarConfig, set_current_sonar_config
 
-    # Creating a breakable-by-default model config sets
-    # SONAR_USE_BREAKABLE_CUDAGRAPH process-wide; shield the default config
-    # from such leaks (it would flip custom_ops to "all").
-    monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "0")
     config = SonarConfig()
     with set_current_sonar_config(config):
         yield config
@@ -530,11 +526,13 @@ class HfRunner:
                 ),
             )
 
-            # in case some unquantized custom models are not in same dtype
+            # In case some unquantized custom models are not in the same dtype.
             if getattr(model, "quantization_method", None) is None and any(
                 p.dtype != self.dtype for p in model.parameters()
             ):
-                model = model.to(dtype=self.dtype)
+                for parameter in model.parameters():
+                    if parameter.is_floating_point() or parameter.is_complex():
+                        parameter.data = parameter.data.to(dtype=self.dtype)
 
             if len({p.device for p in model.parameters()}) < 2:
                 model = model.to(device=self.device)
@@ -988,10 +986,10 @@ class SonarRunner:
         from sonar.platforms import current_platform
 
         if current_platform.is_rocm():
-            gpu_memory_utilization = kwargs.get(
-                "gpu_memory_utilization",
-                CacheConfig.gpu_memory_utilization,
-            )
+            # An unset utilization resolves to 1.0 with the extensible KV cache,
+            # which no longer needs the memory free up front; wait for the
+            # standard fraction in that case.
+            gpu_memory_utilization = kwargs.get("gpu_memory_utilization") or CacheConfig.DEFAULT_GPU_MEMORY_UTILIZATION
             # V1 startup requires free_memory >= total * gpu_memory_utilization.
             # ROCm CI can hand a test a device that is still lazily releasing
             # VRAM from a previous process, so wait before constructing LLM.
@@ -1005,7 +1003,7 @@ class SonarRunner:
             # CCL context in the engine subprocess. The default utilization of
             # 0.92 leaves too little headroom for both, so lower it on XPU when
             # the caller did not request an explicit value.
-            if "gpu_memory_utilization" not in kwargs:
+            if kwargs.get("gpu_memory_utilization") is None:
                 kwargs["gpu_memory_utilization"] = 0.9
             gpu_memory_utilization = kwargs["gpu_memory_utilization"]
             # XPU (Level Zero) can also release device memory lazily after a
@@ -1361,7 +1359,10 @@ class SonarRunner:
         # This is needed because when executing consecutive tests, the GC
         # might not be fast enough in shutting down the llm engine. This can lead to OOMs
         # because when the next test starts some GPU memory is still in use.
-        gpu_memory_utilization = self.llm.llm_engine.sonar_config.cache_config.gpu_memory_utilization
+        gpu_memory_utilization = (
+            self.llm.llm_engine.sonar_config.cache_config.gpu_memory_utilization
+            or CacheConfig.DEFAULT_GPU_MEMORY_UTILIZATION
+        )
         from sonar.platforms import current_platform
 
         try:
@@ -1831,8 +1832,8 @@ def disable_sonar_compile_cache(monkeypatch, use_fresh_inductor_cache):
     This forces compilation (and any custom compile passes) to actually run
     instead of being served from a warm cache left behind by previous runs
     (e.g. on persistent CI agents). Use this for tests that inspect what
-    happens during compilation; use ``use_fresh_inductor_cache`` (or
-    ``fresh_sonar_cache``) instead when the Sonar compile cache must stay
+    happens during compilation; use `use_fresh_inductor_cache` (or
+    `fresh_sonar_cache`) instead when the Sonar compile cache must stay
     enabled (e.g. cache save/load tests).
     """
     monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
@@ -1881,11 +1882,11 @@ def fake_sonar_ir(monkeypatch):
     """
     Pytest fixture to allow isolated IR op registration in tests.
 
-    Replaces IrOp.registry with an empty dict and swaps ``sonar_ir_torch_lib`` for a
-    fresh ``Library`` with a unique namespace per test (see ``Library.ns``).
+    Replaces IrOp.registry with an empty dict and swaps `sonar_ir_torch_lib` for a
+    fresh `Library` with a unique namespace per test (see `Library.ns`).
 
     Torch keeps registrations for the process lifetime; reusing the fragment
-    name ``sonar_ir`` and defining the same op string again can segfault. A
+    name `sonar_ir` and defining the same op string again can segfault. A
     random library name keeps each fixture run on a disjoint namespace.
 
     The test Library is kept alive until after monkeypatch teardown so PyTorch's

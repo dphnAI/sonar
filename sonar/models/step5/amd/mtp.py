@@ -14,9 +14,6 @@ from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from sonar.model_executor.model_loader.mtp_validation import (
-    is_mtp_completeness_check_enabled,
-)
 from sonar.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsMultiModal,
@@ -187,19 +184,10 @@ class Step5MTP(nn.Module, SupportsMultiModal):
                     name = name.replace(f"model.layers.{layer}.", f"model.layers.{layer}.mtp_block.")
                 yield name, weight
 
-        loaded = {
+        return {
             f"model.{name}"
             for name in load_step5_weights(
                 self.model,
                 ((name.removeprefix("model."), weight) for name, weight in mtp_weights()),
             )
         }
-        if is_mtp_completeness_check_enabled():
-            missing = {
-                name
-                for name, _ in self.named_parameters()
-                if not name.endswith((".k_scale", ".v_scale", ".q_scale", ".prob_scale"))
-            } - loaded
-            if missing:
-                raise RuntimeError(f"Step5 MTP checkpoint is missing parameters: {sorted(missing)}")
-        return loaded

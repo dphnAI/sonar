@@ -196,8 +196,6 @@ variants:
           - "humming"
           - "--kv-cache-dtype"
           - "fp8"
-          - "--gpu-memory-utilization"
-          - "0.95"
           - "--enable-prefix-caching"
         extra_env:
           SONAR_MARLIN_USE_ATOMIC_ADD: "1"
@@ -257,8 +255,6 @@ variants:
           - "--enable-prefix-caching"
           - "--max-num-batched-tokens"
           - "16384"
-          - "--gpu-memory-utilization"
-          - "0.95"
           - "--disable-flashinfer-autotune"
           - "--stream-interval"
           - "20"
@@ -272,8 +268,6 @@ variants:
           - "--enable-prefix-caching"
           - "--max-num-batched-tokens"
           - "16384"
-          - "--gpu-memory-utilization"
-          - "0.95"
           - "--no-enable-flashinfer-autotune"
           - "--stream-interval"
           - "20"
@@ -288,8 +282,6 @@ variants:
           - "--enable-prefix-caching"
           - "--max-num-batched-tokens"
           - "16384"
-          - "--gpu-memory-utilization"
-          - "0.9"
           - "--no-enable-flashinfer-autotune"
           - "--stream-interval"
           - "20"
@@ -370,6 +362,8 @@ strategy_overrides:
 # Tuned presets (SCHEMA.md): the InferenceX AgentX lanes, each a delta on the
 # baseline command for one GPU and variant. All are opt-in: the builder's
 # defaults stay the recipe's own; pick a preset (and a point) to render a lane.
+# External benchmark presets below require their pinned upstream vLLM images.
+# Their VLLM_* variables and Dynamo protocols do not target the Sonar runtime.
 presets:
   h200_agentx:
     label: "AgentX TP8"
@@ -396,7 +390,7 @@ presets:
       c12: { label: "12", concurrency: 12, args: ["--max-num-seqs", "24", "--max-cudagraph-capture-size", "96"] }
       c14: { label: "14", concurrency: 14, args: ["--max-num-seqs", "28", "--max-cudagraph-capture-size", "112"] }
     runbook: |
-      The H200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp8-h200-vllm-agentic-mtp`, [SemiAnalysisAI/InferenceX#4429](https://github.com/SemiAnalysisAI/InferenceX/pull/4429)) serves the MXFP8 checkpoint with the GQA EAGLE3 draft (three speculative tokens) as one aggregated Sonar worker on a single 8-GPU H200 node: TP8, no expert parallelism, no host KV offload.
+      The H200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp8-h200-vllm-agentic-mtp`, [SemiAnalysisAI/InferenceX#4429](https://github.com/SemiAnalysisAI/InferenceX/pull/4429)) serves the MXFP8 checkpoint with the GQA EAGLE3 draft (three speculative tokens) as one aggregated vLLM worker on a single 8-GPU H200 node: TP8, no expert parallelism, no host KV offload.
 
       The InferenceX throughput points replaced block verification with synthetic rejection at the committed golden EAGLE3-GQA acceptance length (2.78 for MiniMax-M3 with three draft tokens, thinking on; [`minimaxm3_eagle3_gqa.yaml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/inferencex-e2e/infx/golden_al_distribution/minimaxm3_eagle3_gqa.yaml)) so every point is measured at the same acceptance rate. The command above does not set it.
 
@@ -427,7 +421,7 @@ presets:
         concurrency: 30
         args: ["--max-num-seqs", "60", "--max-cudagraph-capture-size", "4096"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 1073000000000, lazy_offload: true } }
           "--compilation-config": { cudagraph_capture_sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 256, 320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096] }
@@ -437,7 +431,7 @@ presets:
         args: ["--max-num-seqs", "64", "--max-cudagraph-capture-size", "256"]
         remove_args: ["--attention_config.minimax_m3_msa_decode_backend"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 1073000000000, lazy_offload: true } }
       c38:
@@ -445,12 +439,12 @@ presets:
         concurrency: 38
         args: ["--max-num-seqs", "76", "--max-cudagraph-capture-size", "4096"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 1073000000000, lazy_offload: true } }
           "--compilation-config": { cudagraph_capture_sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096] }
     runbook: |
-      The B200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-b200-vllm-agentic-mtp` and `minimaxm3-fp4-b200-vllm-agentic-mtp-c10`, [SemiAnalysisAI/InferenceX#4382](https://github.com/SemiAnalysisAI/InferenceX/pull/4382)) serves the NVFP4 checkpoint with the GQA EAGLE3 draft as one aggregated Sonar worker on a single 8-GPU B200 node. Most points run TP4; the concurrency-10 arm also has a TP8 point.
+      The B200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-b200-vllm-agentic-mtp` and `minimaxm3-fp4-b200-vllm-agentic-mtp-c10`, [SemiAnalysisAI/InferenceX#4382](https://github.com/SemiAnalysisAI/InferenceX/pull/4382)) serves the NVFP4 checkpoint with the GQA EAGLE3 draft as one aggregated vLLM worker on a single 8-GPU B200 node. Most points run TP4; the concurrency-10 arm also has a TP8 point.
 
       The host-KV-offload points pin 1,073 GB of host memory for KV blocks across the node (lazy offload).
 
@@ -470,7 +464,7 @@ presets:
     tp: 4
     select:
       features: { spec_decoding: eagle3_gqa, text_only: true, thinking_always_on: true }
-    env: { SONAR_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl" }
+    env: { VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl" }
     json_args:
       "--speculative-config": { use_local_argmax_reduction: null }
     # --max-num-seqs stays at its default; every point sets --max-cudagraph-capture-size
@@ -499,7 +493,7 @@ presets:
         concurrency: 20
         args: ["--max-num-active-seqs", "4", "--gpu-memory-utilization", "0.9", "--max-cudagraph-capture-size", "8192"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--speculative-config": { num_speculative_tokens: 3 }
           "--compilation-config": { cudagraph_capture_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192] }
@@ -509,7 +503,7 @@ presets:
         concurrency: 20
         args: ["--max-num-active-seqs", "3", "--gpu-memory-utilization", "0.9", "--max-cudagraph-capture-size", "8192"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--speculative-config": { num_speculative_tokens: 3 }
           "--compilation-config": { cudagraph_capture_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192] }
@@ -519,7 +513,7 @@ presets:
         concurrency: 32
         args: ["--max-num-active-seqs", "6", "--gpu-memory-utilization", "0.925", "--max-cudagraph-capture-size", "4096"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--speculative-config": { num_speculative_tokens: 3 }
           "--compilation-config": { cudagraph_capture_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096] }
@@ -529,13 +523,13 @@ presets:
         concurrency: 32
         args: ["--max-num-active-seqs", "16", "--gpu-memory-utilization", "0.925", "--max-cudagraph-capture-size", "4096"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--speculative-config": { num_speculative_tokens: 3 }
           "--compilation-config": { cudagraph_capture_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096] }
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 1073000000000, lazy_offload: true } }
     runbook: |
-      The B200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-b200-vllm-agentic-mtp` and `minimaxm3-fp4-b200-vllm-agentic-mtp-c10`, [SemiAnalysisAI/InferenceX#4382](https://github.com/SemiAnalysisAI/InferenceX/pull/4382)) serves the NVFP4 checkpoint with the GQA EAGLE3 draft as one aggregated Sonar worker on a single 8-GPU B200 node. Most points run TP4; the concurrency-10 arm also has a TP8 point.
+      The B200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-b200-vllm-agentic-mtp` and `minimaxm3-fp4-b200-vllm-agentic-mtp-c10`, [SemiAnalysisAI/InferenceX#4382](https://github.com/SemiAnalysisAI/InferenceX/pull/4382)) serves the NVFP4 checkpoint with the GQA EAGLE3 draft as one aggregated vLLM worker on a single 8-GPU B200 node. Most points run TP4; the concurrency-10 arm also has a TP8 point.
 
       The **Verified** badge for this GPU is recipe-wide. This preset covers the NVFP4 variant only; the GQA draft override in `features.spec_decoding` also applies to the other variants on this GPU, which were not qualified.
 
@@ -563,7 +557,7 @@ presets:
         tp: 8
         args: ["--max-num-seqs", "2", "--gpu-memory-utilization", "0.95"]
         remove_args: ["--attention_config.minimax_m3_msa_decode_backend"]
-        env: { SONAR_FLASHINFER_ALLREDUCE_BACKEND: "trtllm" }
+        env: { VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm" }
         select: { kv_offload: "off" }
         json_args:
           "--compilation-config": { cudagraph_capture_sizes: [4, 8, 256, 512, 1024, 2048] }
@@ -573,7 +567,7 @@ presets:
         tp: 4
         args: ["--max-num-seqs", "30", "--max-num-active-seqs", "6", "--gpu-memory-utilization", "0.95"]
         remove_args: ["--attention_config.minimax_m3_msa_decode_backend"]
-        env: { SONAR_FLASHINFER_ALLREDUCE_BACKEND: "trtllm" }
+        env: { VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm" }
         select: { kv_offload: "off" }
         json_args:
           "--compilation-config": { cudagraph_capture_sizes: [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 256, 512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 10240, 12288, 14336, 16384] }
@@ -583,7 +577,7 @@ presets:
         tp: 4
         args: ["--max-num-seqs", "7", "--gpu-memory-utilization", "0.95"]
         remove_args: ["--attention_config.minimax_m3_msa_decode_backend"]
-        env: { SONAR_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl" }
+        env: { VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl" }
         select: { kv_offload: "off" }
         json_args:
           "--compilation-config": { cudagraph_capture_sizes: [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 256, 512, 1024, 2048, 2560, 3072, 3584, 4096, 5120, 6144, 7168, 8192] }
@@ -592,7 +586,7 @@ presets:
         concurrency: 24
         tp: 2
         args: ["--max-num-seqs", "36", "--gpu-memory-utilization", "0.92"]
-        env: { SONAR_FLASHINFER_ALLREDUCE_BACKEND: "trtllm", SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm", VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         select: { kv_offload: simple }
         json_args:
           "--compilation-config": { cudagraph_capture_sizes: [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 256, 512, 1024, 2048] }
@@ -602,13 +596,13 @@ presets:
         concurrency: 28
         tp: 2
         args: ["--max-num-seqs", "36", "--gpu-memory-utilization", "0.92"]
-        env: { SONAR_FLASHINFER_ALLREDUCE_BACKEND: "trtllm", SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm", VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         select: { kv_offload: simple }
         json_args:
           "--compilation-config": { cudagraph_capture_sizes: [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 256, 512, 1024, 2048] }
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: null, cpu_bytes_to_use: 749000000000, lazy_offload: true } }
     runbook: |
-      The B300 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-b300-vllm-agentic-mtp`, [SemiAnalysisAI/InferenceX#4357](https://github.com/SemiAnalysisAI/InferenceX/pull/4357)) serves the NVFP4 checkpoint with the GQA EAGLE3 draft (three speculative tokens) as one aggregated Sonar worker on a single B300 node: TP8 at concurrency 1, TP4 at concurrency 20 and 24, and TP2 at 24 and 28 with host KV offload.
+      The B300 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-b300-vllm-agentic-mtp`, [SemiAnalysisAI/InferenceX#4357](https://github.com/SemiAnalysisAI/InferenceX/pull/4357)) serves the NVFP4 checkpoint with the GQA EAGLE3 draft (three speculative tokens) as one aggregated vLLM worker on a single B300 node: TP8 at concurrency 1, TP4 at concurrency 20 and 24, and TP2 at 24 and 28 with host KV offload.
 
       The TP2 points pin 749 GB of host memory for KV blocks (lazy offload).
 
@@ -626,7 +620,7 @@ presets:
     description: "One TP4 worker per 4-GPU GB200 tray with the GQA EAGLE3 draft (three tokens, local argmax reduction), the CUTLASS MSA decode kernel and thinking always on, behind the Dynamo KV-aware router; the larger points add host KV offload."
     source: &gb200_agentx_source { label: "InferenceX #4281", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/4281", key: "minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp", revision: "bbebca8b4be98a06401e943bad37874abbd65101" }
     image: &gb200_agentx_image
-      sonar: "vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:8896fd7b29fc4ee7ce839f146cb4757984c476ec79d0234ffa8c995dee6e339a"
+      vllm: "vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:8896fd7b29fc4ee7ce839f146cb4757984c476ec79d0234ffa8c995dee6e339a"
       pip: ["ai-dynamo-runtime==1.6.0.dev20261016", "ai-dynamo==1.6.0.dev20261016"]
     tp: 4
     select:
@@ -637,7 +631,7 @@ presets:
     # interval) and the NCCL MNNVL environment.
     args: ["--max-model-len", "1048576"]
     # The lane's 1M-context engines took over ten minutes to start.
-    env: &gb200_agentx_env { SONAR_ENGINE_READY_TIMEOUT_S: "7200", SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800" }
+    env: &gb200_agentx_env { VLLM_ENGINE_READY_TIMEOUT_S: "7200", VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800" }
     json_args:
       "--compilation-config": { cudagraph_mode: "FULL_AND_PIECEWISE" }
     points:
@@ -658,7 +652,7 @@ presets:
         concurrency: 20
         args: ["--max-num-seqs", "8"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use: 777389080576, cpu_bytes_to_use_per_rank: 194347270144, lazy_offload: true } }
           "--compilation-config": { cudagraph_capture_sizes: [4, 8, 12, 16, 20, 24, 28, 32, 256, 512, 1024, 2048] }
@@ -667,7 +661,7 @@ presets:
         concurrency: 22
         args: ["--max-num-seqs", "12"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use: 777389080576, cpu_bytes_to_use_per_rank: 194347270144, lazy_offload: true } }
           "--compilation-config": { cudagraph_capture_sizes: [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 256, 512, 1024, 2048] }
@@ -676,7 +670,7 @@ presets:
         concurrency: 25
         args: ["--max-num-seqs", "16"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use: 777389080576, cpu_bytes_to_use_per_rank: 194347270144, lazy_offload: true } }
           "--compilation-config": { cudagraph_capture_sizes: [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 256, 512, 1024, 2048] }
@@ -685,12 +679,12 @@ presets:
         concurrency: 30
         args: ["--max-num-seqs", "45"]
         select: { kv_offload: simple }
-        env: { SONAR_USE_SIMPLE_KV_OFFLOAD: "1" }
+        env: { VLLM_USE_SIMPLE_KV_OFFLOAD: "1" }
         json_args:
           "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use: 777389080576, cpu_bytes_to_use_per_rank: 194347270144, lazy_offload: true } }
           "--compilation-config": { cudagraph_capture_sizes: [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 256, 512, 1024, 2048] }
     runbook: |
-      The GB200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp`, [SemiAnalysisAI/InferenceX#4281](https://github.com/SemiAnalysisAI/InferenceX/pull/4281)) serves the NVFP4 checkpoint with the GQA EAGLE3 draft (three speculative tokens, FlashInfer draft attention, local argmax reduction) and the CUTLASS MSA decode kernel as aggregated Sonar workers behind the Dynamo frontend's KV-aware router. This preset holds its TP4 points, one worker per 4-GPU tray; [AgentX TP8](#preset-gb200_agentx_tp8) holds the two-tray TP8 points.
+      The GB200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp`, [SemiAnalysisAI/InferenceX#4281](https://github.com/SemiAnalysisAI/InferenceX/pull/4281)) serves the NVFP4 checkpoint with the GQA EAGLE3 draft (three speculative tokens, FlashInfer draft attention, local argmax reduction) and the CUTLASS MSA decode kernel as aggregated vLLM workers behind the Dynamo frontend's KV-aware router. This preset holds its TP4 points, one worker per 4-GPU tray; [AgentX TP8](#preset-gb200_agentx_tp8) holds the two-tray TP8 points.
 
       - **GPU-resident points** keep the whole KV cache in HBM. Their CUDA graph sizes start at 1 and 2 so the drafter's decode steps also replay full graphs.
       - **KV offload points** add a host-DRAM KV tier through `SimpleCPUOffloadConnector` with lazy offload: 181 GiB of pinned host memory per rank, 724 GiB per tray. Where `--max-num-seqs` is below the concurrency, requests beyond it wait in the scheduler queue.
@@ -702,7 +696,7 @@ presets:
       printf 'max_payload: 33554432\njetstream {}\n' > nats.conf && nats-server -c nats.conf
       ```
 
-      On each worker tray, export `ETCD_ENDPOINTS=http://<infra-host>:2379` and `NATS_SERVER=nats://<infra-host>:4222` along with the generated environment, and run the generated flags with `python3 -m dynamo.vllm --model nvidia/MiniMax-M3-NVFP4` in place of `sonar serve nvidia/MiniMax-M3-NVFP4`. `dynamo.vllm` hands engine flags to Sonar's own parser, so the dotted `--attention_config.*` flags work as generated (the lane passed the same settings as one JSON `--attention-config`). It rejects Sonar's API-server flags, so leave out `--tool-call-parser minimax_m3 --enable-auto-tool-choice` and `--default-chat-template-kwargs '{"thinking_mode": "enabled"}'`, and add:
+      On each worker tray, export `ETCD_ENDPOINTS=http://<infra-host>:2379` and `NATS_SERVER=nats://<infra-host>:4222` along with the generated environment, and run the generated flags with `python3 -m dynamo.vllm --model nvidia/MiniMax-M3-NVFP4` in place of `vllm serve nvidia/MiniMax-M3-NVFP4`. `dynamo.vllm` hands engine flags to vLLM's own parser, so the dotted `--attention_config.*` flags work as generated (the lane passed the same settings as one JSON `--attention-config`). It rejects vLLM's API-server flags, so leave out `--tool-call-parser minimax_m3 --enable-auto-tool-choice` and `--default-chat-template-kwargs '{"thinking_mode": "enabled"}'`, and add:
 
       ```bash
       --dyn-tool-call-parser minimax_m3 --dyn-reasoning-parser minimax_m3 --request-plane tcp \
@@ -741,7 +735,7 @@ presets:
       kv_offload: "off"
       features: *gb200_agentx_features
     # The builder's multi-node TP override for GB200 sets
-    # SONAR_FLASHINFER_ALLREDUCE_BACKEND=mnnvl, as the lane does at TP8.
+    # VLLM_FLASHINFER_ALLREDUCE_BACKEND=mnnvl, as the lane does at TP8.
     args: ["--max-model-len", "1048576"]
     env: *gb200_agentx_env
     json_args:
@@ -760,7 +754,7 @@ presets:
         json_args:
           "--compilation-config": { cudagraph_capture_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 256, 512, 1024, 2048] }
     runbook: |
-      The TP8 points of the GB200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp`, [SemiAnalysisAI/InferenceX#4281](https://github.com/SemiAnalysisAI/InferenceX/pull/4281)) run one aggregated Sonar worker across two 4-GPU trays with Sonar's multi-node tensor parallelism: the second tray runs the same command with its node rank and `--headless`. The KV cache stays in HBM. Both trays must be in the same NVL72 NVLink (IMEX) domain, because TP8's all-reduce runs over MNNVL.
+      The TP8 points of the GB200 AgentX lane in [SemiAnalysis InferenceX](https://inferencex.semianalysis.com/) (`minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp`, [SemiAnalysisAI/InferenceX#4281](https://github.com/SemiAnalysisAI/InferenceX/pull/4281)) run one aggregated vLLM worker across two 4-GPU trays with vLLM's multi-node tensor parallelism: the second tray runs the same command with its node rank and `--headless`. The KV cache stays in HBM. Both trays must be in the same NVL72 NVLink (IMEX) domain, because TP8's all-reduce runs over MNNVL.
 
       Draft, kernels, graph mode and engine environment match [AgentX TP4](#preset-gb200_agentx), whose runbook has the etcd, NATS, Dynamo worker and frontend steps; run the Dynamo worker on both trays. The InferenceX throughput points used synthetic rejection at the golden EAGLE3-GQA acceptance length (2.78); production serving keeps block verification, as in the command above.
 
@@ -798,17 +792,17 @@ presets:
       - "aiter"
     env:
       PYTHONNOUSERSITE: "1"
-      SONAR_ENGINE_READY_TIMEOUT_S: "3600"
-      SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-      SONAR_USE_BREAKABLE_CUDAGRAPH: "0"
-      SONAR_USE_V2_MODEL_RUNNER: "1"
-      SONAR_ROCM_USE_AITER: "1"
-      SONAR_ROCM_USE_AITER_MOE: "1"
-      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
-      SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
-      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
-      SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16: "0"
-      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB: "256"
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+      VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
+      VLLM_USE_V2_MODEL_RUNNER: "1"
+      VLLM_ROCM_USE_AITER: "1"
+      VLLM_ROCM_USE_AITER_MOE: "1"
+      VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+      VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
+      VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16: "0"
+      VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB: "256"
     json_args:
       "--speculative-config": { attention_backend: "ROCM_AITER_UNIFIED_ATTN" }
       "--attention-config": { indexer_kv_dtype: "fp8" }
@@ -864,7 +858,7 @@ presets:
       The [golden 2.78 acceptance length](https://github.com/SemiAnalysisAI/InferenceX/blob/f10885621773d1f900b6b4d002ee37863e583af3/inferencex-e2e/infx/golden_al_distribution/minimaxm3_eagle3_gqa.yaml)
       is for the three-token GQA draft with thinking enabled. Synthetic rejection
       bypasses real verification; never use it for users or accuracy evals.
-      AgentX's `AIPERF_APPLY_CHAT_TEMPLATE=true` and required `sonar:` metrics prefix
+      AgentX's `AIPERF_APPLY_CHAT_TEMPLATE=true` and required `vllm:` metrics prefix
       are benchmark-client settings, not server flags. The source's
       `dram-utilization: 0.20` is orchestration metadata, not KV offload.
 
@@ -881,6 +875,11 @@ notes:
 
 
 guide: |
+  The benchmark presets reproduce external upstream vLLM runs in their pinned
+  vendor images. Their measurements are not Sonar results. Dynamo uses the
+  upstream vLLM protocol; its unmodified sidecar does not use Sonar's gRPC
+  service namespace. Use the Sonar commands below for native deployments.
+
   ## Overview
 
   [MiniMax-M3](https://huggingface.co/MiniMaxAI/MiniMax-M3) is a frontier
@@ -938,7 +937,7 @@ guide: |
   ### NVIDIA — TP8 (8x H200 / H20)
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M3 \
+  sonar run MiniMaxAI/MiniMax-M3 \
     --tensor-parallel-size 8 \
     --block-size 128 \
     --tool-call-parser minimax_m3 \
@@ -949,7 +948,7 @@ guide: |
   #### TP8 + Expert Parallel
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M3 \
+  sonar run MiniMaxAI/MiniMax-M3 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --block-size 128 \
@@ -961,7 +960,7 @@ guide: |
   #### DP8 + Expert Parallel
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M3 \
+  sonar run MiniMaxAI/MiniMax-M3 \
     --data-parallel-size 8 \
     --enable-expert-parallel \
     --block-size 128 \
@@ -986,7 +985,7 @@ guide: |
   #### TP8 (Text or Vision)
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M3 \
+  sonar run MiniMaxAI/MiniMax-M3 \
     --tensor-parallel-size 8 \
     --block-size 128 \
     --attention-backend TRITON_ATTN \
@@ -1012,7 +1011,7 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_USE_AITER_MOE=0
   
-  sonar serve MiniMaxAI/MiniMax-M3 \
+  sonar run MiniMaxAI/MiniMax-M3 \
     --tensor-parallel-size 8 \
     --block-size 128 \
     --attention-backend TRITON_ATTN \
@@ -1025,7 +1024,7 @@ guide: |
   #### TP8 + Expert Parallel
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M3 \
+  sonar run MiniMaxAI/MiniMax-M3 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --block-size 128 \
@@ -1040,7 +1039,7 @@ guide: |
   #### DP8 + Expert Parallel
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M3 \
+  sonar run MiniMaxAI/MiniMax-M3 \
     --data-parallel-size 8 \
     --enable-expert-parallel \
     --block-size 128 \
@@ -1065,7 +1064,7 @@ guide: |
   `--max-model-len`:
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M3 \
+  sonar run MiniMaxAI/MiniMax-M3 \
     --tensor-parallel-size 8 \
     --block-size 128 \
     --max-model-len 131072        # 128K instead of the full 1M
@@ -1077,7 +1076,7 @@ guide: |
 
   ```bash
   SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
-    sonar serve MiniMaxAI/MiniMax-M3 \
+    sonar run MiniMaxAI/MiniMax-M3 \
     --block-size 128 \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 8 \
@@ -1162,7 +1161,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --backend sonar \
     --model MiniMaxAI/MiniMax-M3 \
     --endpoint /v1/completions \
@@ -1178,10 +1177,10 @@ guide: |
   [`MiniMaxAI/MiniMax-M3-MXFP8`](https://huggingface.co/MiniMaxAI/MiniMax-M3-MXFP8)
   is an MXFP8 checkpoint quantized by NVIDIA from the original FP16 weights —
   roughly half the VRAM of the BF16 release. Select the **mxfp8** variant above,
-  or pass the repo id directly to `sonar serve`:
+  or pass the repo id directly to `sonar run`:
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M3-MXFP8 \
+  sonar run MiniMaxAI/MiniMax-M3-MXFP8 \
     --tensor-parallel-size 8 \
     --block-size 128 \
     --tool-call-parser minimax_m3 \
@@ -1205,7 +1204,7 @@ guide: |
   export NCCL_MIN_NCHANNELS="${NCCL_MIN_NCHANNELS:-112}"
   export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES:-2}"
 
-  sonar serve MiniMaxAI/MiniMax-M3-MXFP8 \
+  sonar run MiniMaxAI/MiniMax-M3-MXFP8 \
     --tensor-parallel-size 8 \
     --block-size 128 \
     --language-model-only \
@@ -1229,7 +1228,7 @@ guide: |
   export SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve MiniMaxAI/MiniMax-M3-MXFP8 \
+  sonar run MiniMaxAI/MiniMax-M3-MXFP8 \
     --tensor-parallel-size 8 \
     --block-size 128 \
     --attention-backend TRITON_ATTN \
@@ -1258,7 +1257,7 @@ guide: |
   export SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
 
-  sonar serve MiniMaxAI/MiniMax-M3-MXFP8 \
+  sonar run MiniMaxAI/MiniMax-M3-MXFP8 \
     --tensor-parallel-size 4 \
     --block-size 128 \
     --language-model-only \
@@ -1290,7 +1289,7 @@ guide: |
 
   ```bash
   SONAR_FLOAT32_MATMUL_PRECISION=high \
-    sonar serve nvidia/MiniMax-M3-NVFP4 \
+    sonar run nvidia/MiniMax-M3-NVFP4 \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --block-size 128 \
@@ -1305,7 +1304,7 @@ guide: |
 
   ```bash
   SONAR_FLOAT32_MATMUL_PRECISION=high \
-    sonar serve nvidia/MiniMax-M3-NVFP4 \
+    sonar run nvidia/MiniMax-M3-NVFP4 \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --block-size 128 \
@@ -1318,7 +1317,7 @@ guide: |
 
   ```bash
   SONAR_FLOAT32_MATMUL_PRECISION=high \
-    sonar serve nvidia/MiniMax-M3-NVFP4 \
+    sonar run nvidia/MiniMax-M3-NVFP4 \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --block-size 128 \
@@ -1358,7 +1357,7 @@ guide: |
   or launch the tested TP8 baseline directly:
 
   ```bash
-  sonar serve amd/MiniMax-M3-MXFP4 \
+  sonar run amd/MiniMax-M3-MXFP4 \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --block-size 128 \

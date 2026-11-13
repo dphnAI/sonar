@@ -65,9 +65,9 @@ class TurboQuantAttentionSpec(FullAttentionSpec):
     """FullAttentionSpec for TurboQuant-compressed KV cache.
 
     Reports the true packed bytes per head and stored state through
-    ``state_content_size_bytes``. The inherited page-size calculation then
+    `state_content_size_bytes`. The inherited page-size calculation then
     budgets compressed pages correctly, including padded page allocations,
-    without changing the model's real ``head_size``.
+    without changing the model's real `head_size`.
     """
 
     k_quant: str
@@ -127,8 +127,8 @@ def _build_turboquant_attention_spec(
 ) -> TurboQuantAttentionSpec:
     """Build a TurboQuantAttentionSpec for a single attention layer.
 
-    Reports compressed geometry through ``state_content_size_bytes`` so the
-    scheduler allocates the right number of blocks and ``head_size`` remains
+    Reports compressed geometry through `state_content_size_bytes` so the
+    scheduler allocates the right number of blocks and `head_size` remains
     equal to the model's real head_dim.
     """
     return TurboQuantAttentionSpec(
@@ -424,10 +424,10 @@ class ModelCachePolicy:
         )
 
     def _cache_layer_shapes(self, num_cache_layers: int) -> tuple[list[int], list[int]]:
-        """Build per-cache-layer ``(kv_heads, head_dim)`` lists.
+        """Build per-cache-layer `(kv_heads, head_dim)` lists.
 
         When the runner has per-layer shape lists, extract the first
-        ``num_cache_layers`` entries (which correspond to the unique
+        `num_cache_layers` entries (which correspond to the unique
         layers for YOCO models).  Otherwise replicate the scalar values
         for backward-compat uniform allocation.
         """
@@ -457,9 +457,9 @@ class ModelCachePolicy:
             )
 
     def _kv_layer_size_sum(self) -> int:
-        """Sum of ``kv_heads × head_dim`` across KV cache layers.
+        """Sum of `kv_heads × head_dim` across KV cache layers.
 
-        For uniform models this equals ``num_kv_layers × kv_heads × head_dim``.
+        For uniform models this equals `num_kv_layers × kv_heads × head_dim`.
         """
         num_kv_layers = self._runner.num_sdpa_layers if self._runner.is_hybrid else self._runner.num_kv_cache_layers
         kv_heads = self._runner.kv_heads_per_layer

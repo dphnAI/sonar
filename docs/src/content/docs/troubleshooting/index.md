@@ -13,8 +13,10 @@ Reduce `--max-num-seqs`. Then set a smaller context or use
 `--max-model-len auto`. Lower `--gpu-memory-utilization` when another process
 uses the GPU.
 
-Remember that the utilization fraction applies to total GPU capacity. Sonar
-fails when that requested amount is not free.
+Explicit utilization fractions cap total device-memory use. CUDA/ROCm's
+extensible cache normally sizes itself after warmup. See
+[memory budgeting](/deployment/optimization/#set-the-gpu-memory-budget) for
+fallback paths and allocations that still need reserved headroom.
 
 ## CUDA out of memory during requests
 
@@ -58,6 +60,16 @@ export NCCL_DEBUG=INFO
 ```
 
 Do not leave verbose collective logs enabled during normal production traffic.
+
+The DP coordinator's `Received stats for out-of-order step` diagnostic is
+DEBUG-level information. By itself it does not indicate a failed request.
+
+## Unexpected GPU-CPU synchronization
+
+Set `SONAR_GPU_SYNC_CHECK=error` before launch to report unexpected
+synchronizations after warmup. The error identifies the synchronization path.
+Remove the setting after diagnosis rather than treating it as a performance
+tuning option.
 
 ## Tool calls or reasoning text parse incorrectly
 

@@ -8,7 +8,7 @@ use clap::Parser;
 use futures::StreamExt as _;
 use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
-use sonar_llm::{FinishReason, GenerateOutputStream, GenerateRequest, Llm};
+use sonar_llm::{EngineCoreLlm, FinishReason, GenerateOutputStream, GenerateRequest};
 use tokio::time::timeout;
 use tracing_subscriber::EnvFilter;
 
@@ -48,7 +48,7 @@ fn init_tracing() {
 fn build_request(request_id: String, max_tokens: u32) -> GenerateRequest {
     GenerateRequest {
         request_id,
-        prompt_token_ids: PROMPT_TOKEN_IDS.to_vec(),
+        prompt_token_ids: PROMPT_TOKEN_IDS.into(),
         sampling_params: EngineCoreSamplingParams {
             max_tokens,
             ..EngineCoreSamplingParams::for_test()
@@ -136,7 +136,7 @@ async fn main() -> Result<()> {
     println!("output_address={}", client.output_address());
     println!("engine_identities={:x?}", client.engine_identities());
 
-    let llm = Llm::new(client);
+    let llm = EngineCoreLlm::new(client);
     let request = build_request(request_id.clone(), args.max_tokens);
     println!("request_id={request_id}");
     println!("prompt_token_ids={PROMPT_TOKEN_IDS:?}");

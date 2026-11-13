@@ -72,7 +72,7 @@ strategy_overrides:
   # node, PP2 across nodes, plus DCP=8 for decode-context parallel and the
   # full FP8 / chunked-prefill tuning.
   multi_node_tp_pp:
-    sonar_args:
+    vllm_args:
       - "--dtype"
       - "bfloat16"
       - "--quantization"
@@ -107,7 +107,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### AMD ROCm
@@ -127,7 +127,7 @@ guide: |
 
   ```bash
   # node 0 (start Ray on both nodes first)
-  sonar serve moonshotai/Kimi-K2-Instruct \
+  sonar run moonshotai/Kimi-K2-Instruct \
     --trust-remote-code \
     --tokenizer-mode auto \
     --tensor-parallel-size 8 \
@@ -153,7 +153,7 @@ guide: |
 
   ```bash
   # node 0
-  sonar serve moonshotai/Kimi-K2-Instruct \
+  sonar run moonshotai/Kimi-K2-Instruct \
     --port 8000 --served-model-name kimi-k2 \
     --trust-remote-code \
     --data-parallel-size 16 \
@@ -163,12 +163,11 @@ guide: |
     --enable-expert-parallel \
     --max-num-batched-tokens 8192 \
     --max-num-seqs 256 \
-    --gpu-memory-utilization 0.85 \
     --enable-auto-tool-choice \
     --tool-call-parser kimi_k2
 
   # node 1
-  sonar serve moonshotai/Kimi-K2-Instruct \
+  sonar run moonshotai/Kimi-K2-Instruct \
     --headless \
     --data-parallel-start-rank 8 \
     --port 8000 --served-model-name kimi-k2 \
@@ -180,7 +179,6 @@ guide: |
     --enable-expert-parallel \
     --max-num-batched-tokens 8192 \
     --max-num-seqs 256 \
-    --gpu-memory-utilization 0.85 \
     --enable-auto-tool-choice \
     --tool-call-parser kimi_k2
   ```
@@ -189,7 +187,7 @@ guide: |
 
   ```bash
   export SAFETENSORS_FAST_GPU=1
-  sonar serve moonshotai/Kimi-K2-Instruct \
+  sonar run moonshotai/Kimi-K2-Instruct \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --enable-auto-tool-choice \
@@ -200,15 +198,16 @@ guide: |
   - `--max-model-len` preserves memory; `--max-model-len=65536` is usually good for most scenarios.
   - `--max-num-batched-tokens` balances throughput vs latency. `32768` is good for prompt-heavy
     workloads; reduce to 16k or 8k to cut activation memory and decrease latency.
-  - Sonar conservatively uses 90% of GPU memory. Set `--gpu-memory-utilization=0.95` to
-    maximize KV cache.
+  - With extensible KV caches on CUDA and ROCm, Sonar sizes the cache from memory free after warmup, so
+    `--gpu-memory-utilization` defaults to 1.0 with extensible KV caches; other cache paths keep their platform default. Set it explicitly when the GPU is shared
+    ([details](https://docs.vllm.ai/en/latest/configuration/optimization/#gpu-memory-utilization)).
 
   ## Benchmarking
 
   ### FP8 Benchmark on 16xH800
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model moonshotai/Kimi-K2-Instruct \
     --dataset-name random \
     --random-input-len 1000 \
@@ -222,7 +221,7 @@ guide: |
   ### FP8 Benchmark on 16xH200
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model moonshotai/Kimi-K2-Instruct \
     --dataset-name random \
     --random-input-len 8000 \

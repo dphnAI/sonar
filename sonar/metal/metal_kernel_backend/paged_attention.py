@@ -5,14 +5,14 @@
 The wrapper intercepts mlx_lm attention modules and dispatches to the
 appropriate Metal attention backend based on the module's structure:
 
-- SDPA (Qwen3, Llama, Mistral, …) → ``attention_sdpa.py``
-- Linear attention (Qwen3.5 GatedDeltaNet, …) → ``attention_linear.py`` (stub)
+- SDPA (Qwen3, Llama, Mistral, …) → `attention_sdpa.py`
+- Linear attention (Qwen3.5 GatedDeltaNet, …) → `attention_linear.py` (stub)
 - Future attention types (MLA, …) → add detection + forward function
 
 All operations use MLX arrays end-to-end — no PyTorch MPS bridge.
 
-Reuses ``PagedAttentionContext``, ``OffsetCache``, ``prepare_unified``,
-``clear_context`` from ``paged_attention_common``.
+Reuses `PagedAttentionContext`, `OffsetCache`, `prepare_unified`,
+`clear_context` from `paged_attention_common`.
 """
 
 from __future__ import annotations
@@ -40,14 +40,14 @@ from sonar.metal.paged_attention_common import (
 class MetalKernelPagedAttentionWrapper(nn.Module):
     """Wraps an mlx_lm Attention module to use native Metal paged KV.
 
-    Uses ``object.__setattr__`` to bypass MLX nn.Module's ``__setattr__``.
+    Uses `object.__setattr__` to bypass MLX nn.Module's `__setattr__`.
 
-    When no ``PagedAttentionContext`` is set, falls back to original attention.
+    When no `PagedAttentionContext` is set, falls back to original attention.
 
     Return contract:
-        - Standard models: returns ``mx.array`` (attention output).
-        - YOCO models (e.g. Gemma4): when ``shared_kv`` is in kwargs,
-          returns ``(output, kv_pair, offset)`` so the caller can forward
+        - Standard models: returns `mx.array` (attention output).
+        - YOCO models (e.g. Gemma4): when `shared_kv` is in kwargs,
+          returns `(output, kv_pair, offset)` so the caller can forward
           the K/V pair to the next same-type layer.  The return type is
           selected by kwarg presence rather than a class flag because
           mlx_lm's attention signature is fixed.
@@ -125,16 +125,16 @@ def patch_model_attention_metal_kernel(
     only_layers: list[int] | None = None,
 ) -> int:
     """Walk model layers and replace each attention module with a
-    ``MetalKernelPagedAttentionWrapper``.
+    `MetalKernelPagedAttentionWrapper`.
 
     Supports hybrid models (e.g. Qwen3.5) where different layers use
-    different attribute names (``self_attn``, ``linear_attn``, etc.).
+    different attribute names (`self_attn`, `linear_attn`, etc.).
 
     Args:
         cache_idx_map: Optional mapping from model layer_idx to compact
             cache index.  Used for hybrid models so that a compact
-            ``MetalPagedKVCache`` (SDPA layers only) is indexed correctly.
-            When ``None``, ``layer_idx`` is used directly.
+            `MetalPagedKVCache` (SDPA layers only) is indexed correctly.
+            When `None`, `layer_idx` is used directly.
         only_layers: If provided, only patch these layer indices and skip
             the rest.  Used by hybrid backend to avoid wrapping linear
             attention layers that have no kernel implementation yet.

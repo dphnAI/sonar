@@ -162,7 +162,7 @@ def render_message(
         if response_format:
             content_developer += "\n\n" + response_format_template.format(schema=to_json(response_format))
 
-        content_developer += "\n\n# The user's message is: {}".format(content)
+        content_developer += f"\n\n# The user's message is: {content}"
 
         prompt += user_msg_template.format(content=content_developer)
         if index == last_user_idx and thinking_mode == "thinking":

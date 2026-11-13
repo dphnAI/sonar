@@ -44,6 +44,7 @@ def _resolve_on_rocm(config, *, kernels_available: bool = True, mi3xx: bool = Tr
             return_value=kernels_available,
         ),
         patch("sonar.platforms.rocm.on_mi3xx", return_value=mi3xx),
+        patch("sonar.platforms.rocm.on_gfx1151", return_value=False),
     ):
         return _resolve_gdn_prefill_backend(config)
 

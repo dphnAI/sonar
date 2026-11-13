@@ -154,7 +154,7 @@ write_commit_index() {
 
   install_command="uv pip install sonar --extra-index-url ${public_root}/commits/${commit} --index-strategy first-index"
   if [[ "$PLATFORM_BACKEND" == cuda ]]; then
-    install_command+=" --torch-backend cu130"
+    install_command+=" --torch-backend cu132"
   fi
   python3 "${publication_tools}/generate_nightly_index.py" \
     --entry-file "$entries" \
@@ -305,7 +305,7 @@ nightly_dir="${index_root}/nightly/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}"
 mkdir -p "$package_dir" "$nightly_dir"
 install_command="uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}/simple --index-strategy first-index"
 case "$PLATFORM_BACKEND" in
-  cuda) install_command+=" --torch-backend cu130" ;;
+  cuda) install_command+=" --torch-backend cu132" ;;
   cpu) install_command="curl -LsSf https://sonar.dphn.ai/install.sh | sh -s -- --backend cpu --channel nightly" ;;
 esac
 python3 "${publication_tools}/generate_nightly_index.py" \

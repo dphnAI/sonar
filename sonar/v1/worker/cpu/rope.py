@@ -5,7 +5,7 @@ from typing import cast
 import torch
 import torch.nn as nn
 
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 from sonar.config import ModelConfig
 from sonar.model_executor.models.interfaces import SupportsMRoPE
 

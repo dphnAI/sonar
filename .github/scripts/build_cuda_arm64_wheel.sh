@@ -21,7 +21,7 @@ docker buildx build \
   --file "$dockerfile" \
   --target main-wheel-export \
   --output "type=local,dest=${output_dir}" \
-  --build-arg "CUDA_VERSION=${CUDA_VERSION:-13.0.3}" \
+  --build-arg "CUDA_VERSION=${CUDA_VERSION:-13.2.1}" \
   --build-arg "PYTHON_VERSION=${PYTHON_VERSION:-3.12}" \
   --build-arg "torch_cuda_arch_list=${TORCH_CUDA_ARCH_LIST:-8.0 8.6 8.9 9.0 10.0 11.0 12.0+PTX}" \
   --build-arg "max_jobs=${MAX_JOBS:-64}" \

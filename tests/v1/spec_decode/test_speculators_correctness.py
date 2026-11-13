@@ -24,7 +24,6 @@ class SpeculatorTestConfig:
     expected_per_pos_acceptance_rates: tuple[float, ...]
     per_pos_rtol: float
     quantization: str | None = None
-    parallel_drafting: bool | None = None
 
 
 DFLASH_CONFIG = SpeculatorTestConfig(
@@ -40,19 +39,6 @@ DFLASH_CONFIG = SpeculatorTestConfig(
     quantization="fp8_per_tensor",
 )
 
-PEAGLE_CONFIG = SpeculatorTestConfig(
-    model_path="nm-testing/qwen3-8b-peagle-speculators",
-    method="eagle3",
-    display_name="PEagle",
-    expected_gsm8k_accuracy=0.88,
-    accuracy_rtol=0.05,
-    expected_acceptance_len=2.27,
-    acceptance_len_rtol=0.20,
-    expected_per_pos_acceptance_rates=(0.66, 0.36, 0.18, 0.09),
-    per_pos_rtol=0.20,
-    parallel_drafting=True,
-)
-
 QWEN3_EAGLE3_CONFIG = SpeculatorTestConfig(
     model_path=("inference-optimization/Qwen3-8B-from-Qwen3-8B_regen-speculators.eagle3-qwen3arch-ckpt1"),
     method="eagle3",
@@ -65,24 +51,9 @@ QWEN3_EAGLE3_CONFIG = SpeculatorTestConfig(
     per_pos_rtol=0.10,
 )
 
-QWEN3_PEAGLE_CONFIG = SpeculatorTestConfig(
-    model_path="inference-optimization/Qwen3-8B-speculators.peagle-qwen3arch-ckpt4",
-    method="eagle3",
-    display_name="Qwen3 PEagle",
-    expected_gsm8k_accuracy=0.88,
-    accuracy_rtol=0.05,
-    expected_acceptance_len=3.42,
-    acceptance_len_rtol=0.15,
-    expected_per_pos_acceptance_rates=(0.78, 0.59, 0.43, 0.29, 0.18, 0.10, 0.05),
-    per_pos_rtol=0.10,
-    parallel_drafting=True,
-)
-
 SPECULATOR_CONFIGS = [
     pytest.param(DFLASH_CONFIG, id="dflash"),
-    pytest.param(PEAGLE_CONFIG, id="peagle"),
     pytest.param(QWEN3_EAGLE3_CONFIG, id="qwen3arch_eagle3"),
-    pytest.param(QWEN3_PEAGLE_CONFIG, id="qwen3arch_peagle"),
 ]
 
 
@@ -136,10 +107,9 @@ def test_speculators_model(sonar_runner, example_prompts, monkeypatch, config):
     Verifies:
     1. Speculative config is automatically initialized from speculators config
     2. Method is detected correctly
-    3. parallel_drafting is set correctly (if applicable)
-    4. The draft model path is correctly set
-    5. Speculative tokens count is valid
-    6. Text generation works with speculative decoding enabled
+    3. The draft model path is correctly set
+    4. Speculative tokens count is valid
+    5. Text generation works with speculative decoding enabled
     """
     monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
@@ -156,10 +126,6 @@ def test_speculators_model(sonar_runner, example_prompts, monkeypatch, config):
 
         spec_config = sonar_config.speculative_config
         assert spec_config.method == config.method, f"Expected method='{config.method}', got '{spec_config.method}'"
-        if config.parallel_drafting is not None:
-            assert spec_config.parallel_drafting is config.parallel_drafting, (
-                f"Expected parallel_drafting={config.parallel_drafting} for {config.display_name} model"
-            )
         assert spec_config.num_speculative_tokens > 0, (
             f"Expected positive speculative tokens, got {spec_config.num_speculative_tokens}"
         )
@@ -188,7 +154,6 @@ def test_speculators_correctness(monkeypatch, config):
         trust_remote_code=True,
         max_model_len=4096,
         max_num_seqs=128,
-        gpu_memory_utilization=0.85,
         enforce_eager=False,
         disable_log_stats=False,
     )

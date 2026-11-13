@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-
 import logging
 from typing import Literal
 
@@ -12,13 +11,16 @@ from sonar.config.model import ModelConfig
 from sonar.config.parallel import ParallelConfig
 from sonar.config.speculative import SpeculativeConfig
 
-EAGLE3_DRAFT = "yuhuili/EAGLE3-LLaMA3.1-Instruct-8B"
-LLAMA3_TARGET = "unsloth/Meta-Llama-3.1-8B-Instruct"
-AR_MODEL = "JackFram/llama-68m"
-DFLASH_DRAFT = "z-lab/Qwen3-4B-DFlash-b16"
-DFLASH_TARGET = "Qwen/Qwen3-4B"
-DSPARK_DRAFT = "deepseek-ai/dspark_qwen3_8b_block7"
-DSPARK_TARGET = "Qwen/Qwen3-8B"
+# All repos are public; only config/tokenizer-config files are fetched.
+EAGLE3_DRAFT = "vllm-project/EAGLE3-LLaMA3.1-Instruct-8B"  # max_position_embeddings=2048
+LLAMA3_TARGET = "unsloth/Meta-Llama-3.1-8B-Instruct"  # max_position_embeddings=131072
+AR_MODEL = "vllm-project/llama-68m"  # max_position_embeddings=2048
+DFLASH_DRAFT = "z-lab/Qwen3-4B-DFlash-b16"  # max_position_embeddings=40960
+DFLASH_TARGET = "Qwen/Qwen3-4B"  # max_position_embeddings=40960
+DSPARK_DRAFT = "deepseek-ai/dspark_qwen3_8b_block7"  # max_position_embeddings=40960
+DSPARK_TARGET = "Qwen/Qwen3-8B"  # max_position_embeddings=40960
+# Ships an MTP layer; max_position_embeddings=262144 in its nested text_config.
+MTP_TARGET = "Qwen/Qwen3.5-0.8B"
 
 _LOGGER = "sonar.config.speculative"
 _OVERRIDE_MSG = "Overriding draft model max_position_embeddings"
@@ -137,6 +139,38 @@ def test_eagle_draft_inherits_target_max_model_len(
     draft_hf_config = speculative_config.draft_model_config.hf_config
     assert draft_hf_config.max_position_embeddings == target_model_config.max_model_len
     assert _override_logged(sonar_caplog)
+
+
+@pytest.mark.cpu_test
+def test_mtp_draft_inherits_target_max_model_len(
+    sonar_caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """MTP drafts get none of the target's dict hf_overrides; the raised value
+    must land in the draft's nested text config."""
+    target_model_config = ModelConfig(
+        MTP_TARGET,
+        hf_overrides={"text_config": {"max_position_embeddings": 524288}},
+    )
+    assert target_model_config.max_model_len == 524288
+    speculative_config = SpeculativeConfig(
+        target_model_config=target_model_config,
+        target_parallel_config=ParallelConfig(),
+        method="mtp",
+        num_speculative_tokens=1,
+    )
+    draft_config = speculative_config.draft_model_config
+    draft_text_config = draft_config.hf_text_config
+    assert draft_text_config.max_position_embeddings == 524288
+    assert _override_logged(sonar_caplog)
+
+    # The V2 model runner's draft limit must also read the nested text config.
+    assert draft_config.hf_config is not draft_text_config
+    monkeypatch.setattr(
+        "sonar.config.speculative._rope_only_sizes_cache",
+        lambda config: config is draft_text_config,
+    )
+    assert speculative_config.speculator_config.max_model_len is None
 
 
 @pytest.mark.cpu_test

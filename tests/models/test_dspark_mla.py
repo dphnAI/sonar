@@ -212,7 +212,7 @@ def test_context_kv_weights_are_loaded_as_merged_linear_shards():
     ],
 )
 def test_v41_dspark_loads_linear_scales(monkeypatch, scale_dtype, checkpoint_name, runtime_module, shard_id):
-    """Checkpoint ``.scale`` maps to the quant method's scale parameter and
+    """Checkpoint `.scale` maps to the quant method's scale parameter and
     loads untouched. MXFP8 block-scale expansion lives in the KMxfp8Static
     loader (see tests/quantization/test_modelopt.py), not in load_weights."""
     from sonar.models.deepseek_v41.nvidia import dspark
@@ -256,7 +256,7 @@ def test_v41_dspark_loads_linear_scales(monkeypatch, scale_dtype, checkpoint_nam
         named_parameters=lambda: params.items(),
         process_weights_after_loading=lambda: None,
     )
-    draft._remap_dspark_name = lambda name: (dspark.DSparkDeepseekV4ForCausalLM._remap_dspark_name(draft, name))
+    draft._remap_dspark_name = lambda name: dspark.DSparkDeepseekV4ForCausalLM._remap_dspark_name(draft, name)
     monkeypatch.setattr(dspark, "fused_moe_make_expert_params_mapping", lambda *a, **kw: [])
 
     loaded = dspark.DSparkDeepseekV4ForCausalLM.load_weights(draft, [(checkpoint_name, checkpoint_scale)])
@@ -304,7 +304,7 @@ def test_dsv4_dspark_fused_moe_expert_mapping_includes_redundant_experts(
         named_parameters=lambda: [],
         process_weights_after_loading=lambda: None,
     )
-    draft._remap_dspark_name = lambda name: (dspark.DSparkDeepseekV4ForCausalLM._remap_dspark_name(draft, name))
+    draft._remap_dspark_name = lambda name: dspark.DSparkDeepseekV4ForCausalLM._remap_dspark_name(draft, name)
     monkeypatch.setattr(
         dspark,
         "fused_moe_make_expert_params_mapping",
@@ -368,7 +368,7 @@ def test_v41_context_wkv_loads_each_layer_into_both_projections(monkeypatch):
         ),
         named_parameters=lambda: params.items(),
     )
-    draft._remap_dspark_name = lambda name: (dsv41_dspark.DSparkDeepseekV4ForCausalLM._remap_dspark_name(draft, name))
+    draft._remap_dspark_name = lambda name: dsv41_dspark.DSparkDeepseekV4ForCausalLM._remap_dspark_name(draft, name)
     monkeypatch.setattr(dsv41_dspark, "fused_moe_make_expert_params_mapping", lambda *a, **kw: [])
     weights = [torch.arange(20).view(4, 5).float() + i * 20 for i in range(3)]
     loaded = dsv41_dspark.DSparkDeepseekV4ForCausalLM.load_weights(

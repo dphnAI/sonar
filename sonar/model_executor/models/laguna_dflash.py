@@ -28,6 +28,7 @@ from sonar.model_executor.model_loader.weight_utils import (
     maybe_remap_kv_scale_name,
 )
 from sonar.model_executor.models.interfaces import EagleModelMixin, SupportsEagle3
+from sonar.model_executor.utils import refill_derived
 from sonar.multimodal.inputs import NestedTensors
 from sonar.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
 
@@ -68,6 +69,10 @@ class DFlashLagunaModel(DFlashQwen3Model, EagleModelMixin):
         prefix: str = "",
     ) -> None:
         nn.Module.__init__(self)
+        # derived from the weights after loading, refilled in place on reloads
+        self._kv_weights: torch.Tensor
+        self._kv_biases: torch.Tensor | None = None
+        self._input_layernorm_weights: torch.Tensor
         speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
@@ -153,23 +158,18 @@ class DFlashLagunaModel(DFlashQwen3Model, EagleModelMixin):
     ) -> None:
         self._context_qkv_projs = [a.qkv_proj for a in layers_attn]
         self._context_q_sizes = [a.q_size for a in layers_attn]
+        kv_weights = None
+        kv_biases = None
         if all(isinstance(proj.quant_method, UnquantizedLinearMethod) for proj in self._context_qkv_projs):
-            self._kv_weights: torch.Tensor | None = torch.stack(
-                [a.qkv_proj.weight[a.q_size :] for a in layers_attn], dim=0
-            ).contiguous()
+            kv_weights = torch.stack([a.qkv_proj.weight[a.q_size :] for a in layers_attn], dim=0).contiguous()
             if has_bias:
-                self._kv_biases: torch.Tensor | None = torch.stack(
-                    [a.qkv_proj.bias[a.q_size :] for a in layers_attn], dim=0
-                ).contiguous()
-            else:
-                self._kv_biases = None
-        else:
-            self._kv_weights = None
-            self._kv_biases = None
-        self._input_layernorm_weights = torch.stack(
-            [layer.input_layernorm.weight.data for layer in self.layers], dim=0
-        ).contiguous()
-        self._k_norm_weights = torch.stack([a.k_norm.weight.data for a in layers_attn], dim=0).contiguous()
+                kv_biases = torch.stack([a.qkv_proj.bias[a.q_size :] for a in layers_attn], dim=0).contiguous()
+        refill_derived(self, "_kv_weights", kv_weights)
+        refill_derived(self, "_kv_biases", kv_biases)
+        input_norms = [layer.input_layernorm.weight.data for layer in self.layers]
+        refill_derived(self, "_input_layernorm_weights", torch.stack(input_norms).contiguous())
+        k_norms = [a.k_norm.weight.data for a in layers_attn]
+        refill_derived(self, "_k_norm_weights", torch.stack(k_norms).contiguous())
 
     def _project_context_kv(
         self,
@@ -337,5 +337,7 @@ class DFlashLagunaForCausalLM(nn.Module, SupportsEagle3):
         loaded_weight_names = loader.load_weights(model_weights.items())
         loaded_weight_names.add("lm_head.weight")
         loaded_weight_names.add("model.embed_tokens.weight")
-        self.model._build_fused_kv_buffers()
         return loaded_weight_names
+
+    def process_weights_after_loading(self) -> None:
+        self.model._build_fused_kv_buffers()

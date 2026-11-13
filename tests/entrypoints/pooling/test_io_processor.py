@@ -9,7 +9,7 @@ from sonar import PoolingParams
 from sonar.entrypoints.pooling.base.io_processor import PoolingIOProcessor
 from sonar.entrypoints.pooling.offline import PoolingOfflineMixin
 from sonar.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
-from sonar.entrypoints.pooling.typing import OfflineEncodeInputsContext
+from sonar.entrypoints.pooling.types import OfflineEncodeInputsContext
 from sonar.exceptions import SonarValidationError
 from sonar.renderers import TokenizeParams
 

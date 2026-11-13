@@ -42,7 +42,7 @@ class MoEPermuteScratch:
         self.device = self.expert_first_token_offset.device
 
     def reserve(self, expanded_rows: int) -> None:
-        """Ensure capacity for ``expanded_rows`` (num_tokens * topk) rows."""
+        """Ensure capacity for `expanded_rows` (num_tokens * topk) rows."""
         if expanded_rows <= self.max_expanded_rows:
             return
         if is_workspace_manager_initialized() and current_workspace_manager().is_locked():

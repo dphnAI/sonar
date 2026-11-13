@@ -6,9 +6,9 @@ Two fused paths fold the packed causal conv1d update, the gated delta-rule
 recurrence and the gated output RMSNorm into one launch, updating the conv
 state and the recurrent state in place:
 
-* the Sonar HIP kernel ``ops.fused_kda_decode`` (gfx942 / gfx950), and
-* AITER's Gluon kernels behind ``rocm_aiter_ops`` (CDNA4+): the packed
-  non-spec decode and the speculative-decode ``fused_recurrent_kda``.
+* the Sonar HIP kernel `ops.fused_kda_decode` (gfx942 / gfx950), and
+* AITER's Gluon kernels behind `rocm_aiter_ops` (CDNA4+): the packed
+  non-spec decode and the speculative-decode `fused_recurrent_kda`.
 
 Every output of each is compared against the unfused path the AMD layer falls
 back to, with the argument layout the layer itself uses.
@@ -65,8 +65,8 @@ def _requires_kernel() -> None:
 class KdaDecodeInputs:
     """One decode step of a Kimi-K3 KDA layer, in the layer's own layout.
 
-    ``num_spec`` > 0 sizes the conv state for speculative decoding
-    (``conv_width - 1 + num_spec`` taps, as ``kda_state_shape`` does).
+    `num_spec` > 0 sizes the conv state for speculative decoding
+    (`conv_width - 1 + num_spec` taps, as `kda_state_shape` does).
     """
 
     def __init__(
@@ -287,7 +287,7 @@ def test_fused_kda_decode_without_output_norm() -> None:
 def test_fused_kda_decode_skips_null_block_padding() -> None:
     """A CUDA-graph decode batch is padded with NULL_BLOCK_ID (0).
 
-    gdn_attn.py fills the tail of ``non_spec_state_indices_tensor`` with 0, and
+    gdn_attn.py fills the tail of `non_spec_state_indices_tensor` with 0, and
     the Triton chain zeroes those rows' output while leaving slot 0 alone. The
     fused kernel must do the same rather than read-modify-write slot 0's state
     once per padded row.
@@ -315,13 +315,16 @@ def test_fused_kda_decode_skips_null_block_padding() -> None:
 def test_decode_weights_staged_after_loading(dist_init, monkeypatch, state_dtype: str, aiter_available: bool) -> None:
     """The fused-decode weight copies must not depend on the weight loaders.
 
-    Loaders that bypass ``weight_loader`` (e.g. ``--load-format dummy``) left
+    Loaders that bypass `weight_loader` (e.g. `--load-format dummy`) left
     them uninitialized, so decode could read NaN. Loading runs with grad mode
-    on, so the copies must also stay out of autograd.
+    on, so the copies must also stay out of autograd. A kernel-format reload
+    overwrites the weights in place and reruns the post-load hook, which must
+    re-stage the copies at the addresses captured graphs read.
     """
     _requires_kernel()
     from sonar._aiter_ops import rocm_aiter_ops
     from sonar.config import set_current_sonar_config
+    from sonar.model_executor.model_loader.reload.inplace import reload_weights
     from sonar.model_executor.model_loader.utils import process_weights_after_loading
     from sonar.models.kimi_k3.amd.kda import KimiK3DeltaAttention
     from sonar.models.kimi_k3.amd.ops.kda_chunk import is_fused_kda_chunk_supported
@@ -358,8 +361,10 @@ def test_decode_weights_staged_after_loading(dist_init, monkeypatch, state_dtype
         return
     assert layer.decode_conv1d_weight is not None
     # The AITER Gluon decode path takes o_norm.weight directly, so only the HIP
-    # kernel gets an fp32 norm copy.
-    assert (layer.decode_norm_weight is None) == layer.use_aiter_decode
+    # kernel gets an fp32 norm copy. Without strided-state support, AITER decode
+    # falls back to the HIP kernel.
+    aiter_only = layer.use_aiter_decode and layer.aiter_supports_strided_state
+    assert (layer.decode_norm_weight is None) == aiter_only
     with torch.no_grad():
         for param in layer.parameters():
             param.normal_()
@@ -369,14 +374,30 @@ def test_decode_weights_staged_after_loading(dist_init, monkeypatch, state_dtype
 
     process_weights_after_loading(torch.nn.ModuleList([layer]), sonar_config.model_config, torch.device("cuda"))
 
-    dim = layer.local_projection_size
-    conv_weights = layer.conv1d.weight.squeeze(1)
-    expected_conv = torch.stack([conv_weights[i * dim : (i + 1) * dim].transpose(0, 1) for i in range(3)])
-    torch.testing.assert_close(layer.decode_conv1d_weight, expected_conv, atol=0, rtol=0)
-    if layer.decode_norm_weight is not None:
-        torch.testing.assert_close(layer.decode_norm_weight, layer.o_norm.weight.float(), atol=0, rtol=0)
-        assert not layer.decode_norm_weight.requires_grad
-    assert not layer.decode_conv1d_weight.requires_grad
+    def check_staged() -> None:
+        dim = layer.local_projection_size
+        conv_weights = layer.conv1d.weight.squeeze(1)
+        expected_conv = torch.stack([conv_weights[i * dim : (i + 1) * dim].transpose(0, 1) for i in range(3)])
+        torch.testing.assert_close(layer.decode_conv1d_weight, expected_conv, atol=0, rtol=0)
+        if layer.decode_norm_weight is not None:
+            torch.testing.assert_close(layer.decode_norm_weight, layer.o_norm.weight.float(), atol=0, rtol=0)
+            assert not layer.decode_norm_weight.requires_grad
+        assert not layer.decode_conv1d_weight.requires_grad
+
+    check_staged()
+    staged_ptrs = [buf.data_ptr() for buf in layer.buffers()]
+    model = torch.nn.ModuleList([layer])
+    new_weights = [(name, torch.randn_like(p)) for name, p in model.named_parameters()]
+    with torch.no_grad():
+        reload_weights(
+            sonar_config,
+            model,
+            new_weights,
+            weights_path=None,
+            is_checkpoint_format=False,
+        )
+    check_staged()
+    assert [buf.data_ptr() for buf in layer.buffers()] == staged_ptrs
 
 
 # --------------------------------------------------------------------------
@@ -452,7 +473,7 @@ def test_aiter_packed_decode_leaves_untouched_slots_alone() -> None:
 def test_aiter_packed_decode_skips_null_block_padding() -> None:
     """A CUDA-graph decode batch is padded with NULL_BLOCK_ID (0).
 
-    gdn_attn.py fills the tail of ``non_spec_state_indices_tensor`` with 0 and
+    gdn_attn.py fills the tail of `non_spec_state_indices_tensor` with 0 and
     the Triton chain leaves slot 0 alone; the fused kernel's pad_slot_guard
     must do the same rather than read-modify-write slot 0 once per padded row.
     """
@@ -478,10 +499,10 @@ def test_aiter_packed_decode_skips_null_block_padding() -> None:
 
 
 class SpecBatch:
-    """A spec-only KDA batch: ``num_spec + 1`` query tokens per request at most.
+    """A spec-only KDA batch: `num_spec + 1` query tokens per request at most.
 
-    ``seq_lens`` are the per-request query lengths, ``num_accepted`` the tokens
-    verified in the previous step; ``state_indices`` is the [N, num_spec + 1]
+    `seq_lens` are the per-request query lengths, `num_accepted` the tokens
+    verified in the previous step; `state_indices` is the [N, num_spec + 1]
     per-token slot table the GDN metadata hands the layer.
     """
 

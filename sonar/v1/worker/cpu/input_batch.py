@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 import torch
 
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 from sonar.utils import random_uuid
 
 if TYPE_CHECKING:

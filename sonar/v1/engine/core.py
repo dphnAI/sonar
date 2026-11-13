@@ -7,7 +7,7 @@ import signal
 import threading
 import time
 from collections import defaultdict, deque
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Sequence, Sized
 from concurrent.futures import Future
 from contextlib import ExitStack, contextmanager
 from enum import IntEnum
@@ -24,6 +24,8 @@ import zmq
 import sonar.envs as envs
 from sonar.config import ParallelConfig, SonarConfig
 from sonar.config.pooler import POOLER_CONFIG_LOG_FIELDS
+from sonar.config.utils import hash_config
+from sonar.config.watermarking import warn_watermarking_override
 from sonar.distributed import (
     cleanup_dist_env_and_memory,
     stateless_destroy_torch_distributed_process_group,
@@ -56,6 +58,7 @@ from sonar.utils.watch_dog import get_watch_dog, start_watch_dog
 from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
 from sonar.v1.core import kv_cache_utils
 from sonar.v1.core.kv_cache_planning import (
+    finalize_extensible_kv_cache,
     get_global_kv_cache_groups,
     get_kv_cache_configs,
 )
@@ -112,7 +115,6 @@ from sonar.v1.outputs import ModelRunnerOutput
 from sonar.v1.request import Request, RequestStatus
 from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder, bytestr
 from sonar.v1.structured_output import StructuredOutputManager
-from sonar.v1.utils import compute_iteration_details
 from sonar.version import __version__ as SONAR_VERSION
 
 logger = init_logger(__name__)
@@ -125,11 +127,6 @@ _R = TypeVar("_R")  # Return type for collective_rpc
 class EngineCore:
     """Inner loop of Sonar's Engine."""
 
-    # Class-level defaults so tests can build an EngineCore with
-    # object.__new__.
-    _checkpoint_state = CheckpointState.RUNNING
-    _checkpoint_error: str | None = None
-
     def __init__(
         self,
         sonar_config: SonarConfig,
@@ -138,6 +135,12 @@ class EngineCore:
         executor_fail_callback: Callable | None = None,
         include_finished_set: bool = False,
     ):
+        # Process checkpoint lifecycle (prepare/restore).
+        self._checkpoint_state = CheckpointState.RUNNING
+        self._checkpoint_error: str | None = None
+        # Whether the workers' extensible KV cache holds nothing to keep.
+        self._kv_cache_reclaimable = False
+
         # plugins need to be loaded at the engine/scheduler level too
         from sonar.plugins import load_general_plugins
 
@@ -239,7 +242,11 @@ class EngineCore:
             )
 
         self.step_fn = self.step if self.batch_queue is None else self.step_with_batch_queue
-        self.async_scheduling = sonar_config.scheduler_config.async_scheduling
+        scheduler_config = sonar_config.scheduler_config
+        self.async_scheduling = scheduler_config.async_scheduling
+        self.prefill_schedule_interval = scheduler_config.prefill_schedule_interval
+        # Steps that scheduled tokens; empty schedule() calls don't count.
+        self.num_executed_steps = 0
 
         self.aborts_queue = queue.Queue[list[str]]()
 
@@ -282,6 +289,12 @@ class EngineCore:
         # capture full cudagraphs initialize a minimal KV cache during it.
         # Attention-free models resolve the default so layout reads never precede
         # resolution.
+        if sonar_config.cache_config.enable_extensible_kv_cache:
+            # Disable it, everywhere, where it cannot be used.
+            executor = self.model_executor
+            reason = executor.extensible_kv_cache_unsupported_reason(kv_cache_specs)
+            if reason is not None:
+                executor.disable_extensible_kv_cache(reason)
         layout = resolve_kv_cache_layout(
             sonar_config,
             self.model_executor.get_supported_kv_cache_layouts(),
@@ -338,6 +351,10 @@ class EngineCore:
             sonar_config.cache_config.block_size = min(
                 participating if participating else [g.kv_cache_spec.block_size for g in kv_cache_groups]
             )
+        # With an extensible KV cache, `num_blocks` is the reserved capacity
+        # until the post-warmup measurement below.
+        extensible = sonar_config.cache_config.enable_extensible_kv_cache
+        if kv_cache_groups and not extensible:
             update_kv_cache_capacity(sonar_config, scheduler_kv_cache_config)
 
         sonar_config.validate_block_size()
@@ -357,6 +374,22 @@ class EngineCore:
             kv_cache_config.cache_hit_alignment_tokens = cache_hit_alignment_tokens
 
         self.model_executor.initialize_from_config(kv_cache_configs)
+        compilation_times = []
+        if not envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH:
+            compilation_times = self.model_executor.compile_or_warm_up_model()
+        if extensible:
+            num_blocks = finalize_extensible_kv_cache(
+                sonar_config,
+                kv_cache_configs,
+                scheduler_kv_cache_config,
+                compilation_times,
+            )
+            max_model_len = sonar_config.model_config.max_model_len
+            if max_model_len != max_model_len_after:
+                self.collective_rpc("update_max_model_len", args=(max_model_len,))
+            self.model_executor.extend_kv_cache(num_blocks)
+        # Under the extensible KV cache, workers create the connector in
+        # `extend_kv_cache`, so ask for its block count only afterwards.
         kv_transfer_config = sonar_config.kv_transfer_config
         if (
             kv_transfer_config is not None
@@ -366,8 +399,6 @@ class EngineCore:
             aligned_num_cpu_blocks = self.model_executor.get_simple_cpu_offload_num_blocks()
             assert aligned_num_cpu_blocks is not None, "SimpleCPUOffloadConnector workers must report their block count"
             sonar_config.cache_config.simple_cpu_offload_num_blocks = aligned_num_cpu_blocks
-        if not envs.SONAR_ELASTIC_EP_SCALE_UP_LAUNCH:
-            self.model_executor.compile_or_warm_up_model()
 
         elapsed = time.time() - start
         compile_time = sonar_config.compilation_config.compilation_time
@@ -554,13 +585,14 @@ class EngineCore:
                 is_dummy=True,
             )
         else:
-            details = compute_iteration_details(scheduler_output)
+            details = scheduler_output.iteration_details
+            assert details is not None
             iteration_details = SchedulerIterationDetails(
                 iteration_index=iteration_index,
-                num_ctx_requests=details.num_ctx_requests,
-                num_ctx_tokens=details.num_ctx_tokens,
-                num_generation_requests=details.num_generation_requests,
-                num_generation_tokens=details.num_generation_tokens,
+                num_ctx_requests=details.num_prefill_requests,
+                num_ctx_tokens=details.num_prefill_tokens,
+                num_generation_requests=details.num_decode_requests,
+                num_generation_tokens=details.num_decode_tokens,
                 elapsed_ms=0.0,
                 num_encoder_inputs=details.num_encoder_inputs,
                 num_encoder_output_tokens=details.num_encoder_output_tokens,
@@ -597,9 +629,10 @@ class EngineCore:
             eco.weight_version = self._weight_version
 
     def _should_throttle_prefills(self) -> bool:
-        """Whether to defer new prefills this step (DP prefill balancing).
-        Overridden by the DP engine core; never throttles otherwise."""
-        return False
+        """Whether to defer prefills this step, to run them every Nth step.
+        Overridden by the DP engine core to align across ranks."""
+        interval = self.prefill_schedule_interval
+        return interval > 1 and self.num_executed_steps % interval != 0
 
     def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
         """Schedule, execute, and make output.
@@ -612,13 +645,15 @@ class EngineCore:
         if not self.scheduler.has_requests():
             return {}, False
         scheduler_output = self.scheduler.schedule(self._should_throttle_prefills())
+        if scheduler_output.total_num_scheduled_tokens > 0:
+            self.num_executed_steps += 1
         future = self.model_executor.execute_model(scheduler_output, non_block=True)
         grammar_output = self.scheduler.get_grammar_bitmask(scheduler_output)
         with (
             self.capture_iteration_details(scheduler_output) as iteration_details,
             self.log_error_detail(scheduler_output),
         ):
-            model_output = future.result()
+            model_output = self._wait_for_output(future)
             if model_output is None:
                 model_output = self.model_executor.sample_tokens(grammar_output)
 
@@ -630,6 +665,10 @@ class EngineCore:
         self._attach_weight_version(engine_core_outputs)
 
         return engine_core_outputs, scheduler_output.total_num_scheduled_tokens > 0
+
+    def _wait_for_output(self, future: Future[Any]) -> Any:
+        """Block until a step's model output is ready."""
+        return future.result()
 
     def post_step(self, model_executed: bool) -> None:
         # When using async scheduling we can't get draft token ids in advance,
@@ -672,12 +711,18 @@ class EngineCore:
                 exec_future = self.model_executor.execute_model(scheduler_output, non_block=True)
             if not self.is_mm_encoder_only:
                 model_executed = scheduler_output.total_num_scheduled_tokens > 0
+            if model_executed:
+                self.num_executed_steps += 1
 
             if self.is_pooling_model or not model_executed:
                 # No sampling required (no requests scheduled).
                 future = cast(Future[ModelRunnerOutput], exec_future)
             else:
                 if not scheduler_output.pending_structured_output_tokens:
+                    if scheduler_output.has_structured_output_spec_decode:
+                        draft_token_ids = self.model_executor.take_draft_token_ids()
+                        if draft_token_ids is not None:
+                            self.scheduler.update_draft_token_ids_in_output(draft_token_ids, scheduler_output)
                     # We aren't waiting for any tokens, get any grammar output
                     # and sample immediately.
                     grammar_output = self.scheduler.get_grammar_bitmask(scheduler_output)
@@ -707,7 +752,7 @@ class EngineCore:
             self.capture_iteration_details(scheduler_output) as iteration_details,
             self.log_error_detail(scheduler_output),
         ):
-            model_output = future.result()
+            model_output = self._wait_for_output(future)
             if model_output is None:
                 # None from sample_tokens() implies that the original execute_model()
                 # call failed - raise that exception.
@@ -727,7 +772,7 @@ class EngineCore:
         if deferred_scheduler_output:
             # Update the deferred scheduler output before computing its grammar
             # bitmask.
-            if self.check_for_draft_tokens:
+            if deferred_scheduler_output.has_structured_output_spec_decode:
                 draft_token_ids = self.model_executor.take_draft_token_ids()
                 if draft_token_ids is not None:
                     # Update the draft token ids in the scheduler output while
@@ -857,7 +902,7 @@ class EngineCore:
         self.reset_mm_cache()
         self.reset_encoder_cache()
 
-    def _finish_pause(self, clear_cache: bool) -> None:
+    def _finish_pause(self, clear_cache: bool, reset_connector: bool) -> None:
         # The drain of a checkpoint prepare is complete. A failure leaves the
         # engine FAILED instead of serving, as nothing waits on this pause.
         preparing = self._checkpoint_state == CheckpointState.PREPARING
@@ -866,7 +911,8 @@ class EngineCore:
             # the last dummy batch an idle DP rank launches.
             self.model_executor.collective_rpc("synchronize_device")
             if clear_cache:
-                self._reset_caches()
+                self._reset_caches(reset_connector=reset_connector)
+                self._set_kv_cache_reclaimable(True)
             if preparing:
                 self.release_kv_cache_memory()
                 self.collective_rpc("checkpoint_prepare")
@@ -877,19 +923,27 @@ class EngineCore:
                 raise
             self._fail_checkpoint(e)
 
-    def pause_scheduler(self, mode: PauseMode = "abort", clear_cache: bool = True) -> Future | None:
+    def pause_scheduler(
+        self,
+        mode: PauseMode = "abort",
+        clear_cache: bool = True,
+        reset_connector: bool = True,
+    ) -> Future | None:
         """Pause generation; behavior depends on mode.
 
         All pause modes queue new adds -- "abort" and "keep" skip step();
         "wait" allows step() so in-flight requests can drain.
 
-        - ``abort``: Set PAUSED_NEW, abort all requests, wait for abort
+        - `abort`: Set PAUSED_NEW, abort all requests, wait for abort
           outputs to be sent (when running with output_queue), optionally
           clear caches, then complete the returned Future.
-        - ``wait``: Set PAUSED_NEW (queue adds, keep stepping); when drained,
+        - `wait`: Set PAUSED_NEW (queue adds, keep stepping); when drained,
           optionally clear caches, then complete the returned Future.
-        - ``keep``: Set PAUSED_ALL; return a Future that completes when the
+        - `keep`: Set PAUSED_ALL; return a Future that completes when the
           output queue is empty.
+
+        `reset_connector` decides whether clearing caches also resets the
+        KV connector's cache.
         """
         if mode not in get_args(PauseMode):
             raise ValueError(f"Invalid pause mode: {mode}")
@@ -901,7 +955,16 @@ class EngineCore:
 
         pause_state = PauseState.PAUSED_ALL if mode == "keep" else PauseState.PAUSED_NEW
         self.scheduler.set_pause_state(pause_state)
-        self._finish_pause(clear_cache)
+        if clear_cache and not reset_connector:
+            # Pending connector stores still read the KV cache that a sleep
+            # discards. Step until they finish, as EngineCoreProc does before
+            # it completes a pause.
+            while self.scheduler.has_requests() or self.batch_queue:
+                _, model_executed = self.step_fn()
+                self.post_step(model_executed)
+                if not model_executed:
+                    time.sleep(0.001)
+        self._finish_pause(clear_cache, reset_connector)
 
         return None
 
@@ -909,15 +972,32 @@ class EngineCore:
         """Resume the scheduler and flush any requests queued while paused."""
         if not self._checkpoint_state.is_restored:
             raise RuntimeError(f"Cannot resume scheduling while the checkpoint state is {self._checkpoint_state}")
+        self._set_kv_cache_reclaimable(False)
         self.scheduler.set_pause_state(PauseState.UNPAUSED)
         if self._checkpoint_state == CheckpointState.RESTORING:
             self._checkpoint_state = CheckpointState.RUNNING
+
+    def _set_kv_cache_reclaimable(self, reclaimable: bool) -> None:
+        """Tell the workers whether their extensible KV cache holds nothing to
+        keep, as from a pause that cleared it until the resume, so that a weight
+        reload may borrow its memory."""
+        if reclaimable == self._kv_cache_reclaimable:
+            return
+        self._kv_cache_reclaimable = reclaimable
+        executor = self.model_executor
+        if executor.sonar_config.cache_config.enable_extensible_kv_cache:
+            executor.collective_rpc("set_kv_cache_reclaimable", args=(reclaimable,))
 
     def is_scheduler_paused(self) -> bool:
         """Return whether the scheduler is in any pause state."""
         return self.scheduler.pause_state != PauseState.UNPAUSED
 
-    def sleep(self, level: int = 1, mode: PauseMode = "abort") -> None | Future:
+    def sleep(
+        self,
+        level: int = 1,
+        mode: PauseMode = "abort",
+        reset_connector: bool = True,
+    ) -> None | Future:
         """Put the engine to sleep at the specified level.
 
         Args:
@@ -925,16 +1005,22 @@ class EngineCore:
                 - Level 0: Pause scheduling only. Requests are still accepted
                            but not processed. No GPU memory changes.
                 - Level 1: Offload model weights to CPU, discard KV cache.
-                - Level 2: Discard all GPU memory.
+                - Level 2: Discard model parameters and KV cache.
             mode: Pause mode - how to deal with any existing requests, see
                 documentation of pause_scheduler method.
+            reset_connector: Also reset the KV connector's cache; see
+                `LLM.sleep`.
 
         """
         if self._checkpoint_state != CheckpointState.RUNNING:
             raise RuntimeError(f"Cannot sleep while the checkpoint state is {self._checkpoint_state}")
         # Pause scheduler before sleeping.
         clear_prefix_cache = level >= 1
-        pause_future = self.pause_scheduler(mode=mode, clear_cache=clear_prefix_cache)
+        pause_future = self.pause_scheduler(
+            mode=mode,
+            clear_cache=clear_prefix_cache,
+            reset_connector=reset_connector,
+        )
         if level < 1:
             return pause_future
 
@@ -986,16 +1072,16 @@ class EngineCore:
             self.resume_scheduler()
         return fully_awake
 
-    def release_kv_cache_memory(self) -> None:
+    def release_kv_cache_memory(self, reset_connector: bool = True) -> None:
         """Discard KV cache physical memory. Requires a completed pause
         and all executor memory to be resident. Kept requests are recomputed
-        after wake-up.
+        after wake-up. `reset_connector` is as for `sleep`.
         """
         if not (self.is_scheduler_paused() and not self.scheduler.has_requests() and not self.batch_queue):
             raise RuntimeError("release_kv_cache_memory() requires a completed pause first")
         if self.model_executor.is_sleeping:
             raise RuntimeError("release_kv_cache_memory() requires all executor memory to be resident")
-        self._reset_caches()
+        self._reset_caches(reset_connector=reset_connector)
         self.model_executor.discard(("kv_cache",))
 
     def checkpoint_state(self) -> tuple[CheckpointState, str | None]:
@@ -1009,6 +1095,12 @@ class EngineCore:
     def is_sleeping(self) -> bool:
         """Check if engine is sleeping at any level."""
         return self.is_scheduler_paused() or self.model_executor.is_sleeping
+
+    def is_inference_ready(self) -> bool:
+        """Whether the engine can accept and process new requests: it is not
+        paused (including for a checkpoint) or asleep, and no weight update has
+        left the weights incomplete."""
+        return not self.is_sleeping() and not any(self.collective_rpc("has_incomplete_weight_update"))
 
     def execute_dummy_batch(self):
         self.model_executor.execute_dummy_batch()
@@ -1068,6 +1160,21 @@ class EngineCore:
         if self.mm_receiver_cache is not None and request.mm_features:
             request.mm_features = self.mm_receiver_cache.get_and_update_features(request.mm_features)
 
+        watermark_config = self.sonar_config.watermark_config
+        params = request.sampling_params
+        # Greedy decoding and trace replay cannot be watermarked; leave their
+        # flag as the frontend resolved it.
+        if (
+            watermark_config
+            and watermark_config.enforce
+            and params
+            and params.temperature != 0
+            and params.trace_decode_token_ids is None
+        ):
+            if params.watermarking is False:
+                warn_watermarking_override()
+            params.watermarking = True
+
         frontend_hashes = frontend_block_hashes(request, self.prefix_hash_config)
         req = Request.from_engine_core_request(request, self.request_block_hasher, frontend_hashes)
         if req.use_structured_output:
@@ -1092,6 +1199,19 @@ class EngineShutdownState(IntEnum):
     SHUTTING_DOWN = 2
 
 
+# Input types that EngineCoreProc handles while waiting for a step's output.
+# Others are deferred until the step completes.
+_INPUTS_HANDLED_DURING_STEP = (
+    EngineCoreRequestType.ADD,
+    EngineCoreRequestType.ABORT,
+    EngineCoreRequestType.EXECUTOR_FAILED,
+    EngineCoreRequestType.WAKEUP,
+)
+# While waiting for a step's output, how long to busy-poll for new inputs
+# before falling back to a blocking wait for the output.
+_INPUT_SPIN_DURATION_S = 1.0
+
+
 class EngineCoreProc(EngineCore):
     """ZMQ-wrapper for running EngineCore in background process."""
 
@@ -1113,6 +1233,9 @@ class EngineCoreProc(EngineCore):
     ):
         self.input_queue = queue.Queue[tuple[EngineCoreRequestType, Any]]()
         self.output_queue = queue.Queue[tuple[int, EngineCoreOutputs] | bytes]()
+        # Inputs taken from input_queue while waiting for a step's output that
+        # must not be handled until the step completes (see _wait_for_output).
+        self._deferred_inputs = deque[tuple[EngineCoreRequestType, Any]]()
 
         executor_fail_callback = lambda: self.input_queue.put_nowait((EngineCoreRequestType.EXECUTOR_FAILED, b""))
 
@@ -1205,6 +1328,11 @@ class EngineCoreProc(EngineCore):
                     raise RuntimeError("Input socket thread died during startup")
                 assert addresses.coordinator_input is not None
                 logger.info("Waiting for READY message from DP Coordinator...")
+
+            # Send initial scheduler stats so that the scheduler-state gauges
+            # are exported before the first request.
+            if (stats := self.scheduler.make_stats()) is not None:
+                self.output_queue.put_nowait((0, EngineCoreOutputs(scheduler_stats=stats)))
 
             # Completes once the drain does, which for DP happens in the busy loop.
             if sonar_config.model_config.checkpoint_prepare_on_startup and (refusal := self.checkpoint_prepare()):
@@ -1305,7 +1433,7 @@ class EngineCoreProc(EngineCore):
             }
             # Include config hash for DP configuration validation
             if sonar_config.parallel_config.data_parallel_size > 1:
-                ready_msg["parallel_config_hash"] = sonar_config.parallel_config.compute_hash()
+                ready_msg["parallel_config_hash"] = hash_config(sonar_config.parallel_config)
             if sonar_config.parallel_config.enable_elastic_ep:
                 ready_msg["coord_store_port"] = sonar_config.parallel_config._coord_store_port
                 ready_msg["elastic_ep_max_dp_size"] = sonar_config.parallel_config.elastic_ep_max_dp_size
@@ -1545,6 +1673,10 @@ class EngineCoreProc(EngineCore):
 
     def _process_input_queue(self):
         """Exits when an engine step needs to be performed."""
+        # Inputs deferred during the last step precede anything still queued.
+        while self._deferred_inputs:
+            self._handle_client_request(*self._deferred_inputs.popleft())
+
         waited = False
         while not self.has_work() and self.is_running():
             # Notify callbacks waiting for engine to become idle.
@@ -1640,6 +1772,33 @@ class EngineCoreProc(EngineCore):
             return False
 
         return True
+
+    def _wait_for_output(self, future: Future[Any]) -> Any:
+        """Wait for a step's model output, meanwhile handling new requests and
+        aborts as they arrive."""
+        poll: Callable[[], bool] | None = getattr(future, "poll", None)
+        wait_briefly: Callable[[Sized, float], None] | None = getattr(future, "wait_briefly", None)
+        if poll is not None and wait_briefly is not None:
+            pending_inputs = self.input_queue.queue
+            spin_deadline = time.monotonic() + _INPUT_SPIN_DURATION_S
+            while not self._deferred_inputs and not poll():
+                if pending_inputs:
+                    req = self.input_queue.get_nowait()
+                    # Some kinds of request must wait until the step completes.
+                    if req[0] in _INPUTS_HANDLED_DURING_STEP:
+                        self._handle_client_request(*req)
+                    else:
+                        self._deferred_inputs.append(req)
+                elif time.monotonic() < spin_deadline:
+                    # Spin on something cheaper than poll(), to leave the GIL
+                    # free more of the time for the input and output threads.
+                    wait_briefly(pending_inputs, spin_deadline)
+                else:
+                    # Long-running step: stop busy-looping and block until the
+                    # output arrives. Later inputs are handled after the step.
+                    break
+
+        return future.result()
 
     def _handle_client_request(self, request_type: EngineCoreRequestType, request: Any) -> None:
         """Dispatch request from client."""
@@ -1751,6 +1910,15 @@ class EngineCoreProc(EngineCore):
         if self.output_thread.is_alive():
             logger.fatal("Sonar shutdown signal from EngineCore failed to send. Please report this issue.")
 
+    def _config_hash(self) -> str | None:
+        """`hash_config()` of the initialized config, the hash part of a
+        frontend's `system_fingerprint`. Like the frontend, never fail startup
+        over the fingerprint."""
+        try:
+            return hash_config(self.sonar_config)
+        except Exception:
+            return None
+
     def _make_ready_response(self) -> EngineCoreReadyResponse:
         parallel_config = self.sonar_config.parallel_config
         scheduler_config = self.sonar_config.scheduler_config
@@ -1800,6 +1968,9 @@ class EngineCoreProc(EngineCore):
                 else None
             ),
             prefix_hash_config=self.prefix_hash_config,
+            cache_config_info=self.sonar_config.cache_config.metrics_info(),
+            config_hash=self._config_hash(),
+            enable_expert_parallel=parallel_config.enable_expert_parallel,
         )
 
     def process_input_sockets(
@@ -1964,9 +2135,9 @@ class EngineCoreProc(EngineCore):
     def _handle_mm_cache_miss(self, request: EngineCoreRequest, err: MultiModalCacheMissError) -> None:
         """Return a retryable response for a P0/P1 cache-drift miss.
 
-        Surfaces every drifted hash via ``EngineCoreOutput.mm_cache_miss_hashes`` so
+        Surfaces every drifted hash via `EngineCoreOutput.mm_cache_miss_hashes` so
         the frontend drops them from its sender cache and the client resends with
-        data (see ``MultiModalCacheMissError``). Logged at warning, not exception,
+        data (see `MultiModalCacheMissError`). Logged at warning, not exception,
         because it is expected and self-healing.
         """
         logger.warning(
@@ -2024,18 +2195,23 @@ class EngineCoreProc(EngineCore):
             RequestError(code="validation_error", message=str(error)),
         )
 
-    def pause_scheduler(self, mode: PauseMode = "abort", clear_cache: bool = True) -> Future | None:
+    def pause_scheduler(
+        self,
+        mode: PauseMode = "abort",
+        clear_cache: bool = True,
+        reset_connector: bool = True,
+    ) -> Future | None:
         """Pause generation; behavior depends on mode.
 
         All pause modes queue new adds -- "abort" and "keep" skip step();
         "wait" allows step() so in-flight requests can drain.
 
-        - ``abort``: Set PAUSED_NEW, abort all requests, wait for abort
+        - `abort`: Set PAUSED_NEW, abort all requests, wait for abort
           outputs to be sent (when running with output_queue), optionally
           clear caches, then complete the returned Future.
-        - ``wait``: Set PAUSED_NEW (queue adds, keep stepping); when drained,
+        - `wait`: Set PAUSED_NEW (queue adds, keep stepping); when drained,
           optionally clear caches, then complete the returned Future.
-        - ``keep``: Set PAUSED_ALL; return a Future that completes when the
+        - `keep`: Set PAUSED_ALL; return a Future that completes when the
           output queue is empty.
         """
         if mode not in get_args(PauseMode):
@@ -2043,7 +2219,7 @@ class EngineCoreProc(EngineCore):
 
         def engine_idle_callback(engine: "EngineCoreProc", future: Future[Any]) -> None:
             try:
-                engine._finish_pause(clear_cache)
+                engine._finish_pause(clear_cache, reset_connector)
             except Exception as e:
                 future.set_exception(e)
             else:
@@ -2057,7 +2233,7 @@ class EngineCoreProc(EngineCore):
         self.scheduler.set_pause_state(pause_state)
 
         if self._pause_complete():
-            self._finish_pause(clear_cache)
+            self._finish_pause(clear_cache, reset_connector)
             return None
 
         future = Future[Any]()
@@ -2065,7 +2241,7 @@ class EngineCoreProc(EngineCore):
         return future
 
     def pause_generation(self, mode: PauseMode = "abort", clear_cache: bool = True) -> Future | None:
-        """``pause_scheduler`` for a user pause: "abort" and "wait" also reject
+        """`pause_scheduler` for a user pause: "abort" and "wait" also reject
         new requests with a retryable error until resume, rather than queue
         them. Other pauses (e.g. sleep) leave this policy unchanged."""
         future = self.pause_scheduler(mode, clear_cache)
@@ -2123,7 +2299,7 @@ class EngineCoreProc(EngineCore):
 
     def _pause_complete(self) -> bool:
         """Returns True if the pause has fully completed and the caller can
-        return ``None`` synchronously; False if the pause is still pending
+        return `None` synchronously; False if the pause is still pending
         and the caller should register an idle-state callback to finish it.
         """
         return not self.has_work()
@@ -2172,8 +2348,6 @@ class DPEngineCoreProc(EngineCoreProc):
     ):
         assert sonar_config.model_config.is_moe, "DPEngineCoreProc should only be used for MoE models"
 
-        scheduler_config = sonar_config.scheduler_config
-        self.prefill_schedule_interval = scheduler_config.prefill_schedule_interval
         self.dp_sync_interval = sonar_config.parallel_config.dp_sync_interval
 
         # Counts forward-passes of the model so that we can synchronize
@@ -2230,15 +2404,15 @@ class DPEngineCoreProc(EngineCoreProc):
     def _pause_complete(self) -> bool:
         """Two-phase DP-aware pause.
 
-        Phase 1: Set local pause state and ``pending_pause`` flag. If the
-        engines are idle, kick-start them by setting ``engines_running`` to
+        Phase 1: Set local pause state and `pending_pause` flag. If the
+        engines are idle, kick-start them by setting `engines_running` to
         True so ranks enter the stepping loop and reach the all-reduce
-        consensus checkpoint in ``_has_global_unfinished_reqs``.
+        consensus checkpoint in `_has_global_unfinished_reqs`.
 
-        Phase 2 (in ``_has_global_unfinished_reqs``): Once the all-reduce
-        confirms that **all** ranks have ``pending_pause`` set, collectively
-        stop stepping and set ``ignore_start_dp_wave`` so that stale
-        ``START_DP_WAVE`` messages cannot re-wake any engine.
+        Phase 2 (in `_has_global_unfinished_reqs`): Once the all-reduce
+        confirms that **all** ranks have `pending_pause` set, collectively
+        stop stepping and set `ignore_start_dp_wave` so that stale
+        `START_DP_WAVE` messages cannot re-wake any engine.
         """
         self.pending_pause = True
         self.engines_running = True
@@ -2262,7 +2436,8 @@ class DPEngineCoreProc(EngineCoreProc):
                 "flight. Wait for the pause future to resolve before "
                 "resuming."
             )
-        if self.engines_running:
+        # Set at pause consensus, so all ranks take the same branch.
+        if not self.ignore_start_dp_wave:
             logger.debug("Resume called while engines are not paused, ignoring.")
             return
 
@@ -2548,12 +2723,12 @@ class EngineCoreActorMixin:
         # To bypass 2, we need to also set
         # RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES, but Sonar workers created
         # thereafter would have CUDA_VISIBLE_DEVICES set, which is sticky:
-        # https://github.com/ray-project/ray/blob/e752fc319ddedd9779a0989b6d3613909bad75c9/python/ray/_private/worker.py#L456 # noqa: E501
+        # https://github.com/ray-project/ray/blob/e752fc319ddedd9779a0989b6d3613909bad75c9/python/ray/_private/worker.py#L456
         # This is problematic because when the Sonar worker (a Ray actor)
         # executes a task, it indexes into the sticky CUDA_VISIBLE_DEVICES
         # rather than directly using the GPU ID, potentially resulting in
         # index out of bounds error. See:
-        # https://github.com/ray-project/ray/pull/40461/files#diff-31e8159767361e4bc259b6d9883d9c0d5e5db780fcea4a52ead4ee3ee4a59a78R1860 # noqa: E501
+        # https://github.com/ray-project/ray/pull/40461/files#diff-31e8159767361e4bc259b6d9883d9c0d5e5db780fcea4a52ead4ee3ee4a59a78R1860
         # and get_accelerator_ids_for_accelerator_resource() in worker.py
         # of ray.
         self._set_visible_devices(sonar_config, local_dp_rank)

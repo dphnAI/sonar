@@ -9,7 +9,7 @@ import torch.nn as nn
 
 from sonar.config import SonarConfig
 from sonar.config.compilation import CUDAGraphMode
-from sonar.utils.torch_utils import PIN_MEMORY
+from sonar.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
 from sonar.v1.kv_cache_interface import CrossAttentionSpec, KVCacheConfig
 from sonar.v1.worker.gpu.attn_utils import build_attn_metadata
 from sonar.v1.worker.gpu.input_batch import InputBatch
@@ -120,7 +120,11 @@ class EncoderDecoderModelState(ModelState):
         )
 
         query_start_loc_cpu = torch.from_numpy(input_batch.query_start_loc_np)
-        max_query_len = input_batch.num_scheduled_tokens.max().item()
+        # FULL graphs must retain the promised replay bound, not the dummy's
+        # per-request query length.
+        max_query_len = input_batch.max_query_len
+        if max_query_len is None:
+            max_query_len = input_batch.num_scheduled_tokens.max().item()
         seq_lens_cpu_upper_bound = input_batch.seq_lens_cpu_upper_bound
         if for_capture:
             max_seq_len = self.max_model_len
@@ -165,7 +169,7 @@ class EncoderDecoderModelState(ModelState):
             # is captured with the correct value for cross-attention.
             encoder_seq_lens_np[:] = self.max_encoder_len
 
-        self.encoder_seq_lens_gpu[:num_reqs].copy_(encoder_seq_lens, non_blocking=True)
+        async_tensor_h2d(encoder_seq_lens, out=self.encoder_seq_lens_gpu[:num_reqs])
         self.encoder_seq_lens_gpu[num_reqs:].fill_(0)
         encoder_seq_lens_gpu = self.encoder_seq_lens_gpu[:num_reqs]
 

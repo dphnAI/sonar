@@ -6,8 +6,8 @@ Handles models like Qwen3.5 where some layers use standard dot-product
 attention (paged KV cache) and others use GDN linear attention (fixed-size
 recurrent state).
 
-SDPA layers use the Metal kernel backend (same as ``MHAPagedAttentionBackend``).
-GDN layers use MLX-native state management via ``GDNPagedAttentionWrapper``.
+SDPA layers use the Metal kernel backend (same as `MHAPagedAttentionBackend`).
+GDN layers use MLX-native state management via `GDNPagedAttentionWrapper`.
 """
 
 from __future__ import annotations

@@ -100,6 +100,7 @@ from sonar.models.common.ops.sequence_parallel import (
 )
 from sonar.models.kimi_k3.common.dsa_cache import packed_dsa_block_size
 from sonar.models.kimi_k3.nvidia.dsa import KimiK3DSAAttention
+from sonar.models.kimi_k3.nvidia.gqa_draft import GQADraftKVCacheGrouping
 from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
 from sonar.models.kimi_k3.nvidia.latent_moe_runner import (
     LatentMoERunner,
@@ -149,8 +150,8 @@ def shard_sequence_parallel_mlp(
 ) -> bool:
     """Whether to TP-shard a sequence-parallel MLP instead of replicating it.
 
-    Opt-in via ``SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT``; see :class:`KimiMLP` for
-    the trade-off and :mod:`sonar.envs` for when it is worth enabling.
+    Opt-in via `SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT`; see `KimiMLP` for
+    the trade-off and `sonar.envs` for when it is worth enabling.
     """
     enabled = envs.SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT
     if not (use_sequence_parallel and eligible and enabled):
@@ -163,7 +164,7 @@ def can_shard_sequence_parallel_shared_expert(sonar_config: SonarConfig) -> bool
     """Whether the active MoE backend preserves the SP shared-expert contract.
 
     MegaMoE invokes the shared expert directly. DeepEP v2 invokes it through
-    ``MoERunner``, but its EP combine returns the routed output in the local
+    `MoERunner`, but its EP combine returns the routed output in the local
     sequence-sharded layout, so the shared expert can use the same
     all-gather/partial-GEMM/reduce-scatter implementation.
     """
@@ -200,13 +201,13 @@ class KimiMLP(nn.Module):
     """Dense / shared-expert MLP, optionally TP-sharded under sequence parallel.
 
     Under sequence parallelism each rank owns a distinct slice of the tokens, so
-    by default both projections are replicated (``disable_tp``) and the block
+    by default both projections are replicated (`disable_tp`) and the block
     needs no collective. That makes every rank stream the entire weight to serve
     its own token shard.
 
-    With ``SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT`` the weights are TP-sharded
+    With `SONAR_KIMI_K3_SHARD_SP_SHARED_EXPERT` the weights are TP-sharded
     instead. A rank then holds only a slice of the intermediate dim, so it
-    cannot finish its own tokens alone: ``forward`` all-gathers the full token
+    cannot finish its own tokens alone: `forward` all-gathers the full token
     set, computes this rank's partial, and reduce-scatters. The reduce-scatter
     sums across TP and restores the sequence sharding in one collective, so the
     block still ends with one collective per direction.
@@ -569,12 +570,12 @@ class KimiMoE(nn.Module):
         For MegaMoE, grouped top-k selection stays with the gate.
 
         Returns:
-            ``(routed_hidden_states, router_output, topk_ids)``.
-            ``routed_hidden_states`` is the down-projected latent (or the
-            original ``hidden_states`` when latent MoE is disabled). For MegaMoE
-            ``router_output`` holds the grouped top-k weights and ``topk_ids``
-            the selected experts; otherwise ``router_output`` holds the raw gate
-            logits and ``topk_ids`` is ``None``.
+            `(routed_hidden_states, router_output, topk_ids)`.
+            `routed_hidden_states` is the down-projected latent (or the
+            original `hidden_states` when latent MoE is disabled). For MegaMoE
+            `router_output` holds the grouped top-k weights and `topk_ids`
+            the selected experts; otherwise `router_output` holds the raw gate
+            logits and `topk_ids` is `None`.
 
         """
 
@@ -906,14 +907,18 @@ class KimiDecoderLayer(nn.Module):
         return hidden_states, prefix_sum, residual
 
 
-# Checkpoint indexer names differ from the serving module tree.
+# (param_name, shard_name, shard_id) for the merged DSA wkv_index.
 _DSA_STACKED_PARAMS_MAPPING = [
     (".self_attn.dsa_indexer.wkv_index.", ".self_attn.indexer.wk.", 0),
     (".self_attn.dsa_indexer.wkv_index.", ".self_attn.indexer.weights_proj.", 1),
 ]
+
+# DSA indexer weight rename mapping. Specific rules must come before the
+# generic ".self_attn.indexer." rule: the loop breaks on the first match.
 _DSA_RENAME_PARAMS_MAPPING = [
     (".self_attn.dsa_indexer.wq_index.", ".self_attn.indexer.wq_b."),
     (".self_attn.dsa_indexer.k_index_norm.", ".self_attn.indexer.k_norm."),
+    # Generic fallback for already-nested indexer names
     (".self_attn.dsa_indexer.", ".self_attn.indexer."),
 ]
 
@@ -961,18 +966,32 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
             self.embed_tokens = PPMissingLayer()
 
         # Aux stream for overlapping the MLA g_proj output-gate GEMM with the
-        # attention front-end (DeepseekV4 convention: created at the model
-        # level and threaded into each attention layer).
+        # attention front-end; created at the model level and threaded into
+        # each attention layer.
         aux_stream = torch.cuda.Stream()
 
+        # Single model-level top-k buffer shared by all DSA layers.
+        # [max_num_batched_tokens + dcp_kg_slack, index_topk] int32.
         self.topk_indices_buffer: torch.Tensor | None = None
         if config.dsa_config is not None and any(
             config.is_dsa_layer(layer_idx) for layer_idx in range(config.num_hidden_layers)
         ):
+            topk_buffer_device = "cuda" if torch.cuda.is_available() else "cpu"
+            # In allgather_k mode prefill rows are padded to ceil(P/W) per
+            # rank, so the all-gathered output takes num_decode_tokens +
+            # W*ceil(P/W) rows, at most W-1 more than num_actual_tokens.
+            dcp_kg_slack = (
+                parallel_config.decode_context_parallel_size - 1
+                if parallel_config.decode_context_parallel_size > 1
+                else 0
+            )
             self.topk_indices_buffer = torch.empty(
-                (sonar_config.scheduler_config.max_num_batched_tokens, config.dsa_config.index_topk),
+                (
+                    sonar_config.scheduler_config.max_num_batched_tokens + dcp_kg_slack,
+                    config.dsa_config.index_topk,
+                ),
                 dtype=torch.int32,
-                device="cuda" if torch.cuda.is_available() else "cpu",
+                device=topk_buffer_device,
             )
 
         def get_layer(prefix: str):
@@ -990,7 +1009,10 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
             get_layer,
             prefix=f"{prefix}.layers",
         )
+
         if config.dsa_config is not None:
+            # A DSA layer silently built as dense MLA would be invisible in
+            # outputs; check the wiring matches dsa_config.
             n_dsa_built = sum(
                 isinstance(layer.self_attn, KimiK3DSAAttention)
                 for layer in self.layers[self.start_layer : self.end_layer]
@@ -999,8 +1021,9 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
                 config.is_dsa_layer(layer_idx) for layer_idx in range(self.start_layer, self.end_layer)
             )
             assert n_dsa_built == n_dsa_expected, (
-                f"DSA wiring broken: built {n_dsa_built} layers but dsa_config expects {n_dsa_expected}."
+                f"DSA wiring broken: built {n_dsa_built} DSA attention layers but dsa_config expects {n_dsa_expected}."
             )
+
         self.num_attn_res_blocks = (
             cdiv(self.end_layer, self.attn_res_block_size) if self.attn_res_block_size is not None else 0
         )
@@ -1074,7 +1097,7 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
         pending_mlp_out: torch.Tensor | None,
         block_residual: torch.Tensor,
     ) -> torch.Tensor:
-        """Return the AttnRes stream after ``layer_idx``."""
+        """Return the AttnRes stream after `layer_idx`."""
         prefix = prefix_sum if pending_mlp_out is None else prefix_sum + pending_mlp_out
         if not (self._aux_attn_res_stream and self.use_attn_res):
             return prefix
@@ -1134,8 +1157,6 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
                 forward_context.is_padding = sp_padding_mask(forward_context.is_padding, hidden_states)
             hidden_states = sp_shard(hidden_states)
             assert residual is None, "Currently, SP is not supported with PP"
-
-        remote_aux = self.collect_remote_aux_hidden_states(intermediate_tensors)
 
         # sharded aux hidden states when sp is enabled
         aux_hidden_states: list[torch.Tensor] = []
@@ -1223,7 +1244,6 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
 
         # NOTE: the final norm is applied in compute_logits instead of here, so
         # the MTP draft model receives the pre-norm hidden states.
-        aux_hidden_states = remote_aux + aux_hidden_states
         if aux_hidden_states:
             return hidden_states, aux_hidden_states
         return hidden_states
@@ -1356,6 +1376,8 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
                     )
                     break
                 else:
+                    # Rename indexer checkpoint names into the module tree
+                    # before the param lookup below.
                     if self.config.dsa_config is not None:
                         for param_name, weight_name in _DSA_RENAME_PARAMS_MAPPING:
                             if weight_name in name:
@@ -1515,6 +1537,9 @@ class KimiLinearForCausalLM(
                 if self.specialized_decode_config is None:
                     module.pack_projections()
 
+        if self.specialized_decode is not None:
+            self.specialized_decode.process_weights_after_loading()
+
 
 def get_spec_layer_idx_from_weight_name(config: KimiLinearConfig, weight_name: str) -> int | None:
     if hasattr(config, "num_nextn_predict_layers") and (config.num_nextn_predict_layers > 0):
@@ -1544,6 +1569,7 @@ class KimiK3ForConditionalGeneration(
     HasInnerState,
     IsHybrid,
     SupportsReplaySSM,
+    GQADraftKVCacheGrouping,
 ):
     """Kimi-K3 model with Kimi-K2.5 vision and KimiLinear text."""
 
@@ -1642,9 +1668,6 @@ class KimiK3ForConditionalGeneration(
             self.language_model.make_empty_intermediate_tensors
         )
         self.media_placeholder: int = self.config.media_placeholder_token_id
-
-    def process_weights_after_loading(self) -> None:
-        self.language_model.process_weights_after_loading()
 
     # -- SupportsEncoderCudaGraph protocol methods --
 

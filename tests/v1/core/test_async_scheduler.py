@@ -23,7 +23,6 @@ def _make_model_runner_output(
     req_ids = list(scheduler_output.num_scheduled_tokens.keys())
     return ModelRunnerOutput(
         req_ids=req_ids,
-        req_id_to_index={req_id: i for i, req_id in enumerate(req_ids)},
         sampled_token_ids=[[i] for i in range(len(req_ids))],
         logprobs=None,
         prompt_logprobs_dict={},
@@ -331,7 +330,6 @@ def test_abort_request_when_structured_output_fsm_cannot_advance():
     )
     model_runner_output = ModelRunnerOutput(
         req_ids=[request.request_id],
-        req_id_to_index={request.request_id: 0},
         sampled_token_ids=[[123]],
         logprobs=None,
         prompt_logprobs_dict={},
@@ -371,13 +369,11 @@ def test_no_placeholder_underflow_on_stale_spec_frame():
         total_num_scheduled_tokens=num_spec + 1,
         scheduled_encoder_inputs={},
         scheduled_spec_decode_tokens={req.request_id: [10] * num_spec},
-        num_common_prefix_blocks=[],
         finished_req_ids=set(),
         free_encoder_mm_hashes=[],
     )
     model_runner_output = ModelRunnerOutput(
         req_ids=[req.request_id],
-        req_id_to_index={req.request_id: 0},
         sampled_token_ids=[[999]],
         logprobs=None,
         prompt_logprobs_dict={},
@@ -486,10 +482,7 @@ def test_resumable_request_handoff():
     """New streaming input resumes with the correct context and stale results
     are ignored.
     """
-    scheduler = create_scheduler(
-        async_scheduling=True,
-        use_v2_model_runner=True,
-    )
+    scheduler = create_scheduler(async_scheduling=True)
 
     old_prompt_len = 10
     continuation_len = 12

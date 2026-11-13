@@ -3,7 +3,7 @@
 
 import torch
 
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 
 
 def gumbel_sample(

@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Concrete adapter classes for each registered parser engine.
 
-These are created via :func:`make_adapters` and exposed as module-level
-names so that :class:`ReasoningParserManager` and
-:class:`ToolParserManager` can load them lazily.
+These are created via `make_adapters` and exposed as module-level
+names so that `ReasoningParserManager` and
+`ToolParserManager` can load them lazily.
 """
 
 from sonar.parser.deepseek_v4 import DeepSeekV4Parser
@@ -15,6 +15,7 @@ from sonar.parser.gemma4 import Gemma4Parser
 from sonar.parser.glm47_moe import Glm47MoeParser
 from sonar.parser.granite import GraniteParser
 from sonar.parser.granite_thinking import GraniteThinkingParser
+from sonar.parser.granite_toolcall import GraniteToolCallParser
 from sonar.parser.inkling import InklingParser
 from sonar.parser.kimi_k2 import KimiK2Parser
 from sonar.parser.llama_json import LlamaJsonParser
@@ -25,8 +26,10 @@ from sonar.parser.mistral import MistralParser
 from sonar.parser.nemotron_v3 import NemotronV3Parser
 from sonar.parser.plamo3 import Plamo3Parser
 from sonar.parser.qwen3 import Qwen3Parser
+from sonar.parser.ripple import RippleParser
 from sonar.parser.seed_oss import SeedOssParser
 from sonar.parser.step3p5 import Step3p5Parser
+from sonar.parser.zaya import ZayaParser
 
 (
     DeepSeekV32ParserReasoningAdapter,
@@ -74,6 +77,11 @@ from sonar.parser.step3p5 import Step3p5Parser
 ) = make_adapters(GraniteThinkingParser)
 
 (
+    GraniteToolCallParserReasoningAdapter,
+    GraniteToolCallParserToolAdapter,
+) = make_adapters(GraniteToolCallParser)
+
+(
     NemotronV3ParserReasoningAdapter,
     NemotronV3ParserToolAdapter,
 ) = make_adapters(NemotronV3Parser)
@@ -82,6 +90,11 @@ from sonar.parser.step3p5 import Step3p5Parser
     Qwen3ParserReasoningAdapter,
     Qwen3ParserToolAdapter,
 ) = make_adapters(Qwen3Parser)
+
+(
+    ZayaParserReasoningAdapter,
+    ZayaParserToolAdapter,
+) = make_adapters(ZayaParser)
 
 (
     MiMoParserReasoningAdapter,
@@ -122,3 +135,8 @@ from sonar.parser.step3p5 import Step3p5Parser
     Plamo3ParserReasoningAdapter,
     Plamo3ParserToolAdapter,
 ) = make_adapters(Plamo3Parser)
+
+(
+    RippleParserReasoningAdapter,
+    RippleParserToolAdapter,
+) = make_adapters(RippleParser)

@@ -7,15 +7,21 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 from functools import partial, reduce
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sonar.config import SonarConfig, SpeculativeConfig
 from sonar.logger import init_logger
 from sonar.utils.math_utils import cdiv, round_up
 from sonar.utils.mem_utils import format_gib
 from sonar.utils.torch_utils import get_dtype_size
-from sonar.v1.core.kv_cache_config_builder import KVCacheConfigBuilder
-from sonar.v1.core.kv_cache_utils import _kv_cache_device_name
+from sonar.v1.core.kv_cache_config_builder import (
+    KVCacheConfigBuilder,
+    get_kv_cache_config_builder,
+)
+from sonar.v1.core.kv_cache_utils import (
+    _kv_cache_device_name,
+    update_kv_cache_capacity,
+)
 from sonar.v1.hisparse.layout import (
     get_hisparse_host_pool_bytes,
     get_hisparse_kv_cache_config,
@@ -27,7 +33,6 @@ from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     HiddenStateCacheSpec,
-    HiSparseHotSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheLayout,
@@ -44,7 +49,46 @@ from sonar.v1.kv_cache_interface import (
 )
 from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
 
+if TYPE_CHECKING:
+    from sonar.v1.worker.worker_base import CompilationTimes
+
+
 logger = init_logger(__name__)
+
+
+# Auto-fit warns when it reduces max_model_len below this many tokens, since
+# common requests may not fit.
+AUTO_FIT_SHORT_MAX_MODEL_LEN = 8192
+
+
+def _more_kv_cache_memory_hint(sonar_config: SonarConfig, after_warmup: bool = False) -> str:
+    """How the user can make room for the KV cache, for error messages.
+    after_warmup: the KV cache was sized after CUDA graph capture and warmup."""
+    cache_config = sonar_config.cache_config
+    if cache_config.enable_extensible_kv_cache:
+        used_by = "the model and its activations"
+        graphs_hint = ""
+        if after_warmup:
+            used_by = "the model, its activations, CUDA graphs and warmup"
+            graphs_hint = " CUDA graphs take less with fewer or smaller capture sizes in the compilation config."
+        utilization = cache_config.resolved_gpu_memory_utilization
+        if utilization < 1.0:
+            return (
+                f"The KV cache gets what is left after {used_by} within "
+                f"`gpu_memory_utilization`={utilization}; increase it (with the "
+                "extensible KV cache it defaults to 1.0) or decrease "
+                f"`max_model_len` or `max_num_seqs`.{graphs_hint}"
+            )
+        return (
+            "The extensible KV cache already takes all device memory left after "
+            f"{used_by}; decrease `max_model_len` or `max_num_seqs`, or the "
+            f"model needs a device with more memory.{graphs_hint}"
+        )
+    return (
+        "Try increasing `gpu_memory_utilization` when initializing the engine "
+        "(this flag also controls CPU memory reservation on the CPU backend, "
+        "despite its name)."
+    )
 
 
 def _check_enough_kv_cache_memory(
@@ -52,13 +96,11 @@ def _check_enough_kv_cache_memory(
     get_needed_memory: Callable[[], int],
     max_model_len: int,
     estimate_max_model_len: Callable[[int], int],
+    hint: str,
 ):
     if available_memory <= 0:
         raise ValueError(
-            "No available memory for the cache blocks. "
-            "Try increasing `gpu_memory_utilization` when initializing the engine "
-            "(this flag also controls CPU memory reservation on the CPU "
-            "backend, despite its name). "
+            f"No available memory for the cache blocks. {hint} "
             "See https://sonar.dphn.ai/en/latest/configuration/conserving_memory/ "
             "for more details."
         )
@@ -78,9 +120,7 @@ def _check_enough_kv_cache_memory(
             f"({max_model_len}), ({format_gib(needed_memory)} GiB KV "
             f"cache is needed, which is larger than the available KV cache "
             f"memory ({format_gib(available_memory)} GiB). {estimated_msg}"
-            f"Try increasing `gpu_memory_utilization` (which also controls "
-            f"CPU memory on the CPU backend) or decreasing `max_model_len` "
-            f"when initializing the engine. "
+            f"{hint} Decreasing `max_model_len` also reduces what is needed. "
             f"See https://sonar.dphn.ai/en/latest/configuration/conserving_memory/ "
             f"for more details."
         )
@@ -174,6 +214,7 @@ def check_enough_kv_cache_memory(
             lambda: max_memory_usage_bytes(sonar_config, kv_cache_spec.values()),
             sonar_config.model_config.max_model_len,
             lambda am: estimate_max_model_len(sonar_config, kv_cache_spec, am),
+            _more_kv_cache_memory_hint(sonar_config),
         )
 
 
@@ -258,10 +299,10 @@ def _pool_bytes_per_block_from_builder(
 
     Core places one block with the builder and reads the size of its single
     device backing. A placement with several device allocations declares the
-    value through ``KVCacheConfigBuilder._get_pool_bytes_per_block``. HiSparse
+    value through `KVCacheConfigBuilder._get_pool_bytes_per_block`. HiSparse
     keeps the pure computation, since probing its placement would check the host
-    pool against ``max_model_len`` before auto-fit shortens it.
-    ``num_gpu_blocks_override`` is suppressed so it cannot inflate the probe.
+    pool against `max_model_len` before auto-fit shortens it.
+    `num_gpu_blocks_override` is suppressed so it cannot inflate the probe.
     """
     if not kv_cache_groups:
         return 0
@@ -329,19 +370,17 @@ def _get_kv_cache_groups_uniform_type(
 def unify_kv_cache_spec_page_size(
     kv_cache_spec: dict[str, KVCacheSpec],
 ) -> dict[str, KVCacheSpec]:
-    """Unify the page size of the given KVCacheSpec. If the page size of all layers
-    are the same, return the original KVCacheSpec. If not same, unify the page
-    size by increasing the block size of layers with smaller page size. Two
-    cases cannot be unified by block size alone and pad their physical page to
-    the maximum instead: Mamba layers, whose page size comes from state shapes
-    and is independent of block size; and non-MLA attention layers whose page
-    does not evenly divide the maximum (the padded page is read through a
-    strided view). MLA is excluded because sparse MLA indexes the cache in
-    whole token rows (see ``flat_kv_row_view``), so its block stride can only
-    be padded by its own row-aligned ``alignment``, not to an arbitrary page
-    size. Raise NotImplementedError if failed to unify the page size;
-    ``get_kv_cache_groups`` catches it to try the full-allocation fallback
-    (e.g. MLA next to an incompatible sliding-window draft).
+    """Unify physical page sizes while preserving existing padded block geometry.
+
+    Already-padded attention specs keep their logical block size and grow their
+    padding, including MLA specs. Mamba pages also grow through padding because
+    their state shapes determine their size independently of block size.
+
+    Unpadded specs scale their logical blocks when their page size divides the
+    maximum. Otherwise only non-MLA attention can add arbitrary page padding.
+    Unpadded MLA uses whole token rows (see `flat_kv_row_view`) and must retain
+    its row-aligned `alignment`. Raise NotImplementedError when those rules
+    cannot unify the pages so `get_kv_cache_groups` can try full allocation.
 
     Args:
         kv_cache_spec: The KVCacheSpec of each attention layer in the model
@@ -569,17 +608,14 @@ def _get_kv_cache_bytes_per_block(kv_cache_groups: list[KVCacheGroupSpec], layou
         for group in kv_cache_groups
     )
     assert bytes_per_block > 0
-    alignments = [
-        group.kv_cache_spec.page_size_bytes
-        for group in kv_cache_groups
-        if isinstance(group.kv_cache_spec, HiSparseHotSpec)
-    ]
-    alignments.extend(
-        _get_per_layer_spec(group, layer_name).get_block_stride_alignment()
-        for group in kv_cache_groups
-        for layer_name in group.layer_names
+    alignment = math.lcm(
+        *(
+            _get_per_layer_spec(group, layer_name).get_block_stride_alignment()
+            for group in kv_cache_groups
+            for layer_name in group.layer_names
+        )
     )
-    return round_up(bytes_per_block, math.lcm(*alignments))
+    return round_up(bytes_per_block, alignment)
 
 
 def validate_kv_cache_layout(
@@ -746,8 +782,9 @@ def _promote_local_kv_cache_specs(
                 spec,
                 target_cls,
                 # Promoted specs allocate blocks for all tokens and never free
-                # below the window, so the trailing-edge extension is moot.
-                drop=("extra_retained_tokens",),
+                # below the window, so the trailing-edge extension and replay
+                # bound are moot.
+                drop=("extra_retained_tokens", "bounded_replay"),
                 block_size=block_size,
                 page_size_padded=promoted_page_size_padded(spec, block_size),
             )
@@ -761,15 +798,20 @@ def _promote_local_kv_cache_specs(
 def _try_get_full_allocation_fallback_groups(
     kv_cache_spec: dict[str, KVCacheSpec],
 ) -> list[KVCacheGroupSpec] | None:
-    """Try a supported full-allocation fallback for local-attention layers."""
+    """Try a supported full-allocation fallback for local-attention layers.
+
+    Full attention is never worse here: without a common page size, a separate
+    sliding-window group still pays for every layer's page on each block ID, so
+    freeing out-of-window blocks saves no memory.
+    """
     if any(isinstance(spec, HiddenStateCacheSpec) for spec in kv_cache_spec.values()):
         return None
-    if any(isinstance(spec, (SlidingWindowMLASpec, ChunkedLocalAttentionSpec)) for spec in kv_cache_spec.values()):
+    if any(isinstance(spec, ChunkedLocalAttentionSpec) for spec in kv_cache_spec.values()):
         return None
 
     has_mla = any(isinstance(spec, MLAAttentionSpec) for spec in kv_cache_spec.values())
-    has_regular_swa = any(isinstance(spec, SlidingWindowSpec) for spec in kv_cache_spec.values())
-    if not (has_mla and has_regular_swa):
+    has_swa = any(isinstance(spec, SlidingWindowSpec) for spec in kv_cache_spec.values())
+    if not (has_mla and has_swa):
         return None
 
     try:
@@ -857,7 +899,7 @@ def _get_packed_kv_cache_groups(
     Greedily buckets layers into uniform-type specs. Buckets with equal layer
     counts per page size are treated as a repeating layer pattern (one layer
     per page size) and split into groups covering the same number of pattern
-    repeats (picked by ``_approximate_gcd`` to minimize padding), so all
+    repeats (picked by `_approximate_gcd` to minimize padding), so all
     groups pack into the same per-block layout. Mamba buckets are additionally
     split to fit the block the attention buckets already need.
     Returns None when the layout is not block-outermost or all layers already
@@ -1116,7 +1158,7 @@ def get_kv_cache_groups_from_builder(
     """Group the layers with the builder and check the result.
 
     Core checks every grouping, whether it comes from the default grouping, a
-    model's ``SupportsKVCacheGrouping`` or a platform builder.
+    model's `SupportsKVCacheGrouping` or a platform builder.
     """
     groups = builder.get_kv_cache_groups(sonar_config, kv_cache_spec)
     _check_exact_partition(groups, kv_cache_spec)
@@ -1166,7 +1208,7 @@ def _max_memory_usage_bytes_from_groups(
     be padded to 9 full + 9 sliding window for uniform group sizes.
 
     Each group independently claims blocks from the shared pool, so a request consumes
-    the sum of the per-group block counts, i.e. ``bytes_per_block * total_blocks``.
+    the sum of the per-group block counts, i.e. `bytes_per_block * total_blocks`.
     """
     kv_cache_groups = [group for group in kv_cache_groups if not group.host_resident]
     if not kv_cache_groups:
@@ -1233,6 +1275,7 @@ def _auto_fit_max_model_len(
     sonar_config: SonarConfig,
     projected_groups_per_worker: list[list[KVCacheGroupSpec]],
     available_memory: list[int],
+    after_warmup: bool = False,
 ) -> None:
     """When max_model_len is set to -1, this function estimates the largest
     context length that can be supported with the available GPU memory.
@@ -1245,6 +1288,8 @@ def _auto_fit_max_model_len(
         projected_groups_per_worker: KV cache groups projected to each worker.
         available_memory: Memory available for KV cache in bytes for each
             worker.
+        after_warmup: Whether this re-fits a length fitted before CUDA graph
+            capture and warmup to the memory measured after them.
 
     """
     original_max = sonar_config.model_config.max_model_len
@@ -1269,9 +1314,16 @@ def _auto_fit_max_model_len(
             limiting_worker_mem = avail_mem
 
     if auto_fit_max <= 0:
+        hint = (
+            "CUDA graph capture and warmup left no memory for the KV cache. "
+            "Increase `gpu_memory_utilization`, reduce the memory CUDA graphs "
+            "take (fewer or smaller capture sizes in the compilation config), "
+            "or use more GPUs."
+            if after_warmup
+            else _more_kv_cache_memory_hint(sonar_config)
+        )
         raise ValueError(
-            "Cannot auto-fit max_model_len: not enough GPU memory available "
-            "to serve even a single token. Try increasing `gpu_memory_utilization`."
+            f"Cannot auto-fit max_model_len: not enough GPU memory available to serve even a single token. {hint}"
         )
 
     kv_cache_memory = f"{format_gib(limiting_worker_mem)} GiB {_kv_cache_device_name(sonar_config)}"
@@ -1279,22 +1331,67 @@ def _auto_fit_max_model_len(
         host_pool_gib = format_gib(get_hisparse_host_pool_bytes(sonar_config))
         kv_cache_memory += f" + {host_pool_gib} GiB host"
 
+    # Under the extensible KV cache the length is fitted again once CUDA graphs
+    # and warmup have taken their memory; say so, and log the final length then.
+    tentative = sonar_config.cache_config.enable_extensible_kv_cache and not after_warmup
+    tentative_note = "; the final length is set after CUDA graph capture and warmup" if tentative else ""
     if auto_fit_max >= original_max:
+        if after_warmup:
+            logger.info(
+                "Auto-fit max_model_len: using max_model_len=%d, which fits in "
+                "the KV cache memory left after CUDA graph capture and warmup (%s).",
+                original_max,
+                kv_cache_memory,
+            )
+            return
         # The model's full context length fits in memory
         logger.info_once(
-            "Auto-fit max_model_len: full model context length %d fits in available KV cache memory (%s)",
+            "Auto-fit max_model_len: full model context length %d fits in available KV cache memory (%s)%s",
             original_max,
             kv_cache_memory,
+            tentative_note,
         )
-    else:
-        # Need to reduce max_model_len to fit in memory
-        sonar_config.model_config.max_model_len = auto_fit_max
+        return
+
+    # Need to reduce max_model_len to fit in memory
+    sonar_config.model_config.max_model_len = auto_fit_max
+    if tentative:
         logger.info_once(
-            "Auto-fit max_model_len: reduced from %d to %d to fit in available KV cache memory (%s)",
+            "Auto-fit max_model_len: reduced from %d to %d to fit in available KV cache memory (%s)%s",
             original_max,
             auto_fit_max,
             kv_cache_memory,
+            tentative_note,
         )
+        return
+
+    left = (
+        f"{kv_cache_memory} left for the KV cache after CUDA graph capture and warmup"
+        if after_warmup
+        else f"{kv_cache_memory} available for the KV cache"
+    )
+    if auto_fit_max >= AUTO_FIT_SHORT_MAX_MODEL_LEN:
+        logger.info(
+            "--max-model-len auto reduced max_model_len from %d to %d (%s).",
+            original_max,
+            auto_fit_max,
+            left,
+        )
+        return
+    hint = (
+        "Increase `gpu_memory_utilization` or set --max-model-len explicitly."
+        if sonar_config.cache_config.resolved_gpu_memory_utilization < 1.0
+        else "Use more GPUs or set --max-model-len explicitly."
+    )
+    logger.warning(
+        "--max-model-len auto reduced max_model_len from %d to %d (%s). "
+        "Requests longer than %d tokens will be rejected. %s",
+        original_max,
+        auto_fit_max,
+        left,
+        auto_fit_max,
+        hint,
+    )
 
 
 def _project_kv_cache_groups_to_worker(
@@ -1377,8 +1474,6 @@ def get_kv_cache_configs(
         The generated KVCacheConfigs for each worker.
 
     """
-    from sonar.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
-
     builder = get_kv_cache_config_builder(sonar_config)
 
     # If original_max_model_len was -1, automatically
@@ -1429,6 +1524,7 @@ def get_kv_cache_configs(
             partial(_max_memory_usage_bytes_from_groups, builder, sonar_config, groups),
             sonar_config.model_config.max_model_len,
             partial(_estimate_max_model_len_from_groups, builder, sonar_config, groups),
+            _more_kv_cache_memory_hint(sonar_config),
         )
 
     kv_cache_configs: list[KVCacheConfig] = []
@@ -1464,6 +1560,11 @@ def get_kv_cache_configs(
             sonar_config.parallel_config.decode_context_parallel_size,
         )
 
+    # Every worker receives the scheduler's new_block_ids_to_zero.
+    needs_kv_cache_zeroing = any(cfg.needs_kv_cache_zeroing for cfg in kv_cache_configs)
+    for cfg in kv_cache_configs:
+        cfg.needs_kv_cache_zeroing = needs_kv_cache_zeroing
+
     return kv_cache_configs
 
 
@@ -1472,8 +1573,6 @@ def get_global_kv_cache_groups(
     kv_cache_specs: list[dict[str, KVCacheSpec]],
 ) -> list[KVCacheGroupSpec]:
     """Group the layers of the whole model (all workers' specs merged)."""
-    from sonar.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
-
     builder = get_kv_cache_config_builder(sonar_config)
 
     # Merge the KV cache specs of all workers. Different PP stages may have
@@ -1516,14 +1615,14 @@ def get_global_kv_cache_groups(
 class DefaultKVCacheConfigBuilder(KVCacheConfigBuilder):
     """Default grouping and placement, backed by the module-level functions here.
 
-    .. note::
-        This class is part of the experimental ``KVCacheConfigBuilder``
+    !!! note
+        This class is part of the experimental `KVCacheConfigBuilder`
         interface and is subject to change.
 
     Subclasses override only the hooks they need. The planning flow and its
-    invariants (``num_gpu_blocks_override``, null-block reservation, auto-fit,
+    invariants (`num_gpu_blocks_override`, null-block reservation, auto-fit,
     admission checks, cross-rank convergence) stay in the Core-owned
-    :func:`get_kv_cache_configs`.
+    `get_kv_cache_configs`.
     """
 
     def get_kv_cache_groups(
@@ -1531,9 +1630,9 @@ class DefaultKVCacheConfigBuilder(KVCacheConfigBuilder):
         sonar_config: SonarConfig,
         kv_cache_spec: dict[str, KVCacheSpec],
     ) -> list[KVCacheGroupSpec]:
-        """See ``KVCacheConfigBuilder.get_kv_cache_groups``.
+        """See `KVCacheConfigBuilder.get_kv_cache_groups`.
 
-        A model implementing ``SupportsKVCacheGrouping`` owns the grouping
+        A model implementing `SupportsKVCacheGrouping` owns the grouping
         decision; otherwise the default grouping is used.
         """
         if not sonar_config.model_config.supports_kv_cache_grouping:
@@ -1556,7 +1655,7 @@ class DefaultKVCacheConfigBuilder(KVCacheConfigBuilder):
         kv_cache_groups: list[KVCacheGroupSpec],
         num_blocks: int,
     ) -> KVCacheConfig:
-        """See ``KVCacheConfigBuilder.get_kv_cache_config_from_groups``."""
+        """See `KVCacheConfigBuilder.get_kv_cache_config_from_groups`."""
         if len(kv_cache_groups) == 0:
             # Attention free models do not have KV cache.
             # Return num_blocks=1 as BlockPool always needs a null_block.
@@ -1568,3 +1667,65 @@ class DefaultKVCacheConfigBuilder(KVCacheConfigBuilder):
             )
         bytes_per_block = _pool_bytes_per_block(sonar_config, kv_cache_groups)
         return get_kv_cache_config_from_groups(sonar_config, kv_cache_groups, num_blocks * bytes_per_block)
+
+
+def shrink_kv_cache_configs(sonar_config: SonarConfig, kv_cache_configs: list[KVCacheConfig], num_blocks: int) -> None:
+    """Lower num_blocks of every config in place after measured sizing. The
+    tensors' size follows (their strides and offsets keep describing the
+    reservation). Raises if max_model_len no longer fits.
+    """
+    builder = get_kv_cache_config_builder(sonar_config)
+    for kv_cache_config in kv_cache_configs:
+        assert num_blocks <= kv_cache_config.num_blocks
+        kv_cache_config.kv_cache_tensors = [
+            tensor
+            if tensor.host_resident
+            else replace(tensor, size=num_blocks * tensor.size // kv_cache_config.num_blocks)
+            for tensor in kv_cache_config.kv_cache_tensors
+        ]
+        groups = kv_cache_config.kv_cache_groups
+        if groups:
+            # The null block is held back by the BlockPool, as in the capacity
+            # check of `get_kv_cache_configs`.
+            _check_enough_kv_cache_memory(
+                (num_blocks - 1) * _pool_bytes_per_block_from_builder(builder, sonar_config, groups),
+                partial(_max_memory_usage_bytes_from_groups, builder, sonar_config, groups),
+                sonar_config.model_config.max_model_len,
+                partial(_estimate_max_model_len_from_groups, builder, sonar_config, groups),
+                _more_kv_cache_memory_hint(sonar_config, after_warmup=True),
+            )
+        kv_cache_config.num_blocks = num_blocks
+
+
+def finalize_extensible_kv_cache(
+    sonar_config: SonarConfig,
+    kv_cache_configs: list[KVCacheConfig],
+    scheduler_kv_cache_config: KVCacheConfig,
+    compilation_times: list["CompilationTimes"],
+) -> int:
+    """Settle the KV cache size from the memory workers measured after warmup.
+
+    Every rank must agree on one block count, so the minimum becomes the
+    scheduler's num_blocks; the caller commits it on the workers.
+    """
+    # No measurements: the elastic-EP scale-up path skips warmup. Elastic EP
+    # leaves the extensible KV cache off, so this branch is not reached; it
+    # keeps the capacity.
+    block_counts = (times.num_kv_blocks for times in compilation_times if times.num_kv_blocks is not None)
+    num_blocks = min(block_counts, default=scheduler_kv_cache_config.num_blocks)
+    num_blocks = min(num_blocks, scheduler_kv_cache_config.num_blocks)
+    if sonar_config.model_config.original_max_model_len == -1:
+        # The context length was fitted to the reserved capacity, before CUDA
+        # graphs and warmup took their share; fit it again to the measured one.
+        builder = get_kv_cache_config_builder(sonar_config)
+        groups_per_worker = [config.kv_cache_groups for config in kv_cache_configs]
+        available_memory = [
+            (num_blocks - 1) * _pool_bytes_per_block_from_builder(builder, sonar_config, groups) if groups else 0
+            for groups in groups_per_worker
+        ]
+        _auto_fit_max_model_len(builder, sonar_config, groups_per_worker, available_memory, after_warmup=True)
+    shrink_kv_cache_configs(sonar_config, kv_cache_configs + [scheduler_kv_cache_config], num_blocks)
+    sonar_config.cache_config.num_gpu_blocks = num_blocks
+    if scheduler_kv_cache_config.kv_cache_groups:
+        update_kv_cache_capacity(sonar_config, scheduler_kv_cache_config)
+    return num_blocks

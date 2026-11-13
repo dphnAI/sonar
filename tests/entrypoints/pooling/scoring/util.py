@@ -10,7 +10,7 @@ from PIL import Image
 from safetensors.torch import load_file
 from transformers import AutoModel, AutoTokenizer
 
-from sonar.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
+from sonar.entrypoints.pooling.scoring.types import ScoreMultiModalParam
 from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
 from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageParam,

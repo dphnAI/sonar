@@ -110,9 +110,11 @@ llm = LLM(
 )
 ```
 
-The default `gpu_memory_utilization` is `0.92`. It is a fraction of total GPU
-memory, not currently free memory. Sonar checks free memory during startup and
-fails if another process leaves less than the requested amount.
+With extensible caching on CUDA/ROCm, `gpu_memory_utilization` defaults to `1.0`
+and the KV cache uses memory free after warmup, less measured reserves.
+Other platforms and estimate-based fallback paths default to `0.92`.
+An explicit fraction caps total device-memory use. See
+[memory budgeting](/deployment/optimization/#set-the-gpu-memory-budget).
 
 ## Use more than one GPU
 
@@ -148,6 +150,12 @@ Inspect `finish_reason` before you store a generated answer. A value such as
 errors as startup failures. Treat individual request validation errors as data
 errors and record the source prompt.
 
+Beam search stops each prompt independently at `max_tokens` or the model's
+context limit and returns its completed beams.
+
+Use `llm.get_model_inspection()` to inspect the model hierarchy. The first call
+queries workers; subsequent calls return the cached result.
+
 Release the engine before another process claims the same GPUs:
 
 ```python
@@ -163,6 +171,19 @@ destroy_distributed_environment()
 
 For normal scripts, process exit releases the resources. Explicit cleanup is
 useful in test suites and notebooks that create more than one engine.
+
+## Batch embeddings
+
+`sonar run-batch` accepts JSONL requests targeting `/v1/embeddings`, with a
+`custom_id`, `method: "POST"`, and embedding request `body` on each line:
+
+```bash
+sonar run-batch -i embeddings.jsonl -o results.jsonl \
+  --model intfloat/multilingual-e5-small
+```
+
+Each result retains `custom_id`. Check every result's status and error fields
+because a completed batch can contain failed requests.
 
 ## Next steps
 

@@ -9,14 +9,15 @@ import sonar.model_executor.layers.fused_moe.modular_kernel as mk
 from sonar import envs
 from sonar.config.kernel import MoEBackend
 from sonar.logger import init_logger
-from sonar.model_executor.layers.fused_moe.all2all_utils import (
-    maybe_make_prepare_finalize,
-)
 from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     nvfp4_moe_quant_config,
     nvfp4_w4a16_moe_quant_config,
+)
+from sonar.model_executor.layers.fused_moe.oracle.base import (
+    MoEKernelOracle,
+    make_moe_kernel,
 )
 from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
 from sonar.model_executor.layers.quantization.utils.b12x_moe import (
@@ -37,7 +38,7 @@ from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import
 from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
 )
-from sonar.model_executor.utils import move_parameter
+from sonar.model_executor.utils import move_parameter, refill_derived
 
 logger = init_logger(__name__)
 
@@ -196,6 +197,15 @@ def _use_a16(backend: NvFp4MoeBackend, checkpoint_uses_a16: bool) -> bool:
     return checkpoint_uses_a16 or (backend == NvFp4MoeBackend.B12X and envs.SONAR_B12X_MOE_FP4_FORCE_A16)
 
 
+class NvFp4MoEKernelOracle(MoEKernelOracle[NvFp4MoeBackend]):
+    """NVFP4 MoE backend selection for one deployment configuration."""
+
+    name = "NvFp4"
+
+    def backend_to_kernel_cls(self, backend: NvFp4MoeBackend) -> list[type[mk.FusedMoEExperts]]:
+        return backend_to_kernel_cls(backend)
+
+
 def select_nvfp4_moe_backend(
     config: FusedMoEConfig,
     weight_key: QuantKey | None,
@@ -247,47 +257,19 @@ def select_nvfp4_moe_backend(
     if config.swiglu_limit is not None:
         AVAILABLE_BACKENDS = [b for b in AVAILABLE_BACKENDS if b in NVFP4_BACKENDS_WITH_CLAMP]
 
-    use_batched = config.moe_parallel_config.use_batched_activation_format
-    activation_format = (
-        mk.FusedMoEActivationFormat.BatchedExperts if use_batched else mk.FusedMoEActivationFormat.Standard
-    )
+    activation_format = config.activation_format
 
-    def _make_log_backend(backend: NvFp4MoeBackend):
-        available_backend_strs = [b.value for b in AVAILABLE_BACKENDS]
-        return f"Using '{backend.value}' NvFp4 MoE backend out of potential backends: {available_backend_strs}."
-
-    def _make_log_unsupported(backend: NvFp4MoeBackend, reason: str | None) -> str:
-        if reason:
-            return f"NvFp4 MoE backend '{backend.value}' does not support the deployment configuration since {reason}."
-        else:
-            return f"NvFp4 MoE backend '{backend.value}' does not support the deployment configuration."
-
-    def _return_or_raise(
-        backend: NvFp4MoeBackend,
-        config: FusedMoEConfig,
-        weight_key: QuantKey | None,
-        activation_key: QuantKey | None,
-        activation_format: mk.FusedMoEActivationFormat,
-    ) -> tuple[NvFp4MoeBackend, type[mk.FusedMoEExperts]]:
-        for k_cls in backend_to_kernel_cls(backend):
-            supported, reason = k_cls.is_supported_config(k_cls, config, weight_key, activation_key, activation_format)
-            if supported:
-                logger.info_once(_make_log_backend(backend))
-                return backend, k_cls
-
-        raise ValueError(_make_log_unsupported(backend, reason))
+    runner_backend = config.moe_backend
+    requested_backend = map_nvfp4_backend(runner_backend) if runner_backend != "auto" else None
+    # B12X can run with BF16 activations when the env forces a16.
+    if requested_backend is not None and _use_a16(requested_backend, False):
+        activation_key = None
+    oracle = NvFp4MoEKernelOracle(config, weight_key, activation_key)
 
     # Handle explicit moe_backend from user.
-    runner_backend = config.moe_backend
-    if runner_backend != "auto":
-        requested_backend = map_nvfp4_backend(runner_backend)
-        if _use_a16(requested_backend, False):
-            activation_key = None
+    if requested_backend is not None:
         # For batched activation format, use batched variant if available.
-        if (
-            activation_format == mk.FusedMoEActivationFormat.BatchedExperts
-            and requested_backend == NvFp4MoeBackend.FLASHINFER_CUTEDSL
-        ):
+        if activation_format.is_batched and requested_backend == NvFp4MoeBackend.FLASHINFER_CUTEDSL:
             requested_backend = NvFp4MoeBackend.FLASHINFER_CUTEDSL_BATCHED
         if config.swiglu_limit is not None and requested_backend not in NVFP4_BACKENDS_WITH_CLAMP:
             raise ValueError(
@@ -298,23 +280,14 @@ def select_nvfp4_moe_backend(
                 f"'flashinfer_moe_ep_cutedsl', 'cutlass', 'b12x', 'marlin', "
                 f"or 'humming' instead."
             )
-        return _return_or_raise(requested_backend, config, weight_key, activation_key, activation_format)
+        return oracle.return_or_raise(requested_backend, AVAILABLE_BACKENDS)
 
     # Select kernels in order of backend.
     for backend in AVAILABLE_BACKENDS:
-        for k_cls in backend_to_kernel_cls(backend):
-            supported, reason = k_cls.is_supported_config(
-                k_cls,
-                config,
-                weight_key,
-                activation_key,
-                activation_format,
-            )
-            if supported:
-                logger.info_once(_make_log_backend(backend))
-                return backend, k_cls
-            else:
-                logger.debug_once(_make_log_unsupported(backend, reason))
+        kernel_cls, _ = oracle.try_backend(backend)
+        if kernel_cls is not None:
+            logger.info_once(oracle.make_log_backend(backend, AVAILABLE_BACKENDS))
+            return backend, kernel_cls
 
     raise NotImplementedError("No NvFp4 MoE backend supports the deployment configuration.")
 
@@ -591,6 +564,12 @@ def make_nvfp4_moe_quant_config(
         w13_scale = nvfp4_swizzled_scale_to_cutedsl_mma_view(w13_scale)
         w2_scale = nvfp4_swizzled_scale_to_cutedsl_mma_view(w2_scale)
 
+    a1_gscale = 1.0 / a13_scale
+    a2_gscale = 1.0 / a2_scale
+    if layer is not None:
+        a1_gscale = refill_derived(layer, "_a1_gscale", a1_gscale)
+        a2_gscale = refill_derived(layer, "_a2_gscale", a2_gscale)
+
     # Pass w13_scale_2 / w2_scale_2 directly as g1/g2_alphas.
     # The expert's process_weights_after_loading will fuse activation
     # scales in-place. Since the quant config references the same tensor
@@ -598,8 +577,8 @@ def make_nvfp4_moe_quant_config(
     return nvfp4_moe_quant_config(
         g1_alphas=w13_scale_2,
         g2_alphas=w2_scale_2,
-        a1_gscale=(1.0 / a13_scale),
-        a2_gscale=(1.0 / a2_scale),
+        a1_gscale=a1_gscale,
+        a2_gscale=a2_gscale,
         w1_scale=w13_scale,
         w2_scale=w2_scale,
         # NOTE(rob): this is a hack until the MoE kernels
@@ -630,19 +609,6 @@ def make_nvfp4_moe_kernel(
     if backend == NvFp4MoeBackend.MARLIN and moe_quant_config.use_nvfp4_w4a16:
         per_token_activation = False
 
-    # Create Prepare/Finalize.
-    prepare_finalize = maybe_make_prepare_finalize(
-        moe=moe_config,
-        quant_config=moe_quant_config,
-        routing_tables=routing_tables,
-        allow_new_interface=True,
-        use_monolithic=issubclass(experts_cls, mk.FusedMoEExpertsMonolithic),
-        input_dtype=moe_config.in_dtype if per_token_activation else None,
-    )
-    assert prepare_finalize is not None
-
-    logger.info_once("Using %s", prepare_finalize.__class__.__name__)
-
     extra_kwargs: dict[str, Any] = {}
     if per_token_activation:
         # Prepare dispatched the input unquantized, so an expert that does
@@ -653,27 +619,11 @@ def make_nvfp4_moe_kernel(
             raise ValueError(f"Per-token NVFP4 activation scales are not supported by {backend.value}.")
         extra_kwargs["per_token_activation"] = True
 
-    # Create Experts.
-    if prepare_finalize.activation_format == mk.FusedMoEActivationFormat.BatchedExperts:
-        max_num_tokens = prepare_finalize.max_num_tokens_per_rank()
-        assert max_num_tokens is not None
-        experts = experts_cls(
-            moe_config=moe_config,
-            quant_config=moe_quant_config,
-            max_num_tokens=max_num_tokens,
-            num_dispatchers=prepare_finalize.num_dispatchers(),
-            **extra_kwargs,
-        )
-    else:
-        experts = experts_cls(
-            moe_config=moe_config,
-            quant_config=moe_quant_config,
-            **extra_kwargs,
-        )
-
-    kernel = mk.FusedMoEKernel(
-        prepare_finalize,
-        experts,
+    return make_moe_kernel(
+        moe_quant_config,
+        moe_config,
+        experts_cls,
+        routing_tables,
+        prepare_finalize_kwargs={"input_dtype": moe_config.in_dtype if per_token_activation else None},
+        experts_kwargs=extra_kwargs,
     )
-
-    return kernel

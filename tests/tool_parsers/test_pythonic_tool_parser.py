@@ -179,7 +179,7 @@ def test_streaming_tool_call_with_large_steps(default_tokenizer: TokenizerLike):
     tool_parser: ToolParser = ToolParserManager.get_tool_parser("pythonic")(default_tokenizer)
     model_output_deltas = [
         "[get_weather(city='San",
-        f" Francisco', metric='celsius'), {PARAMETERLESS_FUNCTION_OUTPUT}, {EMPTY_LIST_FUNCTION_OUTPUT}]",
+        (f" Francisco', metric='celsius'), {PARAMETERLESS_FUNCTION_OUTPUT}, {EMPTY_LIST_FUNCTION_OUTPUT}]"),
     ]
 
     reconstructor = run_tool_extraction_streaming(tool_parser, model_output_deltas, assert_one_tool_per_delta=False)

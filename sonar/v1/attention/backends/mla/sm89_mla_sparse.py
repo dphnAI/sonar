@@ -4,7 +4,7 @@
 
 The stock DeepSeek sparse attention stack is kernel-gated to sm90+; this
 backend drives the dedicated sm89 CUDA ops instead. The KV cache must use the
-``fp8_ds_mla`` 656-byte-per-token layout (see flashmla_sparse for the format).
+`fp8_ds_mla` 656-byte-per-token layout (see flashmla_sparse for the format).
 The forward kernel gathers rows directly from the fp8 pool by physical slot
 for decode and prefill-extend alike, so there is no separate bf16 prefill
 path and no upconvert workspace.
@@ -183,12 +183,13 @@ class Sm89MLASparseMetadata(AttentionMetadata):
 
     block_table: torch.Tensor
     req_id_per_token: torch.Tensor
+    seq_lens: torch.Tensor
+    num_decodes: int
+    num_prefills: int
+    num_decode_tokens: int
     block_size: int = 64
     topk_tokens: int = 2048
     cp_kv_cache_interleave_size: int = 1
-    # Populated only under DCP when the local-prefill path is active; other
-    # configurations leave these at their defaults.
-    num_decode_tokens: int = 0
     prefill_local: Sm89LocalPrefillMetadata | None = None
 
 
@@ -312,8 +313,10 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
         cm: CommonAttentionMetadata,
         seg_lengths: np.ndarray,
         starts: np.ndarray,
-    ) -> tuple[int, "Sm89LocalPrefillMetadata | None"]:
-        """Local-prefill metadata for DCP, or (0, None) if inapplicable.
+        num_decodes: int,
+        num_decode_tokens: int,
+    ) -> "Sm89LocalPrefillMetadata | None":
+        """Local-prefill metadata for fresh DCP prompts, or None if inapplicable.
 
         Active only when every prefill request is a fresh prompt (context
         length 0), so the whole prompt's KV is computable on-rank from the
@@ -322,16 +325,11 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
         be batch-uniform for every DCP rank to issue the same collectives.
         """
         if not self.allow_local_prefill:
-            return 0, None
-        # Must match the indexer builder's split exactly (same threshold and
-        # require_uniform) so both sides agree on the decode/prefill boundary.
-        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = split_decodes_and_prefills(
-            cm,
-            decode_threshold=self.reorder_batch_threshold or 1,
-            require_uniform=True,
-        )
+            return None
+        num_prefills = cm.num_reqs - num_decodes
+        num_prefill_tokens = cm.num_actual_tokens - num_decode_tokens
         if num_prefills == 0:
-            return num_decode_tokens, None
+            return None
         # Exact for prefill rows (see CommonAttentionMetadata docstring).
         seq_lens_cpu = cm.seq_lens_cpu_upper_bound
         assert seq_lens_cpu is not None
@@ -348,7 +346,7 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
                 "DCP local-prefill fast path inactive for this batch "
                 "(non-fresh prefill present); using the full-DCP prefill path."
             )
-            return num_decode_tokens, None
+            return None
 
         ws_starts = (starts[num_decodes:-1] - num_decode_tokens).astype(np.int32)
         ws_req_ids = np.repeat(np.arange(num_prefills, dtype=np.int32), prefill_query_lens)
@@ -356,7 +354,7 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
         workspace_starts.copy_(np_to_pinned_tensor(ws_starts), non_blocking=True)
         workspace_request_ids = torch.empty(num_prefill_tokens, dtype=torch.int32, device=self.device)
         workspace_request_ids.copy_(np_to_pinned_tensor(ws_req_ids), non_blocking=True)
-        return num_decode_tokens, Sm89LocalPrefillMetadata(
+        return Sm89LocalPrefillMetadata(
             workspace_request_ids=workspace_request_ids,
             workspace_starts=workspace_starts,
             shadow_slot_mapping=self.local_prefill_slot_buffer[:num_prefill_tokens],
@@ -379,7 +377,14 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             np_to_pinned_tensor(req_id_per_token), non_blocking=True
         )
 
-        num_decode_tokens, prefill_local = self._build_local_prefill(cm, seg_lengths, starts)
+        # Match the indexer's split even when local prefill is disabled: the
+        # shared MLA wrapper uses these counts for MQA routing and DCP merging.
+        num_decodes, num_prefills, num_decode_tokens, _ = split_decodes_and_prefills(
+            cm,
+            decode_threshold=self.reorder_batch_threshold or 1,
+            require_uniform=True,
+        )
+        prefill_local = self._build_local_prefill(cm, seg_lengths, starts, num_decodes, num_decode_tokens)
 
         return Sm89MLASparseMetadata(
             num_reqs=cm.num_reqs,
@@ -390,6 +395,9 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             slot_mapping=cm.slot_mapping,
             block_table=cm.block_table_tensor,
             req_id_per_token=self.req_id_per_token_buffer[:num_tokens],
+            seq_lens=cm.seq_lens,
+            num_decodes=num_decodes,
+            num_prefills=num_prefills,
             block_size=self.kv_cache_spec.block_size,
             topk_tokens=self.topk_tokens,
             cp_kv_cache_interleave_size=(self.sonar_config.parallel_config.cp_kv_cache_interleave_size),
@@ -403,6 +411,9 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
     # DCP cross-rank softmax combine consumes.
     can_return_lse_for_decode: bool = True
     supports_dcp: bool = True
+
+    def get_fp8_ds_mla_row_bytes(self) -> int:
+        return 656
 
     def __init__(
         self,

@@ -8,13 +8,12 @@ import sys
 import textwrap
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 import torch
 
-import sonar.envs as envs
 from sonar.config import SonarConfig, SpeculativeConfig
+from sonar.config.utils import hash_config
 from sonar.model_executor.models.registry import ModelRegistry
 from sonar.v1.worker.gpu.spec_decode import init_speculator
 from sonar.v1.worker.gpu.spec_decode import speculator_config as speculator_config_module
@@ -23,9 +22,6 @@ from sonar.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
 from sonar.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
 from sonar.v1.worker.gpu.spec_decode.standalone_ar.config import (
     StandaloneARSpeculatorConfig,
-)
-from sonar.v1.worker.gpu.spec_decode.v1_speculator_configs import (
-    V1CustomProposerConfig,
 )
 from tests.v1.spec_decode.utils import fake_speculative_config
 
@@ -102,10 +98,6 @@ def test_custom_speculator(register, lazy: bool):
     config = SonarConfig()
     config.speculative_config = spec_config
     assert config.num_lookahead_tokens == 0
-    with patch.object(envs, "SONAR_USE_V2_MODEL_RUNNER", None):
-        assert config.use_v2_model_runner
-    with pytest.raises(ValueError, match="V1 does not support: custom speculative method 'dummy'"):
-        config._validate_v1_model_runner()
 
 
 def test_custom_speculator_inherits_builtin_config(register):
@@ -133,7 +125,7 @@ def test_speculator_options(register):
     spec_config = _custom_spec_config("with_options", speculator_options={"seed": 1})
     assert spec_config.speculator_options == {"seed": 1}
     other_seed = _custom_spec_config("with_options", speculator_options={"seed": 2})
-    assert spec_config.compute_hash() != other_seed.compute_hash()
+    assert hash_config(spec_config) != hash_config(other_seed)
 
     with pytest.raises(ValueError, match="unknown option"):
         _custom_spec_config("with_options", speculator_options={"nope": 1})
@@ -172,16 +164,6 @@ def test_custom_speculator_validation(register, config, kwargs, error, match):
         _custom_spec_config(**kwargs)
 
 
-def test_v1_custom_proposer_unsupported_by_v2_model_runner():
-    config = SonarConfig()
-    config.speculative_config = SpeculativeConfig(
-        method="custom_class", model="my_module.MyProposer", num_speculative_tokens=3
-    )
-
-    assert type(config.speculative_config.speculator_config) is V1CustomProposerConfig
-    assert config._get_v2_model_runner_unsupported_features() == ["speculative method 'custom_class'"]
-
-
 def _sonar_config(config_cls: type[SpeculatorConfig], method: str = "dummy") -> Any:
     return SimpleNamespace(speculative_config=fake_speculative_config(config_cls, method=method))
 
@@ -206,9 +188,9 @@ def test_init_speculator():
     [
         (_sonar_config(NotASpeculatorConfig), TypeError, "must be a subclass of"),
         (
-            SimpleNamespace(speculative_config=fake_speculative_config(method="suffix")),
+            _sonar_config(NoSpeculatorClassConfig),
             NotImplementedError,
-            "suffix is not supported",
+            "is not supported",
         ),
     ],
 )
@@ -227,7 +209,7 @@ def test_speculator_configs_do_not_import_speculators():
         import sonar.v1.worker.gpu.spec_decode as pkg
 
         for module in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + "."):
-            if module.name.endswith(("config", "_configs")):
+            if module.name.endswith("config"):
                 importlib.import_module(module.name)
 
         suffixes = (".speculator", ".model_runner", ".extract_hidden_states")

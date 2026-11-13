@@ -10,6 +10,7 @@ from sonar.config import SonarConfig
 from sonar.model_executor.models import SonarModelForPooling, is_pooling_model
 from sonar.pooling_params import PoolingParams
 from sonar.tasks import PoolingTask
+from sonar.utils.torch_utils import token_ids_to_tensor
 from sonar.v1.outputs import PoolerOutput
 from sonar.v1.pool.late_interaction_runner import LateInteractionRunner
 from sonar.v1.pool.metadata import PoolingMetadata, PoolingStates
@@ -29,23 +30,16 @@ class PoolingRunner:
         model_tasks = tuple(sorted(self.model.pooler.get_supported_tasks()))
         selected_task = self.model_config.get_pooling_task(model_tasks)
         if selected_task not in _SUPPORTED_TASKS:
-            hint = (
-                "Set an explicitly supported task or SONAR_USE_V2_MODEL_RUNNER=0."
-                if _SUPPORTED_TASKS.intersection(model_tasks)
-                else "Set SONAR_USE_V2_MODEL_RUNNER=0 to use this model."
-            )
+            hint = " Set an explicitly supported task." if _SUPPORTED_TASKS.intersection(model_tasks) else ""
             raise ValueError(
-                "Model Runner V2 supports pooling tasks "
-                f"{sorted(_SUPPORTED_TASKS)}, but this model selects "
-                f"{selected_task!r} from {list(model_tasks)}. {hint}"
+                f"Sonar supports pooling tasks {sorted(_SUPPORTED_TASKS)}, but "
+                f"this model selects {selected_task!r} from {list(model_tasks)}."
+                f"{hint}"
             )
         self.supported_tasks = frozenset(self.get_supported_tasks(model))
         if not self.supported_tasks:
             raise ValueError(
-                "Model Runner V2 supports pooling tasks "
-                f"{sorted(_SUPPORTED_TASKS)}, but this model supports "
-                f"{list(model_tasks)}. "
-                "Set SONAR_USE_V2_MODEL_RUNNER=0 to use this model."
+                f"Sonar supports pooling tasks {sorted(_SUPPORTED_TASKS)}, but this model supports {list(model_tasks)}."
             )
         self.pooling_params: dict[int, PoolingParams] = {}
         self.pooling_states: dict[int, PoolingStates] = {}
@@ -77,7 +71,7 @@ class PoolingRunner:
         self.pooling_states[req_index] = PoolingStates()
         if pooling_params.requires_token_ids:
             assert prompt_token_ids is not None
-            self.prompt_token_ids[req_index] = torch.tensor(prompt_token_ids, dtype=torch.int64)
+            self.prompt_token_ids[req_index] = token_ids_to_tensor(prompt_token_ids)
 
     def remove_request(self, req_index: int) -> None:
         self.pooling_params.pop(req_index, None)

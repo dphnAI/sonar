@@ -156,8 +156,6 @@ variants:
           - "flashinfer"
           - "--moe-backend"
           - "marlin"
-          - "--gpu-memory-utilization"
-          - "0.92"
           - "--max-model-len"
           - "262144"
           - "--max-num-batched-tokens"
@@ -181,8 +179,6 @@ variants:
           - "flashinfer"
           - "--attention-config"
           - '{"use_trtllm_attention":true}'
-          - "--gpu-memory-utilization"
-          - "0.9"
           - "--max-num-seqs"
           - "8"
           - "--max-num-batched-tokens"
@@ -209,8 +205,6 @@ variants:
           - "flashinfer"
           - "--attention-config"
           - '{"use_trtllm_attention":true}'
-          - "--gpu-memory-utilization"
-          - "0.85"
           - "--max-model-len"
           - "65536"
           - "--max-num-seqs"
@@ -326,7 +320,7 @@ guide: |
   ### Docker (Intel XPU B60 / B70)
 
   Validated on 4× Intel Arc Pro B60 / B70 (B60 24 GB, B70 32 GB per card) with the
-  official Sonar XPU image `vllm/vllm-openai-xpu:latest`.
+  upstream vLLM XPU image `vllm/vllm-openai-xpu:latest`.
 
   ```bash
   docker run --device /dev/dri \

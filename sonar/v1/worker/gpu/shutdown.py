@@ -8,6 +8,7 @@ logger = init_logger(__name__)
 
 def free_before_shutdown(sonar_config: SonarConfig) -> None:
     from sonar.model_executor.layers.rotary_embedding import _ROPE_DICT
+    from sonar.platforms import current_platform
     from sonar.v1.worker.workspace import reset_workspace_manager
 
     cache_config = sonar_config.cache_config
@@ -18,3 +19,4 @@ def free_before_shutdown(sonar_config: SonarConfig) -> None:
 
     _ROPE_DICT.clear()
     reset_workspace_manager()
+    current_platform.reset_global_graph_pool()

@@ -5,7 +5,7 @@
 """Detect and apply the manylinux tag supported by a wheel's binaries.
 
 This changes only the wheel filename. CUDA libraries remain external, so
-``auditwheel repair`` cannot be used to graft dependencies into the wheel.
+`auditwheel repair` cannot be used to graft dependencies into the wheel.
 """
 
 from __future__ import annotations

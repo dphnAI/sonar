@@ -2,17 +2,17 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Inkling MTP (Multi-Token Prediction) draft model (NVIDIA).
 
-Mirrors the reference ``mtp_model.py`` shipped with the checkpoint: each MTP
-depth ``i`` owns ``hidden_norm`` / ``embed_norm`` RMSNorms, an ``input_proj``
-(``2H -> H``) and a full Inkling transformer block (dense MLP, with the
+Mirrors the reference `mtp_model.py` shipped with the checkpoint: each MTP
+depth `i` owns `hidden_norm` / `embed_norm` RMSNorms, an `input_proj`
+(`2H -> H`) and a full Inkling transformer block (dense MLP, with the
 same short convolutions as the backbone; its attention is full or sliding-window
-per depth, selected by ``mtp_config.local_layer_ids``). When enabled, a shared
-``chain_norm`` is applied after every depth; its output is both the logits input
+per depth, selected by `mtp_config.local_layer_ids`). When enabled, a shared
+`chain_norm` is applied after every depth; its output is both the logits input
 and the previous hidden state fed to the next depth.
 
 The draft shares the target's token embedding table and LM head
-(``load_eagle_model`` wires those references) and applies the backbone
-``embed_norm`` before each depth's own ``embed_norm``.
+(`load_eagle_model` wires those references) and applies the backbone
+`embed_norm` before each depth's own `embed_norm`.
 """
 
 from __future__ import annotations
@@ -27,9 +27,6 @@ from sonar.config import SonarConfig
 from sonar.model_executor.layers.linear import ReplicatedLinear
 from sonar.model_executor.layers.quantization import QuantizationConfig
 from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from sonar.model_executor.model_loader.mtp_validation import (
-    is_mtp_completeness_check_enabled,
-)
 from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 from sonar.model_executor.models.interfaces import SupportsMultiModalEmbeddings
 from sonar.model_executor.models.utils import WeightsMapper, maybe_prefix
@@ -288,7 +285,7 @@ def _load_inkling_mtp_weights(
     module: InklingMTP,
     weights: Iterable[tuple[str, torch.Tensor]],
 ) -> set[str]:
-    """Load ``model.mtp.*`` weights into the MTP module."""
+    """Load `model.mtp.*` weights into the MTP module."""
     params = dict(module.named_parameters())
     loaded: set[str] = set()
 
@@ -352,10 +349,6 @@ def _load_inkling_mtp_weights(
             loaded_weight = _load(name, weight)
         if not loaded_weight:
             raise ValueError(f"Unexpected Inkling MTP weight: {original_name}")
-
-    required = {name for name in params if name.startswith("model.layers.") or name.startswith("model.chain_norm.")}
-    if (missing := sorted(required - loaded)) and is_mtp_completeness_check_enabled():
-        raise ValueError("Inkling MTP checkpoint is missing required parameters: " + ", ".join(missing))
     return loaded
 
 

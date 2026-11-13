@@ -163,7 +163,7 @@ guide: |
   source .venv/bin/activate
 
   # Install Sonar >= 0.11.0
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
 
   # Install Qwen-VL utility library (recommended for offline inference)
   uv pip install qwen-vl-utils==0.0.14
@@ -173,7 +173,7 @@ guide: |
 
   ### H100 (Image + Video, FP8)
   ```bash
-  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  sonar run Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --enable-expert-parallel \
@@ -182,17 +182,16 @@ guide: |
 
   ### H100 (Image-Only, FP8, TP4)
   ```bash
-  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  sonar run Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
     --tensor-parallel-size 4 \
     --limit-mm-per-prompt.video 0 \
     --async-scheduling \
-    --gpu-memory-utilization 0.95 \
     --max-num-seqs 128
   ```
 
   ### A100 & H100 (Image-Only, BF16)
   ```bash
-  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct \
+  sonar run Qwen/Qwen3-VL-235B-A22B-Instruct \
     --tensor-parallel-size 8 \
     --limit-mm-per-prompt.video 0 \
     --async-scheduling
@@ -200,7 +199,7 @@ guide: |
 
   ### A100 & H100 (Image + Video, BF16)
   ```bash
-  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct \
+  sonar run Qwen/Qwen3-VL-235B-A22B-Instruct \
     --tensor-parallel-size 8 \
     --max-model-len 128000 \
     --async-scheduling
@@ -208,7 +207,7 @@ guide: |
 
   ### H200 & B200
   ```bash
-  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct \
+  sonar run Qwen/Qwen3-VL-235B-A22B-Instruct \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --async-scheduling
@@ -223,12 +222,11 @@ guide: |
   export SONAR_ROCM_USE_AITER="1"
   export SONAR_ROCM_USE_AITER_MHA="1"
   export SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT="1"
-  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct \
+  sonar run Qwen/Qwen3-VL-235B-A22B-Instruct \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --enable-expert-parallel \
     --async-scheduling \
-    --gpu-memory-utilization 0.94 \
     --max-model-len 32768 \
     --max-num-seqs 10240 \
     --max-num-batched-tokens 32768 \
@@ -244,14 +242,13 @@ guide: |
   export SONAR_ROCM_USE_AITER="1"
   export SONAR_ROCM_USE_AITER_MHA="1"
   export SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT="1"
-  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  sonar run Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --enable-expert-parallel \
     --async-scheduling \
     --enable-chunked-prefill \
     --limit-mm-per-prompt '{"image": 1}' \
-    --gpu-memory-utilization 0.94 \
     --max-model-len 32768 \
     --max-num-seqs 10240 \
     --max-num-batched-tokens 32768 \
@@ -276,9 +273,8 @@ guide: |
   export SONAR_ROCM_USE_AITER_RMSNORM="0"
   export SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT="0"
 
-  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  sonar run Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
     --tensor-parallel-size 8 \
-    --gpu-memory-utilization 0.94 \
     --distributed-executor-backend mp \
     --enable-chunked-prefill \
     --max-model-len 16384 \
@@ -333,7 +329,7 @@ guide: |
   ## Troubleshooting
 
   - OOM on A100 / H100 BF16: reduce `--max-model-len`, drop to image-only, or switch to the FP8 checkpoint.
-  - If enabling `--mm-encoder-tp-mode data` raises memory pressure, lower `--gpu-memory-utilization`.
+  - If enabling `--mm-encoder-tp-mode data` raises memory pressure, lower `--max-num-seqs` or `--max-model-len`.
 
   ## References
 

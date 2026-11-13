@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+import dataclasses
+
 import torch
 
 from sonar.logger import init_logger
@@ -27,6 +29,8 @@ logger = init_logger(__name__)
 
 class HummingNvFp4LinearKernel(NvFp4LinearKernel):
     """Humming GEMM Kernel for NVFP4."""
+
+    allow_input_schema_fallback = True
 
     @classmethod
     def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
@@ -69,7 +73,12 @@ class HummingNvFp4LinearKernel(NvFp4LinearKernel):
             set_kernel_parameter(layer, "input_scale_2", layer.input_global_scale.reshape(-1))
             input_quant_key = kNvfp4Dynamic
         input_schema = quant_key_to_input_schema(input_quant_key)
-        self.layer_config = prepare_humming_linear_layer_config(layer, quant_config, input_schema=input_schema)
+        self.layer_config = prepare_humming_linear_layer_config(
+            layer,
+            quant_config,
+            input_schema=input_schema,
+            allow_input_schema_fallback=self.allow_input_schema_fallback,
+        )
         self.compute_config = get_humming_linear_compute_config()
         self.locks = create_humming_locks(layer.weight.device)
 
@@ -87,3 +96,26 @@ class HummingNvFp4LinearKernel(NvFp4LinearKernel):
             compute_config=self.compute_config,
             locks=self.locks,
         )
+
+
+class HummingHadamardNvFp4LinearKernel(HummingNvFp4LinearKernel):
+    """Humming W4A4 NVFP4 with a Sylvester Hadamard fused into input quantization.
+
+    Runs the activation dtype the checkpoint declares, without A16 fallback.
+    """
+
+    allow_input_schema_fallback = False
+
+    def __init__(self, config: NvFp4LinearLayerConfig, hadamard_block_size: int) -> None:
+        super().__init__(config)
+        self.hadamard_block_size = hadamard_block_size
+
+    @classmethod
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+        if not current_platform.has_device_capability(100):
+            return False, "Humming FP4 activations require SM100+"
+        return super().is_supported(compute_capability)
+
+    def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        super().process_weights_after_loading(layer)
+        layer.weight_schema = dataclasses.replace(layer.weight_schema, hadamard_block_size=self.hadamard_block_size)

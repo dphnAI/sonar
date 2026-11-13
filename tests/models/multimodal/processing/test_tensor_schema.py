@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn
 from PIL import Image
 
+from sonar import ModelRegistry
 from sonar.config import ModelConfig, SonarConfig, set_current_sonar_config
 from sonar.config.cache import CacheConfig
 from sonar.config.multimodal import (
@@ -37,7 +38,7 @@ from sonar.utils.torch_utils import set_default_torch_dtype
 
 from ....utils import create_new_process_for_each_test
 from ...registry import HF_EXAMPLE_MODELS
-from ...utils import dummy_hf_overrides
+from ...utils import dummy_hf_overrides, skip_unavailable_models
 from .test_common import get_model_ids_to_test, get_token_prompt
 
 ImageInput = list[Image.Image]
@@ -109,6 +110,12 @@ def create_batched_mm_kwargs(
     )
 
 
+@pytest.fixture(scope="module", autouse=True)
+def fill_model_info_cache() -> None:
+    # Every case builds a different model: inspect them all once, not per case.
+    ModelRegistry.fill_model_info_cache()
+
+
 # TODO(Isotr0py): Don't initialize model during test
 @contextmanager
 def initialize_dummy_model(
@@ -139,7 +146,10 @@ def initialize_dummy_model(
 
 
 @create_new_process_for_each_test()
-@pytest.mark.parametrize("model_id", get_model_ids_to_test())
+@pytest.mark.parametrize(
+    "model_id",
+    skip_unavailable_models(get_model_ids_to_test(), HF_EXAMPLE_MODELS.find_hf_info),
+)
 def test_model_tensor_schema(model_id: str):
     if model_id == "moonshotai/Kimi-K2.5":
         # FIXME(Isotr0py): Fix Kimi-K2.5's offline inference about vision chunks.
@@ -152,12 +162,6 @@ def test_model_tensor_schema(model_id: str):
         pytest.skip("GLM-5.3-Flash is not supported on XPU")
 
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model_id)
-    model_info.check_available_online(on_fail="skip")
-    model_info.check_transformers_version(
-        on_fail="skip",
-        check_max_version=False,
-        check_version_reason="sonar",
-    )
 
     model_arch = next(arch for arch, info in HF_EXAMPLE_MODELS.hf_models.items() if info == model_info)
 

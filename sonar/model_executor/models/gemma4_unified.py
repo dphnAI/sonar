@@ -29,6 +29,7 @@ from transformers.models.gemma4_unified.processing_gemma4_unified import (
 )
 
 from sonar.config import SonarConfig
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
 from sonar.model_executor.layers.linear import ColumnParallelLinear
 from sonar.model_executor.models.gemma3n_mm import batch_audio_features
 from sonar.model_executor.models.gemma4 import Gemma4ForCausalLM
@@ -147,8 +148,8 @@ class Gemma4UnifiedProcessingInfo(Gemma4ProcessingInfo):
     """ProcessingInfo for the Gemma4 Unified variant.
 
     Two field-name differences from the tower-based parent:
-      * config → ``Gemma4UnifiedConfig`` (not ``Gemma4Config``)
-      * vision_config.``num_soft_tokens`` (not ``default_output_length``)
+      * config → `Gemma4UnifiedConfig` (not `Gemma4Config`)
+      * vision_config.`num_soft_tokens` (not `default_output_length`)
 
     Everything else (token sequencing, audio limits, video frame budget,
     parser construction) is inherited unchanged.
@@ -223,16 +224,16 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
 
     Inherits multimodal embedding routing, PLE handling, bidirectional
     attention helpers, language-model forward, LoRA, and pipeline-parallel
-    support from :class:`Gemma4ForConditionalGeneration`.  Overrides only:
+    support from `Gemma4ForConditionalGeneration`.  Overrides only:
 
-      * ``__init__`` — builds the encoder-free vision embedder instead of
-        SigLIP/audio towers (LightOnOCR-style: ``nn.Module.__init__`` +
-        full rebuild, no ``super().__init__()``).
-      * ``hf_to_sonar_mapper`` — adds the ``model.vision_embedder.`` prefix.
-      * ``_process_image_input`` / ``_process_video_input`` /
-        ``_process_audio_input`` — encoder-free projection paths.
-      * ``load_weights`` — ignore-prefix list excludes the absent towers.
-      * ``get_mm_mapping`` — no tower entries.
+      * `__init__` — builds the encoder-free vision embedder instead of
+        SigLIP/audio towers (LightOnOCR-style: `nn.Module.__init__` +
+        full rebuild, no `super().__init__()`).
+      * `hf_to_sonar_mapper` — adds the `model.vision_embedder.` prefix.
+      * `_process_image_input` / `_process_video_input` /
+        `_process_audio_input` — encoder-free projection paths.
+      * `load_weights` — ignore-prefix list excludes the absent towers.
+      * `get_mm_mapping` — no tower entries.
     """
 
     hf_to_sonar_mapper = WeightsMapper(
@@ -272,6 +273,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             quant_config=quant_config,
             prefix=maybe_prefix(prefix, "vision_embedder"),
         )
+        self.vision_input_norm = build_mm_input_norm(sonar_config.model_config)
         self.embed_vision = Gemma4MultimodalEmbedder(
             config.vision_config,
             config.text_config,
@@ -368,6 +370,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         pixel_values: torch.Tensor,
         pixel_position_ids: torch.Tensor,
     ) -> torch.Tensor:
+        pixel_values = self._normalize_pixel_values(pixel_values, self.vision_embedder.pos_embedding.dtype)
         weight = self.embed_vision.embedding_projection.weight
         target_dtype = weight.dtype
         if pixel_values.numel() == 0:

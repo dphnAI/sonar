@@ -56,7 +56,6 @@ class DSparkSpeculatorConfig(DFlashSpeculatorConfig):
             draft.hf_config.architectures = ["DSparkV41DraftModel" if is_v41 else "DSparkDraftModel"]
             draft.quantization = target.quantization
             spec.update_arch_()
-        spec.parallel_drafting = True
 
     @classmethod
     def resolve_num_speculative_tokens(cls, spec: "SpeculativeConfig") -> None:
@@ -104,7 +103,7 @@ class DSparkSpeculatorConfig(DFlashSpeculatorConfig):
             # Anchor-sampling DSpark drafts a block of num_speculative_tokens
             # query tokens in which the anchor itself is the first prediction
             # position (no separate bonus query).
-            return self.num_speculative_tokens
+            return self.num_scheduled_spec_tokens
         return super().num_lookahead_tokens
 
     def hash_factors(self) -> list[Any]:
@@ -114,6 +113,6 @@ class DSparkSpeculatorConfig(DFlashSpeculatorConfig):
     def pcp_unsupported_reason(self, parallel_config: "ParallelConfig") -> str | None:
         dcp_size = parallel_config.decode_context_parallel_size
         pcp_size = parallel_config.prefill_context_parallel_size
-        if dcp_size not in (1, pcp_size) and self.spec_config.draft_model_config.use_mla:
+        if dcp_size not in (1, pcp_size) and self.spec_config.draft_decode_context_parallel_size != 1:
             return f"MRV2 PCP DSpark requires DCP=1 or DCP=PCP; got DCP={dcp_size}, PCP={pcp_size}."
         return super().pcp_unsupported_reason(parallel_config)

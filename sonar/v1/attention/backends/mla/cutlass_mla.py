@@ -168,8 +168,8 @@ class CutlassMLAImpl(MLACommonImpl[MLACommonMetadata]):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert q_nope.ndim == 3, f"q_nope must be a 3D tensor, but got {q_nope.ndim}"
         assert q_pe.ndim == 3, f"q_pe must be a 3D tensor, but got {q_pe.ndim}"
-        assert kv_c_and_k_pe_cache.ndim == 3, "kv_c_and_k_pe_cache must be a 3D tensor, but got {}".format(
-            kv_c_and_k_pe_cache.ndim
+        assert kv_c_and_k_pe_cache.ndim == 3, (
+            f"kv_c_and_k_pe_cache must be a 3D tensor, but got {kv_c_and_k_pe_cache.ndim}"
         )
 
         B_q, H, D_q_nope = q_nope.shape

@@ -20,7 +20,7 @@ from sonar.entrypoints.serve.engine.serving import BaseServing
 from sonar.entrypoints.serve.utils.request_logger import RequestLogger
 from sonar.inputs import EngineInput
 from sonar.logger import init_logger
-from sonar.renderers.online_derenderer import OnlineDerenderer
+from sonar.renderers.online_derenderer import OnlineDerenderer, resolve_prompt_tokens
 
 from ..token_in_token_out.mm_features import extract_mm_features
 from ..token_in_token_out.protocol import (
@@ -141,9 +141,9 @@ class ServingDerender(BaseServing):
         """Postprocess a GenerateResponse into a ChatCompletionResponse.
 
         Non-streaming only: expects the complete GenerateResponse with all
-        token IDs present.  Uses ``parser.parse()`` for one-shot extraction.
+        token IDs present.  Uses `parser.parse()` for one-shot extraction.
 
-        When ``request.chat_request`` is provided, the parser splits the
+        When `request.chat_request` is provided, the parser splits the
         output into (reasoning, content, tool_calls).  Otherwise falls
         back to plain detokenization.
         """
@@ -167,7 +167,11 @@ class ServingDerender(BaseServing):
             )
 
         try:
-            choices, prompt_logprobs = await self.online_derenderer.derender_chat(
+            (
+                choices,
+                prompt_logprobs,
+                completion_tokens_details,
+            ) = await self.online_derenderer.derender_chat(
                 request.generate_response,
                 request.chat_request,
                 request.prompt_token_ids,
@@ -175,13 +179,17 @@ class ServingDerender(BaseServing):
         except ValueError as exc:
             return self.create_error_response(str(exc))
 
-        prompt_tokens = request.prompt_tokens if request.prompt_tokens is not None else 0
         gen = request.generate_response
+        prompt_tokens = resolve_prompt_tokens(request.prompt_tokens, gen.usage)
         completion_tokens = sum(len(ch.token_ids) for ch in gen.choices if ch.token_ids)
         usage = UsageInfo(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=prompt_tokens + completion_tokens,
+            # Only the generate step knows the prefix cache hit, so its
+            # usage is the source for `prompt_tokens_details`.
+            prompt_tokens_details=(gen.usage.prompt_tokens_details if gen.usage is not None else None),
+            completion_tokens_details=completion_tokens_details,
         )
 
         model_name = request.model or self.models.model_name()
@@ -285,9 +293,9 @@ class ServingDerender(BaseServing):
         self,
         request: DerenderChatStreamRequest,
     ) -> tuple[ChatCompletionStreamResponse, DerenderStreamState] | ErrorResponse:
-        """Streaming counterpart to ``derender_chat_response``.
+        """Streaming counterpart to `derender_chat_response`.
 
-        Processes one ``GenerateStreamResponse`` chunk and returns the
+        Processes one `GenerateStreamResponse` chunk and returns the
         derendered chunk together with the updated client carried state.
         """
         error_check_ret = await self._check_model(request)
@@ -378,9 +386,9 @@ class ServingDerender(BaseServing):
         self,
         request: DerenderCompletionStreamRequest,
     ) -> tuple[CompletionStreamResponse, DerenderStreamState] | ErrorResponse:
-        """Streaming counterpart to ``derender_completion_response``.
+        """Streaming counterpart to `derender_completion_response`.
 
-        Processes one ``GenerateStreamResponse`` chunk (one output sequence's
+        Processes one `GenerateStreamResponse` chunk (one output sequence's
         delta) and returns the derendered chunk and updated state.
         """
         error_check_ret = await self._check_model(request)

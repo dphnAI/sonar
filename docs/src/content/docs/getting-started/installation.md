@@ -45,7 +45,7 @@ not available, it prints the required package-manager command and exits.
 ## NVIDIA CUDA
 
 CUDA wheels support Linux x86-64 and ARM64 (`aarch64`) with Python 3.11-3.14
-and a driver supporting CUDA 13.0 or newer. Supported compute capabilities are
+and a driver supporting CUDA 13.2 or newer. Supported compute capabilities are
 8.0, 8.6, 8.9, 9.0, 10.0, 10.3, and 12.x. ARM64 wheels also support 11.0
 (Jetson Thor). Jetson Orin (8.7) and CUDA 12 drivers are not supported.
 
@@ -58,7 +58,7 @@ source .venv/bin/activate
 uv pip install sonar \
   --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple \
   --index-strategy first-index \
-  --torch-backend cu130
+  --torch-backend cu132
 ```
 
 Use a nightly build when you need the latest commit.
@@ -67,7 +67,7 @@ Use a nightly build when you need the latest commit.
 uv pip install sonar \
   --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
   --index-strategy first-index \
-  --torch-backend cu130
+  --torch-backend cu132
 ```
 
 On ARM64, replace `cuda/x86_64` with `cuda/aarch64` in either index URL.
@@ -86,7 +86,7 @@ cd sonar
 uv venv --python 3.12 --seed
 source .venv/bin/activate
 SONAR_USE_PRECOMPILED=1 \
-  uv pip install --editable . --torch-backend=cu130
+  uv pip install --editable . --torch-backend=cu132
 ```
 
 The commit must have a compatible wheel at
@@ -186,6 +186,9 @@ source .venv/bin/activate
 uv pip install -r requirements/build/cpu.txt -r requirements/cpu.txt
 SONAR_TARGET_DEVICE=cpu uv pip install . --no-build-isolation
 ```
+
+x86-64 CPU execution requires `triton-cpu`; startup fails if it is missing.
+Use the Sonar installer or the CPU requirements for a compatible build.
 
 Set `SONAR_CPU_KVCACHE_SPACE` to the KV cache size in GiB. Start with a
 conservative value if other processes use the same host.

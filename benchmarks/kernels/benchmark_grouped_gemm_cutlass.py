@@ -49,9 +49,7 @@ def bench_run(
     init_workspace_manager(torch.accelerator.current_device_index())
     label = "Quant Matmul"
 
-    sub_label = "{}, num_experts={}, topk={}, per_act_token={} per_out_ch={}, MKN=({})".format(
-        model, num_experts, topk, per_act_token, per_out_ch, mkn
-    )
+    sub_label = f"{model}, {num_experts=}, {topk=}, {per_act_token=} {per_out_ch=}, MKN=({mkn})"
 
     print(f"Testing: {sub_label}")
 

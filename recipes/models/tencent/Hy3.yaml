@@ -137,7 +137,7 @@ guide: |
   docker run --gpus all \
     -p 8000:8000 \
     --ipc=host \
-    -e SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm \
+    -e VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai:hy3 tencent/Hy3 \
       --tensor-parallel-size 8 \
@@ -178,13 +178,12 @@ guide: |
   export SONAR_ROCM_USE_AITER_RMSNORM=1
   export SONAR_ROCM_USE_AITER_LINEAR=1
 
-  sonar serve tencent/Hy3 \
+  sonar run tencent/Hy3 \
     --tensor-parallel-size 8 \
     --tool-call-parser hy_v3 \
     --reasoning-parser hy_v3 \
     --enable-auto-tool-choice \
-    --served-model-name hy3 \
-    --gpu-memory-utilization 0.90
+    --served-model-name hy3
   ```
 
   > **ROCm troubleshooting — AITER fused-MoE.** With `SONAR_ROCM_USE_AITER_MOE=1`
@@ -200,15 +199,14 @@ guide: |
   MTP (recommended on AMD for lower latency, same flags as the NVIDIA path):
 
   ```bash
-  sonar serve tencent/Hy3 \
+  sonar run tencent/Hy3 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
     --speculative-config.num_speculative_tokens 2 \
     --tool-call-parser hy_v3 \
     --reasoning-parser hy_v3 \
     --enable-auto-tool-choice \
-    --served-model-name hy3 \
-    --gpu-memory-utilization 0.90
+    --served-model-name hy3
   ```
 
   ### Serving on 8×H200 or 8×H20-3e(141GB)
@@ -218,7 +216,7 @@ guide: |
   ```bash
   # Switch to the trtllm all-reduce backend to work around an mnnvl workspace-size issue.
   export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-  sonar serve tencent/Hy3 \
+  sonar run tencent/Hy3 \
     --tensor-parallel-size 8 \
     --tool-call-parser hy_v3 \
     --reasoning-parser hy_v3 \
@@ -231,7 +229,7 @@ guide: |
   ```bash
   # Switch to the trtllm all-reduce backend to work around an mnnvl workspace-size issue.
   export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-  sonar serve tencent/Hy3 \
+  sonar run tencent/Hy3 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
     --speculative-config.num_speculative_tokens 2 \
@@ -260,7 +258,7 @@ guide: |
   ```bash
   # Switch to the trtllm all-reduce backend to work around an mnnvl workspace-size issue.
   export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-  sonar serve tencent/Hy3 \
+  sonar run tencent/Hy3 \
     --tensor-parallel-size 8 \
     --attention-backend HPC_ATTN
   ```
@@ -271,7 +269,7 @@ guide: |
   ```bash
   # Switch to the trtllm all-reduce backend to work around an mnnvl workspace-size issue.
   export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-  sonar serve tencent/Hy3-FP8 \
+  sonar run tencent/Hy3-FP8 \
     --tensor-parallel-size 8 \
     --moe-backend hpc \
     --kv-cache-dtype fp8_e4m3 \
@@ -367,7 +365,7 @@ guide: |
   The following benchmarks the FP8 checkpoint (8192→1024, concurrency 32, 160 prompts):
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model tencent/Hy3-FP8 \
     --dataset-name random \
     --random-input-len 8192 \

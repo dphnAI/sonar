@@ -62,7 +62,7 @@ Exact generated text can vary because of floating-point and batching changes.
 uv pip install --upgrade sonar \
   --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple \
   --index-strategy first-index \
-  --torch-backend cu130
+  --torch-backend cu132
 ```
 
 For a nightly build:
@@ -71,7 +71,7 @@ For a nightly build:
 uv pip install --upgrade sonar \
   --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
   --index-strategy first-index \
-  --torch-backend cu130
+  --torch-backend cu132
 ```
 
 On Linux ARM64, replace `cuda/x86_64` with `cuda/aarch64` in either index URL.
@@ -85,7 +85,7 @@ environment until the replacement passes validation.
 git fetch origin
 git switch main
 git pull --ff-only
-uv pip install --editable . --torch-backend=cu130
+uv pip install --editable . --torch-backend=cu132
 ```
 
 Regenerate the CMake preset when Python, CUDA, the compiler, or the virtual
@@ -96,6 +96,19 @@ environment changes. Rebuild native extensions after CMake or `csrc/` changes.
 Check startup warnings for renamed flags and deprecated values. Compare the
 generated [server argument reference](/reference/server-arguments/) with the
 saved command.
+
+CUDA/ROCm execution uses the unified model runner. Remove
+`SONAR_USE_V2_MODEL_RUNNER` from launch environments. Replace obsolete graph-size fields with the separate
+prefill-token and decode-request controls described in
+[optimization](/deployment/optimization/#select-compilation-behavior).
+
+Review explicit GPU memory caps because CUDA/ROCm extensible caching now
+defaults to `1.0`. Keep headroom for other processes and unified-memory hosts.
+Suffix decoding no longer needs Arctic Inference. Custom GPU logits processors
+must implement `sonar.v1.worker.gpu.sample.logits_processor.LogitsProcessor`;
+the old batch-update interface remains available only on Metal.
+`custom_class` proposers, heterogeneous-vocabulary drafting, `fp_quant`, and
+`SONAR_MARLIN_INPUT_DTYPE` are no longer supported.
 
 Run chat, streaming, structured output, tool calling, LoRA, and multimodal
 requests that the service supports. Compare latency and memory with the saved

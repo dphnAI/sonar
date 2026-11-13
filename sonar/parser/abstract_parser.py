@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 
 from openai.types.responses import ToolChoiceCustom, ToolChoiceFunction
 from pydantic import TypeAdapter, ValidationError
-from xgrammar import Grammar, StructuralTag
+from xgrammar import StructuralTag
 from xgrammar.structural_tag import (
     ConstStringFormat,
     Format,
@@ -50,6 +50,7 @@ from sonar.sampling_params import (
 from sonar.tokenizers import TokenizerLike
 from sonar.tool_parsers.abstract_tool_parser import Tool, ToolParser
 from sonar.tool_parsers.streaming import (
+    RequiredToolCallScanner,
     extract_named_tool_call_streaming,
     extract_required_tool_call_streaming,
 )
@@ -65,7 +66,7 @@ logger = init_logger(__name__)
 
 @dataclass
 class StreamState:
-    """Mutable state for ``Parser.parse_delta()``. One per stream."""
+    """Mutable state for `Parser.parse_delta()`. One per stream."""
 
     reasoning_ended: bool = False
     tool_call_text_started: bool = False
@@ -78,6 +79,7 @@ class StreamState:
     # only used for "required" and "named tool" choices,
     # tracks whether function name has been fully returned in the stream yet
     function_name_returned: bool = False
+    required_tool_call_scanner: RequiredToolCallScanner = field(default_factory=RequiredToolCallScanner)
     engine_based: bool = False
 
     def advance(
@@ -108,10 +110,10 @@ class StreamState:
 class Parser:
     """Parse model output into reasoning, content and tool calls.
 
-    The serving layer holds one ``Parser`` per request and calls only the
-    members defined here. ``ParserEngine`` implements them over a single
-    declarative engine; ``DelegatingParser`` composes a legacy
-    ``ReasoningParser`` / ``ToolParser`` pair.
+    The serving layer holds one `Parser` per request and calls only the
+    members defined here. `ParserEngine` implements them over a single
+    declarative engine; `DelegatingParser` composes a legacy
+    `ReasoningParser` / `ToolParser` pair.
     """
 
     # Class-level parser classes for compatibility with existing patterns
@@ -151,6 +153,12 @@ class Parser:
 
         self._engine_based = (self._reasoning_parser is None or self._reasoning_parser.engine_based_streaming) and (
             self._tool_parser is None or self._tool_parser.engine_based_streaming
+        )
+        # Without a tool parser nothing else consumes reasoning markers, so a
+        # grammar that can open reasoning from content parses the whole stream,
+        # as the non-streaming path does, even when the prompt closed reasoning.
+        self._reasoning_engine_streams_all = self._tool_parser is None and getattr(
+            self._reasoning_parser, "opens_reasoning_in_content", False
         )
         if (
             self._reasoning_parser is None
@@ -290,15 +298,8 @@ def structured_outputs_to_format(params: StructuredOutputsParams) -> Format | No
     if params.grammar is not None:
         from sonar.v1.structured_output.utils import grammar_is_likely_lark
 
-        grammar = params.grammar
-        # IMPORTANT(arpera):
-        # GrammarFormat only accepts EBNF.
-        if grammar_is_likely_lark(grammar):
-            try:
-                grammar = str(Grammar.from_lark(grammar))
-            except Exception as e:
-                raise SonarValidationError("Invalid grammar specification.") from e
-        return GrammarFormat(grammar=grammar)
+        syntax = "lark" if grammar_is_likely_lark(params.grammar) else "ebnf"
+        return GrammarFormat(grammar=params.grammar, syntax=syntax)
     if params.structural_tag is not None:
         check_json_nesting(params.structural_tag, structural_tag=True)
         s_tag = json.loads(params.structural_tag)
@@ -727,10 +728,10 @@ class DelegatingParser(Parser):
 
         if supports_required_and_named and request.tool_choice == "required":
             delta_message, function_name_returned = extract_required_tool_call_streaming(
-                previous_text=previous_text,
-                current_text=current_text,
+                delta_text=delta_text,
                 tool_call_idx=tool_call_idx,
                 tool_call_id_type=tool_call_id_type,
+                scanner=self._stream_state.required_tool_call_scanner,
             )
             return delta_message, function_name_returned
         return self.extract_tool_calls_streaming(
@@ -765,7 +766,7 @@ class DelegatingParser(Parser):
     def _in_reasoning_phase(self, state: StreamState) -> bool:
         if self._reasoning_parser is None:
             return False
-        return not state.reasoning_ended
+        return not state.reasoning_ended or self._reasoning_engine_streams_all
 
     def _in_tool_call_phase(self, state: StreamState) -> bool:
         if self._tool_parser is None:
@@ -865,7 +866,7 @@ class DelegatingParser(Parser):
                 should_transition = reasoning_parser.has_engine_confirmed_reasoning_end()
             else:
                 should_transition = self._is_reasoning_end_streaming(current_token_ids, delta_token_ids)
-            if should_transition:
+            if should_transition and not self._reasoning_engine_streams_all:
                 state.reasoning_ended = True
                 reasoning_transitioned = True
                 current_token_ids = self._extract_content_ids(delta_token_ids)
@@ -977,7 +978,7 @@ class DelegatingParser(Parser):
             # characters from tool-call markup it saw with
             # skip_tool_parsing=True.  Flushing that would leak spurious
             # content (e.g. a stray '"'), so skip it.
-            if parser is self._reasoning_parser and reasoning_ended:
+            if parser is self._reasoning_parser and reasoning_ended and not self._reasoning_engine_streams_all:
                 continue
             finish = getattr(parser, "finish_streaming", None)
             if finish is None:

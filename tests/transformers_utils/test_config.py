@@ -6,7 +6,6 @@ only get the `eos_token_id` from the tokenizer as defined by
 """
 
 import json
-import math
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -69,6 +68,30 @@ def test_gemma4_dspark_rope_config_preserves_parameters(tmp_path, layout):
         assert set(config.rope_parameters) == set(per_layer)
 
 
+def test_qwen3_asr_legacy_nested_config(tmp_path):
+    from transformers import Qwen3ASRConfig
+
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "model_type": "qwen3_asr",
+                "architectures": ["Qwen3ASRForConditionalGeneration"],
+                "thinker_config": {
+                    "model_type": "qwen3_asr_thinker",
+                    "audio_config": {"model_type": "qwen3_asr_audio_encoder"},
+                    "text_config": {"model_type": "qwen3_asr_text"},
+                    "audio_token_id": 151676,
+                },
+            }
+        )
+    )
+    _, config = config_module.HFConfigParser().parse(tmp_path, trust_remote_code=False)
+    assert isinstance(config, Qwen3ASRConfig)
+    assert config.audio_config.model_type == "qwen3_asr_encoder"
+    assert config.text_config.model_type == "qwen3"
+    assert config.audio_token_id == 151676
+
+
 def test_patch_legacy_rope_type_preserves_nope_layers():
     """NoPE layers stay disabled while later RoPE layers are normalized."""
     rope_parameters = {
@@ -88,31 +111,6 @@ def test_patch_legacy_rope_type_preserves_nope_layers():
             "rope_type": "default",
             "mrope_section": [24, 20, 20],
         },
-    }
-
-
-def test_patch_legacy_rope_type_normalizes_telechat3_yarn():
-    """TeleChat3's RoPE is YaRN with 0.07 in place of the usual 0.1.
-
-    Encoding that as a precomputed attention_factor keeps the config
-    plain YaRN, which Transformers and every "yarn" guard understand.
-    `mscale` cannot express it: Transformers only applies mscale when
-    mscale_all_dim is also truthy.
-    """
-    rope_parameters = {
-        "type": "telechat3-yarn",
-        "rope_type": "telechat3-yarn",
-        "factor": 4.0,
-        "original_max_position_embeddings": 8192,
-    }
-
-    patch_legacy_rope_type(rope_parameters)
-
-    assert rope_parameters == {
-        "rope_type": "yarn",
-        "factor": 4.0,
-        "original_max_position_embeddings": 8192,
-        "attention_factor": pytest.approx(0.07 * math.log(4.0) + 1.0),
     }
 
 

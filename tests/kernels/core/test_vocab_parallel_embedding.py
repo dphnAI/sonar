@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for the fused vocab-parallel embedding kernel
-(``sonar._custom_ops.vocab_parallel_embedding``).
+(`sonar._custom_ops.vocab_parallel_embedding`).
 
 The guarantee: the kernel is a drop-in for the TP > 1 embedding path, i.e. it
-returns bit-exactly what mask + shift + gather + ``masked_fill_`` returns on
+returns bit-exactly what mask + shift + gather + `masked_fill_` returns on
 each rank, and summing the per-rank outputs (what the all-reduce does)
 reconstructs a full-table lookup.
 """
@@ -24,8 +24,8 @@ from sonar.platforms import current_platform
 from sonar.utils.torch_utils import set_random_seed
 
 requires_cuda = pytest.mark.skipif(
-    not current_platform.is_cuda(),
-    reason="the fused vocab-parallel embedding kernel is CUDA-only",
+    not current_platform.is_cuda_alike(),
+    reason="the fused vocab-parallel embedding kernel requires CUDA or ROCm",
 )
 
 
@@ -137,7 +137,7 @@ def test_embedding_optionally_reduces_output(dtype, use_fused, default_sonar_con
             remote = (expected - local).to(dtype)
             group = Mock(world_size=2, rank_in_group=rank)
             # Model the other vocabulary owner's contribution, including FP8 bytes.
-            group.all_reduce.side_effect = lambda output, remote=remote: (output + remote.view(output.dtype))
+            group.all_reduce.side_effect = lambda output, remote=remote: output + remote.view(output.dtype)
             for reduce_results in (True, False):
                 embedding = VocabParallelEmbedding(
                     128,

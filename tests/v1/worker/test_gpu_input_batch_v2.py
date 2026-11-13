@@ -53,7 +53,7 @@ def test_make_dummy_distributes_remainder(num_reqs: int, num_tokens: int):
     assert torch.equal(batch.query_start_loc.cpu(), torch.from_numpy(batch.query_start_loc_np))
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="Requires CUDA top-k.")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Requires CUDA/ROCm top-k.")
 @pytest.mark.parametrize("is_padding", [True, False])
 def test_make_dummy_padding_controls_moe_routing(monkeypatch, is_padding: bool):
     """Dummy tokens marked as padding are dropped by the MoE router (top-k id

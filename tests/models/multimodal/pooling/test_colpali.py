@@ -14,7 +14,7 @@ import pytest
 import torch
 from PIL import Image
 
-from sonar.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
+from sonar.entrypoints.pooling.scoring.types import ScoreMultiModalParam
 from sonar.platforms import current_platform
 from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageParam,
@@ -222,11 +222,9 @@ def test_colpali_default_runner(
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_v2_multimodal_text_query_image_docs(
     sonar_runner,
-    monkeypatch: pytest.MonkeyPatch,
     model: str,
     dtype: str,
 ) -> None:
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     attention_backend = "FLASH_ATTN" if current_platform.is_cuda() else None
     with sonar_runner(
         model,
@@ -238,5 +236,4 @@ def test_colpali_v2_multimodal_text_query_image_docs(
         attention_backend=attention_backend,
         kernel_config={"enable_flashinfer_autotune": False},
     ) as sonar_model:
-        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
         _run_multimodal_text_query_image_docs_test(sonar_model)

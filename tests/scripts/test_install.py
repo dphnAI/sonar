@@ -46,7 +46,7 @@ def installer_environment(tmp_path: Path) -> dict[str, str]:
         "TEST_OS": "Linux",
         "TEST_MACHINE": "aarch64",
         "TEST_COMPUTE_CAPS": "11.0",
-        "TEST_CUDA_VERSION": "13.0",
+        "TEST_CUDA_VERSION": "13.2",
     }
 
 
@@ -99,25 +99,28 @@ def test_installer_selects_platform_index(
     selected_backend = "cuda" if backend == "auto" else backend
     index = f"https://sonar.invalid/whl/{channel}/{selected_backend}/{architecture}/simple"
     assert index in result.stdout
-    torch_backend = "cu130" if selected_backend == "cuda" else "cpu"
-    assert f"'--torch-backend' '{torch_backend}'" in result.stdout
+    if selected_backend == "cuda":
+        assert "https://download.pytorch.org/whl/cu132" in result.stdout
+    else:
+        assert "'--torch-backend' 'cpu'" in result.stdout
     assert not (tmp_path / "venv").exists()
 
 
 @pytest.mark.parametrize(
     ("machine", "os_name", "cuda_version", "compute_caps", "error"),
     [
-        ("aarch64", "Linux", "13.0", "8.0", None),
-        ("aarch64", "Linux", "13.0", "11.0", None),
-        ("aarch64", "Linux", "13.0", "11.0\n12.1", None),
-        ("x86_64", "Linux", "13.0", "12.1", None),
-        ("x86_64", "Linux", "13.0", "11.0", "compute capability: 11.0"),
-        ("aarch64", "Linux", "13.0", "8.7", "compute capability: 8.7"),
-        ("aarch64", "Linux", "13.0", "11.0\n8.7", "compute capability: 8.7"),
-        ("aarch64", "Linux", "12.9", "11.0", "requires CUDA 13.0"),
-        ("aarch64", "Linux", "13.0", "", "Could not determine"),
-        ("aarch64", "Darwin", "13.0", "11.0", "does not publish a cuda wheel"),
-        ("ppc64le", "Linux", "13.0", "8.0", "does not publish wheels"),
+        ("aarch64", "Linux", "13.2", "8.0", None),
+        ("aarch64", "Linux", "13.2", "11.0", None),
+        ("aarch64", "Linux", "13.2", "11.0\n12.1", None),
+        ("x86_64", "Linux", "13.2", "12.1", None),
+        ("x86_64", "Linux", "13.2", "11.0", "compute capability: 11.0"),
+        ("aarch64", "Linux", "13.2", "8.7", "compute capability: 8.7"),
+        ("aarch64", "Linux", "13.2", "11.0\n8.7", "compute capability: 8.7"),
+        ("aarch64", "Linux", "12.9", "11.0", "requires CUDA 13.2"),
+        ("aarch64", "Linux", "13.0", "11.0", "requires CUDA 13.2"),
+        ("aarch64", "Linux", "13.2", "", "Could not determine"),
+        ("aarch64", "Darwin", "13.2", "11.0", "does not publish a cuda wheel"),
+        ("ppc64le", "Linux", "13.2", "8.0", "does not publish wheels"),
     ],
 )
 def test_installer_validates_cuda_platform(
@@ -139,7 +142,7 @@ def test_installer_validates_cuda_platform(
 
     if error is None:
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "'--torch-backend' 'cu130'" in result.stdout
+        assert "https://download.pytorch.org/whl/cu132" in result.stdout
     else:
         assert result.returncode != 0, result.stdout + result.stderr
         assert error in result.stderr
@@ -181,6 +184,7 @@ def _wheel(name: str, version: str, *, dependency: bool = False) -> tuple[str, b
         pytest.param(200, 200, False, "empty", id="empty-index"),
         pytest.param(200, 200, False, "unrelated", id="unrelated-page"),
         pytest.param(200, 200, False, "sdist", id="source-distribution-only"),
+        pytest.param(200, 200, False, "missing-torch", id="missing-torch-index"),
     ],
 )
 @pytest.mark.parametrize("platform_backend", ["default", "cuda"])
@@ -202,6 +206,8 @@ def test_installer_pins_sonar_index(
     backend = "rocm" if architecture == "x86_64" else "cpu"
     if platform_backend == "cuda":
         backend = "cuda"
+    if index_content == "missing-torch" and backend != "cuda":
+        pytest.skip("CUDA-specific index failure")
     if backend == "cpu":
         try:
             ctypes.CDLL("libnuma.so.1")
@@ -216,6 +222,15 @@ def test_installer_pins_sonar_index(
         f"/files/{unrelated_name}": unrelated_wheel,
         f"/files/{dependency_name}": dependency_wheel,
     }
+    torch_pages = {}
+    public_torch_pages = {}
+    for package in ("torch", "torchvision", "torchaudio", "torchcodec"):
+        name, wheel = _wheel(package, "1.0+cu132")
+        wheels[f"/files/{name}"] = wheel
+        torch_pages[f"/torch/cu132/{package}/"] = name
+        name, wheel = _wheel(package, "9.9+cpu")
+        wheels[f"/files/{name}"] = wheel
+        public_torch_pages[f"/fallback/simple/{package}/"] = name
     trusted_page = f"/whl/release/{backend}/{architecture}/simple/sonar/"
     fallback_page = "/fallback/simple/sonar/"
     dependency_page = "/fallback/simple/sonar-installer-test-dependency/"
@@ -244,6 +259,13 @@ def test_installer_pins_sonar_index(
                 name = unrelated_name
             elif self.path == dependency_page:
                 name = dependency_name
+            elif self.path in torch_pages:
+                if index_content == "missing-torch":
+                    self.send_error(404)
+                    return
+                name = torch_pages[self.path]
+            elif self.path in public_torch_pages:
+                name = public_torch_pages[self.path]
             elif self.path in wheels:
                 payload = wheels[self.path]
                 self.send_response(200)
@@ -288,6 +310,27 @@ def test_installer_pins_sonar_index(
         UV_HTTP_RETRIES="0",
         NO_PROXY="127.0.0.1,localhost",
     )
+    if backend == "cuda":
+        # Emulate an older uv's enum while delegating resolution to the real uv.
+        # Only redirect the public index URL; source selection remains uv's job.
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        wrapper = bin_dir / "uv"
+        wrapper.write_text(
+            f"#!{sys.executable}\n"
+            "import os, pathlib, sys\n"
+            "args = sys.argv[1:]\n"
+            "if 'cu132' in args or '--torch-backend=cu132' in args:\n"
+            "    sys.exit('invalid torch backend: cu132')\n"
+            "if '--requirements' in args:\n"
+            "    project = pathlib.Path(args[args.index('--requirements') + 1])\n"
+            "    project.write_text(project.read_text().replace(\n"
+            "        'https://download.pytorch.org/whl/cu132',\n"
+            f"        {base_url + '/torch/cu132'!r}))\n"
+            f"os.execv({uv!r}, [{uv!r}, *args])\n"
+        )
+        wrapper.chmod(0o755)
+        env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
     venv = tmp_path / "venv"
     try:
         if preflight_status == 200:
@@ -323,6 +366,23 @@ def test_installer_pins_sonar_index(
             ).strip()
             assert installed == "0.1"
             assert dependency_page in requests
+            if backend == "cuda":
+                versions = json.loads(
+                    subprocess.check_output(
+                        [
+                            python,
+                            "-I",
+                            "-c",
+                            (
+                                "import importlib.metadata as m, json; "
+                                "print(json.dumps([m.version(p) for p in "
+                                "('torch', 'torchvision', 'torchaudio', 'torchcodec')]))"
+                            ),
+                        ],
+                        text=True,
+                    )
+                )
+                assert versions == ["1.0+cu132"] * 4
         elif preflight_status != 200:
             assert result.returncode != 0, result.stdout + result.stderr
             assert not venv.exists()
@@ -345,6 +405,9 @@ def test_installer_pins_sonar_index(
             assert installed.get("sonar") == ("9.9" if already_installed else None)
             assert not (venv / ".sonar-install.json").exists()
         assert fallback_page not in requests, result.stdout + result.stderr
+        if backend == "cuda":
+            assert not set(public_torch_pages).intersection(requests)
+            assert "/torch/cu132/sonar-installer-test-dependency/" not in requests
         if index_content == "sdist":
             assert "/files/sonar-0.1.tar.gz" not in requests
     finally:

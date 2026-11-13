@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import numpy as np
 import torch
 
-from sonar.utils.torch_utils import make_tensor_with_pad
+from sonar.utils.torch_utils import make_ndarray_with_pad
 from sonar.v1.sample.metadata import SamplingMetadata
 
 
@@ -88,12 +89,8 @@ def no_repeat_ngram(
     _, vocab_size = logits.shape
     output_tokens_t = None
     if sampling_metadata.output_token_ids:
-        output_tokens_t = make_tensor_with_pad(
-            sampling_metadata.output_token_ids,
-            pad=vocab_size,
-            device="cpu",
-            dtype=torch.int64,
-            pin_memory=False,
+        output_tokens_t = torch.from_numpy(
+            make_ndarray_with_pad(sampling_metadata.output_token_ids, pad=vocab_size, dtype=np.int64)
         ).to(logits.device, non_blocking=True)
 
     for i in range(batch_size):

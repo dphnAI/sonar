@@ -196,11 +196,11 @@ def get_ops() -> ModuleType:
 
     The Metal shader sources are read, pre-processed (includes inlined),
     and passed to the C++ extension which JIT-compiles them via
-    ``mlx::core::metal::Device::get_library()``.
+    `mlx::core::metal::Device::get_library()`.
 
     Returns:
-        The ``_paged_ops`` module with ``reshape_and_cache()`` and
-        ``paged_attention_v1()``.
+        The `_paged_ops` module with `reshape_and_cache()` and
+        `paged_attention_v1()`.
     """
     global _ops_module
     if _ops_module is not None:

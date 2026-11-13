@@ -9,7 +9,7 @@ from typing import cast
 import torch
 
 import sonar.model_executor.layers.fused_moe.modular_kernel as mk
-from sonar._custom_ops import (
+from sonar._cpu_ops import (
     CPUActMethod,
     CPUQuantAlgo,
     CPUQuantMethod,
@@ -71,8 +71,8 @@ def swigluoai_w13_interleave_perm(
     two_i: int,
     device: torch.device,
 ) -> torch.Tensor | None:
-    """Index taking a half-split w13 ``[gate | up]`` to the interleaved order
-    ZenDNN's ``swiglu_oai_mul`` expects, or None when no reorder is needed.
+    """Index taking a half-split w13 `[gate | up]` to the interleaved order
+    ZenDNN's `swiglu_oai_mul` expects, or None when no reorder is needed.
     Callers apply it along whichever axis holds their output channels."""
     if not getattr(experts_cls, "requires_interleaved_w13", False):
         return None

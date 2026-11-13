@@ -47,6 +47,23 @@ the optional `xxhash` package.
 Use a cryptographic hash for an untrusted multi-tenant service unless you have
 evaluated collision risk.
 
+## Mamba ReplaySSM
+
+For supported Mamba2 models, `--use-replayssm` reduces full-state writes during
+decode. It is off by default and supports prefix caching with MTP speculation.
+Set `--mamba-backend flashinfer --replayssm-buffer-len 16` for FlashInfer.
+
+With prefix caching, FlashInfer's replay rings require BF16 model inputs.
+The state dtype is independent. Its replay buffer is capped at 16 tokens and
+must hold at least `1 + num_speculative_tokens`. Pipeline parallelism,
+microbatching, and KV connectors are unsupported.
+
+The Triton Mamba backend supports ReplaySSM speculation without the 16-token
+cap, but does not support stochastic rounding. It has the same minimum buffer
+size and parallelism restrictions.
+
+Prefix reuse still needs a shared prefix with a saved Mamba checkpoint.
+
 ## Avoid ineffective layouts
 
 Short shared prefixes save little work. Templates that insert a user ID, date,

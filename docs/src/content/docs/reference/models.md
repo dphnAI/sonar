@@ -7,7 +7,7 @@ description: Model architectures that the current Sonar source tree registers.
 
 Sonar reads the `architectures` field from a model's `config.json` file. The value must match an architecture in these tables. A compatible Transformers implementation can also use the Transformers backend.
 
-The current registry contains **420 architecture entries** in the user-facing categories below.
+The current registry contains **421 architecture entries** in the user-facing categories below.
 
 ## Text generation
 
@@ -54,7 +54,6 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `Gemma3ForCausalLM` | `gemma3:Gemma3ForCausalLM` |
 | `Gemma3nForCausalLM` | `gemma3n:Gemma3nForCausalLM` |
 | `Gemma4ForCausalLM` | `gemma4:Gemma4ForCausalLM` |
-| `GemmaForCausalLM` | `gemma:GemmaForCausalLM` |
 | `Glm4ForCausalLM` | `glm4:Glm4ForCausalLM` |
 | `Glm4MoeForCausalLM` | `glm4_moe:Glm4MoeForCausalLM` |
 | `Glm4MoeLiteForCausalLM` | `glm4_moe_lite:Glm4MoeLiteForCausalLM` |
@@ -85,6 +84,7 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `LagunaForCausalLM` | `laguna:LagunaForCausalLM` |
 | `Lfm2ForCausalLM` | `lfm2:Lfm2ForCausalLM` |
 | `Lfm2MoeForCausalLM` | `lfm2_moe:Lfm2MoeForCausalLM` |
+| `Lfm3ForCausalLM` | `lfm3:Lfm3ForCausalLM` |
 | `Llama4ForCausalLM` | `llama4:Llama4ForCausalLM` |
 | `LlamaForCausalLM` | `llama:LlamaForCausalLM` |
 | `LongcatFlashForCausalLM` | `longcat_flash:LongcatFlashForCausalLM` |
@@ -113,30 +113,28 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `PanguProMoEV2ForCausalLM` | `openpangu:PanguProMoEV2ForCausalLM` |
 | `PanguUltraMoEForCausalLM` | `openpangu:PanguUltraMoEForCausalLM` |
 | `Param2MoEForCausalLM` | `param2moe:Param2MoEForCausalLM` |
-| `Phi3ForCausalLM` | `phi3:Phi3ForCausalLM` |
 | `PhiMoEForCausalLM` | `phimoe:PhiMoEForCausalLM` |
 | `Plamo3ForCausalLM` | `plamo3:Plamo3ForCausalLM` |
 | `Qwen2ForCausalLM` | `qwen2:Qwen2ForCausalLM` |
-| `Qwen2MoeForCausalLM` | `qwen2_moe:Qwen2MoeForCausalLM` |
 | `Qwen3ForCausalLM` | `qwen3:Qwen3ForCausalLM` |
 | `Qwen3MoeForCausalLM` | `qwen3_moe:Qwen3MoeForCausalLM` |
 | `Qwen3NextForCausalLM` | `qwen3_next:Qwen3NextForCausalLM` |
 | `Qwen3_5ForCausalLM` | `sonar.models.qwen3_5:Qwen3_5ForCausalLM` |
 | `Qwen3_5MoeForCausalLM` | `sonar.models.qwen3_5:Qwen3_5MoeForCausalLM` |
 | `Qwen4ExpForCausalLM` | `sonar.models.qwen4_exp:Qwen4ExpForCausalLM` |
+| `RicursiveForCausalLM` | `ricursive:RicursiveForCausalLM` |
 | `Rnj1ForCausalLM` | `rnj1:Rnj1ForCausalLM` |
 | `SarvamMLAForCausalLM` | `sarvam:SarvamMLAForCausalLM` |
 | `SarvamMoEForCausalLM` | `sarvam:SarvamMoEForCausalLM` |
 | `SolarForCausalLM` | `solar:SolarForCausalLM` |
-| `StableLmForCausalLM` | `stablelm:StablelmForCausalLM` |
 | `Step1ForCausalLM` | `step1:Step1ForCausalLM` |
 | `Step3TextForCausalLM` | `step3_text:Step3TextForCausalLM` |
 | `Step3p5ForCausalLM` | `step3p5:Step3p5ForCausalLM` |
 | `Step5ForCausalLM` | `sonar.models.step5:Step5ForCausalLM` |
-| `TeleChat2ForCausalLM` | `telechat2:TeleChat2ForCausalLM` |
-| `TeleChat3ForCausalLM` | `llama:LlamaForCausalLM` |
 | `TeleFLMForCausalLM` | `teleflm:TeleFLMForCausalLM` |
+| `UnlimitedOCR2TextForCausalLM` | `unlimited_ocr:UnlimitedOCR2TextForCausalLM` |
 | `Zamba2ForCausalLM` | `zamba2:Zamba2ForCausalLM` |
+| `ZayaForCausalLM` | `zaya:ZayaForCausalLM` |
 
 ## Embedding
 
@@ -168,7 +166,6 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `MistralModel` | `llama:LlamaForCausalLM` |
 | `ModernBertModel` | `modernbert:ModernBertModel` |
 | `NomicBertModel` | `bert_with_rope:NomicBertModel` |
-| `Phi3ForCausalLM` | `phi3:Phi3ForCausalLM` |
 | `Phi3VForCausalLM` | `phi3v:Phi3VForCausalLM` |
 | `Qwen2ForCausalLM` | `qwen2:Qwen2ForCausalLM` |
 | `Qwen2Model` | `qwen2:Qwen2ForCausalLM` |
@@ -176,8 +173,6 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `RobertaForMaskedLM` | `roberta:RobertaEmbeddingModel` |
 | `RobertaModel` | `roberta:RobertaEmbeddingModel` |
 | `SiglipModel` | `siglip:SiglipEmbeddingModel` |
-| `TeleChat2ForCausalLM` | `telechat2:TeleChat2ForCausalLM` |
-| `TeleChat3ForCausalLM` | `llama:LlamaForCausalLM` |
 | `Terratorch` | `terratorch:Terratorch` |
 | `VoyageQwen3BidirectionalEmbedModel` | `voyage:VoyageQwen3BidirectionalEmbedModel` |
 | `XLMRobertaModel` | `roberta:RobertaEmbeddingModel` |
@@ -199,6 +194,7 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `ModernVBertModel` | `colmodernvbert:ColModernVBertForRetrieval` |
 | `OpsColQwen3Model` | `colqwen3:ColQwen3Model` |
 | `Qwen3VLNemotronEmbedModel` | `colqwen3:ColQwen3Model` |
+| `UltraVBertModel` | `colultravbert:ColUltraVBertForRetrieval` |
 
 ## Reward
 
@@ -242,7 +238,6 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | Architecture | Implementation |
 | --- | --- |
 | `Alpamayo2Super` | `alpamayo2_super:Alpamayo2SuperForConditionalGeneration` |
-| `AriaForConditionalGeneration` | `aria:AriaForConditionalGeneration` |
 | `AudioFlamingo3ForConditionalGeneration` | `audioflamingo3:AudioFlamingo3ForConditionalGeneration` |
 | `BagelForConditionalGeneration` | `bagel:BagelForConditionalGeneration` |
 | `BailingMoeV3VLForConditionalGeneration` | `bailing_moe_v3_vl:BailingMoeV3VLForConditionalGeneration` |
@@ -293,9 +288,12 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `IsaacForConditionalGeneration` | `isaac:IsaacForConditionalGeneration` |
 | `KananaVForConditionalGeneration` | `kanana_v:KananaVForConditionalGeneration` |
 | `KimiK25ForConditionalGeneration` | `kimi_k25:KimiK25ForConditionalGeneration` |
+| `KimiK31ForConditionalGeneration` | `sonar.models.kimi_k3:KimiK3ForConditionalGeneration` |
 | `KimiK3ForConditionalGeneration` | `sonar.models.kimi_k3:KimiK3ForConditionalGeneration` |
 | `KimiVLForConditionalGeneration` | `kimi_vl:KimiVLForConditionalGeneration` |
 | `Lfm2VlForConditionalGeneration` | `lfm2_vl:Lfm2VLForConditionalGeneration` |
+| `Lfm3AudioForConditionalGeneration` | `lfm3_audio:Lfm3AudioForConditionalGeneration` |
+| `Lfm3VlForConditionalGeneration` | `lfm3_vl:Lfm3VlForConditionalGeneration` |
 | `LightOnOCRForConditionalGeneration` | `lightonocr:LightOnOCRForConditionalGeneration` |
 | `Llama4ForConditionalGeneration` | `mllama4:Llama4ForConditionalGeneration` |
 | `Llama_Nemotron_Nano_VL` | `nemotron_vl:LlamaNemotronVLChatModel` |
@@ -378,6 +376,7 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `BailingMoeV3MTPModel` | `bailing_moe_v3_mtp:BailingMoeV3MTPModel` |
 | `DFlash2BeamDraftModel` | `sonar.models.beam:DFlash2BeamForCausalLM` |
 | `DFlash2DraftModel` | `qwen3_dflash2:DFlash2Qwen3ForCausalLM` |
+| `DFlash2RicursiveDraftModel` | `ricursive_dflash2:RicursiveDFlash2ForCausalLM` |
 | `DFlashDraftModel` | `qwen3_dflash:DFlashQwen3ForCausalLM` |
 | `DFlashLagunaForCausalLM` | `laguna_dflash:DFlashLagunaForCausalLM` |
 | `DFlashMuseGlimmerAssistantModel` | `qwen3_dflash:DFlashQwen3ForCausalLM` |
@@ -427,14 +426,11 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `MiMoV2OmniMTPModel` | `mimo_v2_mtp:MiMoV2OmniMTP` |
 | `MiniMaxM3MTP` | `sonar.models.minimax_m3:MiniMaxM3MTP` |
 | `MuseGlimmerAssistantModel` | `qwen3_dflash:DFlashQwen3ForCausalLM` |
-| `MuseSparkDSparkModel` | `sonar.models.muse_spark.common.dspark:MuseSparkDSparkForCausalLM` |
+| `MuseSparkDSparkModel` | `sonar.models.muse_spark:MuseSparkDSparkForCausalLM` |
 | `Nemotron3_5TranscribeMTPModel` | `nemotron3_5_transcribe:Nemotron3_5TranscribeMTP` |
 | `NemotronHMTPModel` | `nemotron_h_mtp:NemotronHMTP` |
 | `OpenPanguMTPModel` | `openpangu_mtp:OpenPanguMTP` |
-| `PEagleDraftModel` | `llama_eagle3:Eagle3LlamaForCausalLM` |
 | `ParseAuxMTPModel` | `nemotron_parse3_5_mtp:ParseAuxMTPModel` |
-| `PeagleLlamaForCausalLM` | `llama_eagle3:Eagle3LlamaForCausalLM` |
-| `PeagleQwen3ForCausalLM` | `qwen3_eagle3:Eagle3Qwen3ForCausalLM` |
 | `Qwen3DSparkModel` | `qwen3_dspark:Qwen3DSparkForCausalLM` |
 | `Qwen3NextMTP` | `qwen3_next_mtp:Qwen3NextMTP` |
 | `Qwen3OmniDSparkModel` | `qwen3_dspark:Qwen3DSparkForCausalLM` |
@@ -450,11 +446,13 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | Architecture | Implementation |
 | --- | --- |
 | `ArceeForCausalLM` | `transformers:TransformersForCausalLM` |
+| `AriaForConditionalGeneration` | `transformers:TransformersMultiModalMoEForCausalLM` |
 | `CwmForCausalLM` | `transformers:TransformersForCausalLM` |
 | `Emu3ForConditionalGeneration` | `transformers:TransformersMultiModalForCausalLM` |
 | `FlexOlmoForCausalLM` | `transformers:TransformersMoEForCausalLM` |
 | `GPTBigCodeForCausalLM` | `transformers:TransformersForCausalLM` |
 | `GPTNeoXForCausalLM` | `transformers:TransformersForCausalLM` |
+| `GemmaForCausalLM` | `transformers:TransformersForCausalLM` |
 | `GlmForCausalLM` | `transformers:TransformersForCausalLM` |
 | `HunYuanDenseV1ForCausalLM` | `transformers:TransformersForCausalLM` |
 | `HunYuanMoEV1ForCausalLM` | `transformers:TransformersMoEForCausalLM` |
@@ -467,9 +465,12 @@ The current registry contains **420 architecture entries** in the user-facing ca
 | `Olmo3ForCausalLM` | `transformers:TransformersForCausalLM` |
 | `OlmoForCausalLM` | `transformers:TransformersForCausalLM` |
 | `OlmoeForCausalLM` | `transformers:TransformersMoEForCausalLM` |
+| `Phi3ForCausalLM` | `transformers:TransformersForCausalLM` |
 | `PhiForCausalLM` | `transformers:TransformersForCausalLM` |
+| `Qwen2MoeForCausalLM` | `transformers:TransformersMoEForCausalLM` |
 | `SeedOssForCausalLM` | `transformers:TransformersForCausalLM` |
 | `SmolLM3ForCausalLM` | `transformers:TransformersForCausalLM` |
+| `StableLmForCausalLM` | `transformers:TransformersForCausalLM` |
 | `Starcoder2ForCausalLM` | `transformers:TransformersForCausalLM` |
 | `VaultGemmaForCausalLM` | `transformers:TransformersForCausalLM` |
-| `VibeVoiceAsrForConditionalGeneration` | `transformers:TransformersMultiModalForCausalLM` |
+| `VibeVoiceAsrForConditionalGeneration` | `transformers:TransformersMultiModalForTranscription` |

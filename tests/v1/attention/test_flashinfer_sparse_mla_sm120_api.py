@@ -8,7 +8,7 @@ import torch
 
 from sonar.config import set_current_sonar_config
 from sonar.models.deepseek_v4.nvidia.flashinfer_sparse import (
-    _required_sm120_sparse_topk,
+    required_sm120_sparse_topk,
 )
 from sonar.platforms.interface import DeviceCapability
 from sonar.utils import flashinfer as fi_utils
@@ -90,5 +90,5 @@ def test_sm120_dsv4_required_topk_tracks_dspark_width() -> None:
         speculative_config=SimpleNamespace(num_speculative_tokens=5),
     )
 
-    assert _required_sm120_sparse_topk(causal, 128) == 128
-    assert _required_sm120_sparse_topk(dspark, 128) == 192
+    assert required_sm120_sparse_topk(causal, 128) == 128
+    assert required_sm120_sparse_topk(dspark, 128) == 192

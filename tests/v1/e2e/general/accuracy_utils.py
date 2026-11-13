@@ -416,8 +416,8 @@ class SamplingReference:
     def distributions(self, raw_logits: torch.Tensor, generated_ids: list[int]) -> tuple[torch.Tensor, torch.Tensor]:
         """Return FP32 logits before and after non-grammar sampling transforms.
 
-        ``raw_logits`` scores the next token after the prompt and
-        ``generated_ids``. Returned tensors do not alias the model's tensor.
+        `raw_logits` scores the next token after the prompt and
+        `generated_ids`. Returned tensors do not alias the model's tensor.
         Normalize the first result to check reported completion logprobs;
         the second supplies the greedy decision reference.
         """

@@ -126,13 +126,17 @@ guide: |
       --served-model-name hy3-preview
   ```
 
-  ### Installing from source
+  ### Installing upstream vLLM from source
+
+  This external source build installs vLLM. Use `vllm serve` and `VLLM_*`
+  variables in that environment. For Sonar, use the platform indexes in
+  [the recipe README](../../README.md).
 
   ```bash
   uv venv --python 3.12 --seed --managed-python
   source .venv/bin/activate
   git clone https://github.com/vllm-project/vllm.git
-  cd sonar
+  cd vllm
   uv pip install --editable . --torch-backend=auto
   ```
 
@@ -145,15 +149,12 @@ guide: |
 
   ### Serving on 8×AMD MI300X / MI325X / MI350X / MI355X
 
-  Hy3-preview support is being added in Sonar PR
-  [#40681](https://github.com/vllm-project/vllm/pull/40681). Until it merges, AMD users
-  must build Sonar from the PR branch inside the published ROCm Sonar nightly image
-  (`rocm/vllm-dev:nightly`). See the AMD install note in `hardware_overrides.amd`
-  above for the full reproducer.
-
-  Once Sonar is installed, serve with the standard launcher plus the AITER environment
-  variables (the recipe's `hardware_overrides.amd.extra_env` applies these
-  automatically when the AMD profile is selected on the recipe site):
+  The vendor reproducer builds upstream vLLM PR
+  [#40681](https://github.com/vllm-project/vllm/pull/40681) inside
+  `rocm/vllm-dev:nightly`. See the AMD install note above. That environment
+  uses `vllm serve` and `VLLM_*` variables. The commands below instead target
+  an installed Sonar runtime with Hy3-preview support and use Sonar's launcher
+  and AITER environment variables:
 
   ```bash
   export SONAR_ROCM_USE_AITER=1
@@ -162,27 +163,25 @@ guide: |
   export SONAR_ROCM_USE_AITER_RMSNORM=1
   export SONAR_ROCM_USE_AITER_LINEAR=1
 
-  sonar serve tencent/Hy3-preview \
+  sonar run tencent/Hy3-preview \
     --tensor-parallel-size 8 \
     --tool-call-parser hy_v3 \
     --reasoning-parser hy_v3 \
     --enable-auto-tool-choice \
-    --served-model-name hy3-preview \
-    --gpu-memory-utilization 0.90
+    --served-model-name hy3-preview
   ```
 
   MTP (recommended on AMD for lower latency, same flags as the NVIDIA path):
 
   ```bash
-  sonar serve tencent/Hy3-preview \
+  sonar run tencent/Hy3-preview \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
     --speculative-config.num_speculative_tokens 1 \
     --tool-call-parser hy_v3 \
     --reasoning-parser hy_v3 \
     --enable-auto-tool-choice \
-    --served-model-name hy3-preview \
-    --gpu-memory-utilization 0.90
+    --served-model-name hy3-preview
   ```
 
   ### Serving on 8×H200 or 8×H20-3e(141GB)
@@ -190,7 +189,7 @@ guide: |
   Without Multi-Token Prediction (MTP):
 
   ```bash
-  sonar serve tencent/Hy3-preview \
+  sonar run tencent/Hy3-preview \
     --tensor-parallel-size 8 \
     --tool-call-parser hy_v3 \
     --reasoning-parser hy_v3 \
@@ -201,7 +200,7 @@ guide: |
   With MTP (recommended for lower latency):
 
   ```bash
-  sonar serve tencent/Hy3-preview \
+  sonar run tencent/Hy3-preview \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
     --speculative-config.num_speculative_tokens 1 \
@@ -295,7 +294,7 @@ guide: |
   The following uses 8×H20-3e(141GB) as an example.
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model tencent/Hy3-preview \
     --dataset-name random \
     --random-input-len 8192 \

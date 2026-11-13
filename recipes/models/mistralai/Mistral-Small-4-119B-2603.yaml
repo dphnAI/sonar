@@ -144,7 +144,7 @@ guide: |
 
   ```bash
   uv venv && source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   uv pip install -U "mistral_common>=1.11.0" transformers
   ```
 
@@ -155,25 +155,23 @@ guide: |
   FP8 default (2xB200 / 2xH200):
 
   ```bash
-  sonar serve mistralai/Mistral-Small-4-119B-2603 \
+  sonar run mistralai/Mistral-Small-4-119B-2603 \
     --max-model-len 262144 \
     --tensor-parallel-size 2 \
     --tool-call-parser mistral --enable-auto-tool-choice \
     --reasoning-parser mistral \
-    --max-num-batched-tokens 16384 --max-num-seqs 128 \
-    --gpu-memory-utilization 0.8
+    --max-num-batched-tokens 16384 --max-num-seqs 128
   ```
 
   NVFP4 variant (single B200, or 2xB200 for full 256K context):
 
   ```bash
-  sonar serve mistralai/Mistral-Small-4-119B-2603-NVFP4 \
+  sonar run mistralai/Mistral-Small-4-119B-2603-NVFP4 \
     --max-model-len 262144 \
     --tensor-parallel-size 2 \
     --tool-call-parser mistral --enable-auto-tool-choice \
     --reasoning-parser mistral \
-    --max-num-batched-tokens 16384 --max-num-seqs 128 \
-    --gpu-memory-utilization 0.8
+    --max-num-batched-tokens 16384 --max-num-seqs 128
   ```
 
   Mistral publishes a custom Docker image
@@ -187,13 +185,12 @@ guide: |
   `spec_decoding` feature (or pass `--speculative-config` directly):
 
   ```bash
-  sonar serve mistralai/Mistral-Small-4-119B-2603 \
+  sonar run mistralai/Mistral-Small-4-119B-2603 \
     --max-model-len 262144 \
     --tensor-parallel-size 2 \
     --tool-call-parser mistral --enable-auto-tool-choice \
     --reasoning-parser mistral \
     --max-num-batched-tokens 16384 --max-num-seqs 128 \
-    --gpu-memory-utilization 0.8 \
     --speculative-config '{
       "model": "mistralai/Mistral-Small-4-119B-2603-eagle",
       "num_speculative_tokens": 3,

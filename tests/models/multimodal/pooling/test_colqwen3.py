@@ -14,7 +14,7 @@ import pytest
 import torch
 from PIL import Image
 
-from sonar.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
+from sonar.entrypoints.pooling.scoring.types import ScoreMultiModalParam
 from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,

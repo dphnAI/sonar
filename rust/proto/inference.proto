@@ -67,6 +67,10 @@ message GenerateRequest {
 
   // Sonar sampler extensions. Omitted fields use the Python sampling defaults.
   SonarSamplingParams sonar_sampling = 19;
+
+  // Media loading options keyed by modality, as in the HTTP `media_io_kwargs`
+  // request field. Only `video.fps` (frames sampled per second) is supported.
+  google.protobuf.Struct media_io_kwargs = 20;
 }
 
 // Inputs to the engine's reasoning gate, which keeps a structured-output

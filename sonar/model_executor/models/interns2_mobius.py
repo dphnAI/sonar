@@ -31,6 +31,7 @@ from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
+from sonar.model_executor.models.qwen3_moe import Qwen3MoeMLP
 from sonar.multimodal import MULTIMODAL_REGISTRY
 from sonar.sequence import IntermediateTensors
 from sonar.tokenizers.registry import cached_tokenizer_from_config
@@ -40,7 +41,6 @@ from .interns2_preview import (
     InternS2PreviewForConditionalGeneration,
     InternS2PreviewProcessingInfo,
 )
-from .qwen2_moe import Qwen2MoeMLP
 from .qwen3_5 import (
     Qwen3_5ForCausalLMBase,
     Qwen3_5Model,
@@ -153,7 +153,7 @@ class InternS2MobiusSharedExpertBlock(nn.Module):
             quant_config=None,
             prefix=f"{prefix}.shared_expert_gate",
         )
-        self.shared_expert = Qwen2MoeMLP(
+        self.shared_expert = Qwen3MoeMLP(
             hidden_size=config.hidden_size,
             intermediate_size=config.shared_expert_intermediate_size,
             hidden_act=config.hidden_act,

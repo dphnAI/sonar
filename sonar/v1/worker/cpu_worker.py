@@ -18,11 +18,11 @@ from sonar.platforms import CpuArchEnum, current_platform
 from sonar.utils.cpu_resource_utils import (
     get_allowed_cpu_list,
     get_memory_node_info,
-    get_visible_memory_node,
+    get_worker_memory_nodes,
 )
 from sonar.utils.mem_utils import format_gib
 from sonar.utils.torch_utils import set_random_seed
-from sonar.v1.worker.cpu_model_runner import CPUModelRunner
+from sonar.v1.worker.cpu.model_runner import CPUModelRunner
 from sonar.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
 from sonar.v1.worker.worker_base import CompilationTimes
 
@@ -41,7 +41,7 @@ class CPUWorker(Worker):
         # TODO: use numactl for process setup
         # TODO: optimize for `interleaved` policy
         # Bind memory node
-        allowed_memory_nodes = get_visible_memory_node(sonar_config.parallel_config.assigned_physical_gpu_ids)
+        allowed_memory_nodes = get_worker_memory_nodes(sonar_config.parallel_config.assigned_physical_gpu_ids)
         allowed_cpu_list = get_allowed_cpu_list()
         cpu_core = allowed_cpu_list[0]
 
@@ -69,7 +69,7 @@ class CPUWorker(Worker):
         torch.ops._C.init_cpu_memory_env([memory_node])
 
         memory_status = get_memory_node_info(memory_node)
-        memory_fraction = sonar_config.cache_config.gpu_memory_utilization
+        memory_fraction = sonar_config.cache_config.resolved_gpu_memory_utilization
         self.requested_cpu_memory = math.ceil(memory_status.total_memory * memory_fraction)
 
         super().__init__(
@@ -135,32 +135,21 @@ class CPUWorker(Worker):
             self.local_rank,
             current_platform.dist_backend,
         )
-        if self.use_v2_model_runner:
-            logger.info_once("Using V2 Model Runner")
 
         # Set random seed.
         set_random_seed(self.model_config.seed)
 
         # Construct the model runner
-        if self.use_v2_model_runner:
-            if current_platform.uses_standalone_cpu_model_runner():
-                from sonar.v1.worker.cpu.standalone_model_runner import (
-                    StandaloneCPUModelRunner,
-                )
+        if current_platform.uses_standalone_cpu_model_runner():
+            from sonar.v1.worker.cpu.standalone_model_runner import (
+                StandaloneCPUModelRunner,
+            )
 
-                self.model_runner: CPUModelRunner = StandaloneCPUModelRunner(  # type: ignore
-                    self.sonar_config, self.device
-                )
-            else:
-                from sonar.v1.worker.cpu.model_runner import (
-                    CPUModelRunner as CPUModelRunnerV2,
-                )
-
-                self.model_runner = CPUModelRunnerV2(  # type: ignore
-                    self.sonar_config, self.device
-                )
+            self.model_runner: CPUModelRunner = StandaloneCPUModelRunner(  # type: ignore
+                self.sonar_config, self.device
+            )
         else:
-            self.model_runner = CPUModelRunner(self.sonar_config, torch.device("cpu"))
+            self.model_runner = CPUModelRunner(self.sonar_config, self.device)
 
     def sleep(self, level: int = 1) -> None:
         logger.warning("sleep mode is not supported on CPU, ignore it.")
@@ -265,10 +254,9 @@ class CPUWorker(Worker):
         # Only compile here for models without kv cache
         if len(self.model_runner.kv_caches) == 0 and self._should_warm_up_model():
             self.model_runner.warming_up_model()
-        # profile_run skips the MRV2 scheduler-driven kernels, so without this
+        # profile_run skips the scheduler-driven kernels, so without this
         # their Triton JIT lands in the first request's TTFT.
-        kernel_config = self.sonar_config.kernel_config
-        if self.use_v2_model_runner and kernel_config.enable_jit_warmup:
+        if self.sonar_config.kernel_config.enable_jit_warmup:
             if current_platform.uses_standalone_cpu_model_runner():
                 from sonar.v1.worker.cpu.warmup import warmup_kernels
             else:

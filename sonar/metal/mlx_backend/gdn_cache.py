@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Per-request recurrent state cache for GDN linear attention layers.
 
-Unlike ``MetalPagedKVCache`` which stores per-token KV that grows with
+Unlike `MetalPagedKVCache` which stores per-token KV that grows with
 sequence length, GDN linear attention uses fixed-size recurrent state
 per request: a convolution buffer and a hidden state matrix.
 

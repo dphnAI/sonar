@@ -338,29 +338,27 @@ def _check_distributed_selection(rank, rendezvous, scenario):
                 lambda: types.SimpleNamespace(world_size=2, cpu_group=torch.distributed.group.WORLD),
                 raising=False,
             )
-            monkeypatch.setattr(
-                rsl,
-                "get_pp_group",
-                lambda: types.SimpleNamespace(world_size=2 if scenario == "pipeline_draft" else 1),
-                raising=False,
-            )
+            # The last PP rank builds the draft as the only pipeline stage.
+            monkeypatch.setattr(rsl, "in_single_pp_stage", lambda: scenario == "pipeline_draft")
             if scenario == "pipeline_draft" and rank == 0:
                 # Earlier PP stages never invoke the draft loader.
                 torch.distributed.barrier()
                 return
+
             # Exercise real selection and Gloo; observe the distributed stream input.
-            monkeypatch.setattr(
-                rsl,
-                "runai_safetensors_weights_iterator",
-                lambda paths, *args: iter((path, None) for path in paths),
-            )
+            def stream(paths, use_tqdm_on_load, is_distributed):
+                assert is_distributed == (scenario != "pipeline_draft")
+                return iter((path, None) for path in paths)
+
+            monkeypatch.setattr(rsl, "runai_safetensors_weights_iterator", stream)
             model = torch.nn.Module()
             if not (scenario == "missing_hook" and rank == 1):
                 needed = "main." if scenario == "different_roles" and rank == 1 else "draft."
-                model.is_unused_checkpoint_weight = lambda name: (not name.startswith(needed))
+                model.is_unused_checkpoint_weight = lambda name: not name.startswith(needed)
             config = types.SimpleNamespace(model=root, model_weights="", revision=None)
             selected = [path for path, _ in _runai_loader({"distributed": True}).get_all_weights(config, model)]
-            expected = files[1:] if scenario == "healthy" else files
+            selects = scenario in ("healthy", "pipeline_draft")
+            expected = files[1:] if selects else files
             assert selected == expected
             if scenario == "pipeline_draft":
                 torch.distributed.barrier()

@@ -2,21 +2,21 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Metal frame-capture wrapper for Sonar's WorkerProfiler abstraction.
 
-Subclasses ``sonar.profiler.wrapper.WorkerProfiler`` so that the manual
-start/stop surface — ``LLM.start_profile`` / ``LLM.stop_profile``, the
-``/start_profile`` and ``/stop_profile`` HTTP endpoints, and the engine's
-``collective_rpc("profile", ...)`` plumbing — routes through unchanged.
+Subclasses `sonar.profiler.wrapper.WorkerProfiler` so that the manual
+start/stop surface — `LLM.start_profile` / `LLM.stop_profile`, the
+`/start_profile` and `/stop_profile` HTTP endpoints, and the engine's
+`collective_rpc("profile", ...)` plumbing — routes through unchanged.
 
-Only the two abstract methods need bodies: ``_start`` calls
-``mlx.metal.start_capture`` and ``_stop`` calls ``mlx.metal.stop_capture``.
-The output is a ``.gputrace`` bundle that opens directly in Xcode (the same
+Only the two abstract methods need bodies: `_start` calls
+`mlx.metal.start_capture` and `_stop` calls `mlx.metal.stop_capture`.
+The output is a `.gputrace` bundle that opens directly in Xcode (the same
 artifact Xcode's "Capture GPU Frame" produces).
 
-The ``delay_iterations`` / ``max_iterations`` scheduling fields are
+The `delay_iterations` / `max_iterations` scheduling fields are
 **rejected** both at construction and per-session start: they are advanced by
-``WorkerProfiler.step()``, which the metal worker never calls.
+`WorkerProfiler.step()`, which the metal worker never calls.
 
-Apple gates frame capture behind ``MTL_CAPTURE_ENABLED=1`` in the process
+Apple gates frame capture behind `MTL_CAPTURE_ENABLED=1` in the process
 environment.  We check that up front and raise with an actionable message;
 the alternative is a generic "Capturing is not supported" from MLX.
 """
@@ -39,7 +39,7 @@ logger = init_logger(__name__)
 class MetalProfilerWrapper(WorkerProfiler):
     """Metal frame-capture flavor of Sonar's WorkerProfiler.
 
-    Trace output: ``<profiler_config.torch_profiler_dir>/<trace_name>.gputrace``
+    Trace output: `<profiler_config.torch_profiler_dir>/<trace_name>.gputrace`
     """
 
     def __init__(self, profiler_config: ProfilerConfig, trace_name: str) -> None:

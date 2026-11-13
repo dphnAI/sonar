@@ -2,15 +2,15 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Environment variable definitions for the Sonar Metal plugin.
 
-This module is the single source of truth for all ``SONAR_METAL_*`` (and
-``SONAR_MLX_*``) environment variables.  It mirrors the lazy-evaluation
-pattern used by ``sonar/envs.py``: each variable is read from
-``os.environ`` on access via ``__getattr__``, so values are never stale
-and ``monkeypatch.setenv`` works in tests without extra resets.
+This module is the single source of truth for all `SONAR_METAL_*` (and
+`SONAR_MLX_*`) environment variables.  It mirrors the lazy-evaluation
+pattern used by `sonar/envs.py`: each variable is read from
+`os.environ` on access via `__getattr__`, so values are never stale
+and `monkeypatch.setenv` works in tests without extra resets.
 
-During plugin registration (``sonar.metal._register``), the
-``environment_variables`` dict is merged into
-``sonar.envs.environment_variables`` so that ``validate_environ()``
+During plugin registration (`sonar.metal._register`), the
+`environment_variables` dict is merged into
+`sonar.envs.environment_variables` so that `validate_environ()`
 recognises our variables and does not emit spurious "Unknown Sonar
 environment variable" warnings.
 """
@@ -44,10 +44,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Enable verbose debug logging (default False).
     "SONAR_METAL_DEBUG": lambda: os.getenv("SONAR_METAL_DEBUG", "0") == "1",
     # Use native Metal paged attention (default True).
-    "SONAR_METAL_USE_PAGED_ATTENTION": lambda: (os.getenv("SONAR_METAL_USE_PAGED_ATTENTION", "1") == "1"),
+    "SONAR_METAL_USE_PAGED_ATTENTION": lambda: os.getenv("SONAR_METAL_USE_PAGED_ATTENTION", "1") == "1",
     # Experimental YOCO/KV-sharing fast prefill. Default on for eligible
     # paged-attention models.
-    "SONAR_METAL_KV_SHARING_FAST_PREFILL": lambda: (os.getenv("SONAR_METAL_KV_SHARING_FAST_PREFILL", "1") == "1"),
+    "SONAR_METAL_KV_SHARING_FAST_PREFILL": lambda: os.getenv("SONAR_METAL_KV_SHARING_FAST_PREFILL", "1") == "1",
     # Multimodal serving mode:
     # - "auto": known-incompatible multimodal checkpoints fall back to the
     #   text-only compatibility path.

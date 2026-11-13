@@ -52,8 +52,8 @@ def _feed(parser, chunks, request=None):
     """Feed chunks through the streaming parser and collect results.
 
     Each element in *chunks* is either:
-    - a ``str``: used as delta_text (current_text accumulates automatically)
-    - a ``(delta_text, delta_token_ids)`` tuple for special-token scenarios
+    - a `str`: used as delta_text (current_text accumulates automatically)
+    - a `(delta_text, delta_token_ids)` tuple for special-token scenarios
 
     Returns a list of non-None DeltaMessage objects.
     """
@@ -131,9 +131,11 @@ class TestContentStreaming:
             parser,
             [
                 "Let me check. ",
-                '<minimax:tool_call><invoke name="get_weather">'
-                '<parameter name="city">Seattle</parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="get_weather">'
+                    '<parameter name="city">Seattle</parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         assert _collect_content(results) == "Let me check. "
@@ -174,9 +176,11 @@ class TestSingleInvoke:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="get_weather">'
-                '<parameter name="city">Seattle</parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="get_weather">'
+                    '<parameter name="city">Seattle</parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -211,8 +215,8 @@ class TestMultipleInvokes:
             parser,
             [
                 "<minimax:tool_call>",
-                '<invoke name="search_web"><parameter name="query">OpenAI</parameter></invoke>',
-                '<invoke name="search_web"><parameter name="query">Gemini</parameter></invoke>',
+                ('<invoke name="search_web"><parameter name="query">OpenAI</parameter></invoke>'),
+                ('<invoke name="search_web"><parameter name="query">Gemini</parameter></invoke>'),
                 "</minimax:tool_call>",
             ],
         )
@@ -229,8 +233,10 @@ class TestMultipleInvokes:
             parser,
             [
                 "<minimax:tool_call>",
-                '<invoke name="fn_a"><parameter name="x">1</parameter></invoke>'
-                '<invoke name="fn_b"><parameter name="y">2</parameter></invoke>',
+                (
+                    '<invoke name="fn_a"><parameter name="x">1</parameter></invoke>'
+                    '<invoke name="fn_b"><parameter name="y">2</parameter></invoke>'
+                ),
                 "</minimax:tool_call>",
             ],
         )
@@ -245,8 +251,8 @@ class TestMultipleInvokes:
             parser,
             [
                 "<minimax:tool_call>",
-                '<invoke name="get_weather"><parameter name="city">NYC</parameter></invoke>',
-                '<invoke name="get_stock"><parameter name="ticker">AAPL</parameter></invoke>',
+                ('<invoke name="get_weather"><parameter name="city">NYC</parameter></invoke>'),
+                ('<invoke name="get_stock"><parameter name="ticker">AAPL</parameter></invoke>'),
                 "</minimax:tool_call>",
             ],
         )
@@ -268,7 +274,7 @@ class TestDeltaMessageFormat:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>',
+                ('<minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>'),
             ],
         )
         tc_deltas = [tc for r in results for tc in (r.tool_calls or [])]
@@ -352,9 +358,11 @@ class TestAnyOfNullableParam:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="update_profile">'
-                '<parameter name="nickname">Alice</parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="update_profile">'
+                    '<parameter name="nickname">Alice</parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -384,9 +392,11 @@ class TestAnyOfNullableParam:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="update_profile">'
-                '<parameter name="nickname">null</parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="update_profile">'
+                    '<parameter name="nickname">null</parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -416,10 +426,12 @@ class TestAnyOfNullableParam:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="update_settings">'
-                '<parameter name="config">{"theme": "dark", "fontSize": 14}'
-                "</parameter>"
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="update_settings">'
+                    '<parameter name="config">{"theme": "dark", "fontSize": 14}'
+                    "</parameter>"
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -455,9 +467,11 @@ class TestNoneStringPreservation:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="set_theme">'
-                '<parameter name="theme">none</parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="set_theme">'
+                    '<parameter name="theme">none</parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -486,9 +500,11 @@ class TestNoneStringPreservation:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="echo">'
-                '<parameter name="message">none</parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="echo">'
+                    '<parameter name="message">none</parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -518,9 +534,11 @@ class TestNoneStringPreservation:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="update_profile">'
-                '<parameter name="nickname">null</parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="update_profile">'
+                    '<parameter name="nickname">null</parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -548,9 +566,11 @@ class TestNoneStringPreservation:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="echo">'
-                '<parameter name="value">nil</parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="echo">'
+                    '<parameter name="value">nil</parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -566,9 +586,11 @@ class TestParameterWhitespace:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="echo">'
-                '<parameter name="msg"> hi </parameter>'
-                "</invoke></minimax:tool_call>",
+                (
+                    '<minimax:tool_call><invoke name="echo">'
+                    '<parameter name="msg"> hi </parameter>'
+                    "</invoke></minimax:tool_call>"
+                ),
             ],
         )
         tc = _collect_tool_calls(results)
@@ -580,7 +602,7 @@ class TestParameterWhitespace:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="write"><parameter name="content">    def foo():\n',
+                ('<minimax:tool_call><invoke name="write"><parameter name="content">    def foo():\n'),
                 "        return 1\n",
                 "</parameter></invoke></minimax:tool_call>",
             ],

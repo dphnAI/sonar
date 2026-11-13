@@ -12,8 +12,8 @@ from sonar.metal.multimodal.feature_spec import MultiModalFeatureSpec
 class EncoderCache:
     """Store multimodal features and MLX encoder outputs by request/hash.
 
-    Mirrors upstream Sonar's v1 GPU ``EncoderCache`` with the tensor type
-    changed from ``torch.Tensor`` to ``mlx.core.array``.
+    Mirrors upstream Sonar's v1 GPU `EncoderCache` with the tensor type
+    changed from `torch.Tensor` to `mlx.core.array`.
     """
 
     def __init__(self) -> None:

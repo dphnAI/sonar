@@ -10,6 +10,7 @@ from transformers import PreTrainedTokenizerBase
 
 from sonar.entrypoints.generate.base.protocol import DeltaMessage
 from sonar.reasoning import ReasoningParser
+from sonar.v1.token_buffer import rfind_tokens
 
 if TYPE_CHECKING:
     from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
@@ -102,7 +103,7 @@ class Step3ReasoningParser(ReasoningParser):
             return reasoning, content
 
     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
-        return self.think_end_token_id in input_ids
+        return rfind_tokens(input_ids, (self.think_end_token_id,)) >= 0
 
     def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
         end_token_id = self.think_end_token_id

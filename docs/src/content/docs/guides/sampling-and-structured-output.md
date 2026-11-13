@@ -101,6 +101,15 @@ application because a schema does not apply business rules.
 Structured output also supports a regular expression, a choice list, a grammar,
 and JSON-object mode. Set one primary constraint per request.
 
+Pass Lark grammar syntax directly when using the XGrammar backend.
+
+## Watermarking
+
+`--watermark-config` can enable `enforce` to override request-level watermark
+opt-outs. Enforcement is off by default. Watermark context uses generated
+tokens only, and the first `context_width` tokens use ordinary sampling.
+`top_k=1` cannot embed a watermark even with enforcement.
+
 ## Use the OpenAI response format
 
 OpenAI-compatible clients can pass a JSON schema through `response_format`.

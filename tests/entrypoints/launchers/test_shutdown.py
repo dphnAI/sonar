@@ -19,7 +19,7 @@ from prometheus_client.parser import text_string_to_metric_families
 from sonar.utils.network_utils import get_open_port
 from tests.utils import RemoteOpenAIServer
 
-MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
+MODEL_NAME = "vllm-project/tiny-random-LlamaForCausalLM"
 
 # GPU initialization might take take longer
 _SERVER_STARTUP_TIMEOUT = 120
@@ -128,7 +128,7 @@ async def _concurrent_request_loop(
 
 
 def _num_running_requests(metrics_text: str) -> float:
-    """Sum ``sonar:num_requests_running`` across the server's label sets."""
+    """Sum `sonar:num_requests_running` across the server's label sets."""
     total = 0.0
     for family in text_string_to_metric_families(metrics_text):
         if family.name == "sonar:num_requests_running":
@@ -144,7 +144,7 @@ async def _wait_for_running_request(
 ) -> float:
     """Wait until the server reports a running request, returning the delay.
 
-    ``ShutdownState.inflight_requests`` is incremented before the HTTP call is
+    `ShutdownState.inflight_requests` is incremented before the HTTP call is
     awaited, so it only shows that a client coroutine started. Draining can
     only complete work the engine has already admitted, so synchronize on the
     server's own scheduler gauge instead.

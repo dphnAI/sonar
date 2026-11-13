@@ -68,6 +68,8 @@ def _mori_worker(pgi, sonar_config, cpu_group, m, n, k, scheme, graph):
         AiterFp8ChannelExperts,
         AiterMxfp4Experts,
         AiterUnquantizedExperts,
+        derive_aiter_quant_type,
+        mxfp4_w4a16_extra_kwargs,
         rocm_aiter_fused_experts,
     )
     from sonar.model_executor.layers.fused_moe.prepare_finalize.mori import (
@@ -144,7 +146,17 @@ def _mori_worker(pgi, sonar_config, cpu_group, m, n, k, scheme, graph):
         if mxfp4:
             # AITER's non-EP MXFP4 path quantizes the BF16 input the same way
             # as FP4 dispatch, so the BF16 tolerances below still apply.
-            return rocm_aiter_fused_experts(x, ref_w1, ref_w2, route_weights, ids, config, quant_config=ref_quant)
+            return rocm_aiter_fused_experts(
+                x,
+                ref_w1,
+                ref_w2,
+                route_weights,
+                ids,
+                config,
+                quant_config=ref_quant,
+                quant_type=derive_aiter_quant_type(ref_quant),
+                **mxfp4_w4a16_extra_kwargs(ref_quant, config),
+            )
         return torch_experts(
             x,
             w1,

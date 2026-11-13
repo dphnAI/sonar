@@ -187,9 +187,9 @@ def _assert_rows_bit_identical(small, large, msg):
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("seed", list(range(4)))
 def test_rms_norm_batch_invariant_nonresidual_kernel(hidden_size: int, dtype: torch.dtype, seed: int):
-    """C++ ``rms_norm`` (no residual) must be batch invariant across the block
-    threshold. Reached in compiled mode with ``ir_op_priority.rms_norm=["sonar_c"]``
-    (default priority is ``native``/inductor codegen when compiling).
+    """C++ `rms_norm` (no residual) must be batch invariant across the block
+    threshold. Reached in compiled mode with `ir_op_priority.rms_norm=["sonar_c"]`
+    (default priority is `native`/inductor codegen when compiling).
     """
     import sonar._custom_ops as ops
 
@@ -219,9 +219,9 @@ def test_rms_norm_batch_invariant_nonresidual_kernel(hidden_size: int, dtype: to
 @pytest.mark.parametrize("add_residual", [False, True])
 def test_rms_norm_static_fp8_quant_batch_invariant(hidden_size: int, dtype: torch.dtype, seed: int, add_residual: bool):
     """C++ static per-tensor fp8-quant RMSNorm must be batch invariant across
-    the block threshold. Covers ``rms_norm_static_fp8_quant`` and, with
-    ``add_residual``, ``fused_add_rms_norm_static_fp8_quant`` (the compiled fp8
-    path where ``RMSNormQuantFusionPass`` rewrites norm + quant into them).
+    the block threshold. Covers `rms_norm_static_fp8_quant` and, with
+    `add_residual`, `fused_add_rms_norm_static_fp8_quant` (the compiled fp8
+    path where `RMSNormQuantFusionPass` rewrites norm + quant into them).
     """
     device = torch.device(DEVICE_TYPE)
     torch.manual_seed(seed)
@@ -255,7 +255,7 @@ def test_rms_norm_static_fp8_quant_batch_invariant(hidden_size: int, dtype: torc
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("seed", list(range(4)))
 def test_rms_norm_per_block_quant_batch_invariant(hidden_size: int, dtype: torch.dtype, seed: int):
-    """C++ ``rms_norm_per_block_quant`` must be batch invariant across the
+    """C++ `rms_norm_per_block_quant` must be batch invariant across the
     block threshold (compiled fp8 block-quant path; block pinned to 512)."""
     import sonar._custom_ops as ops
 

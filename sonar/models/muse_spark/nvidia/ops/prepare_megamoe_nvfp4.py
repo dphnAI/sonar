@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Triton input staging for MuseSpark1x on the NVFP4 MegaMoE kernel.
+"""Triton input staging for Muse Spark on the NVFP4 MegaMoE kernel.
 
-MegaMoE reads linear scales, not ``scaled_fp4_quant``'s swizzled 128x4 layout.
+MegaMoE reads linear scales, not `scaled_fp4_quant`'s swizzled 128x4 layout.
 """
 
 import torch
@@ -134,16 +134,16 @@ def prepare_megamoe_nvfp4_inputs(
     topk_weights_out: torch.Tensor,
     is_padding: torch.Tensor | None = None,
 ) -> None:
-    """Stage ``hidden_states`` and routing into MegaMoE's symmetric buffer."""
+    """Stage `hidden_states` and routing into MegaMoE's symmetric buffer."""
     num_tokens, hidden_size = hidden_states.shape
     if num_tokens == 0:
         return
     if hidden_size % 64 != 0:
         raise ValueError(
-            f"MuseSpark1x NVFP4 MegaMoE staging requires hidden_size to be a multiple of 64, got {hidden_size}."
+            f"Muse Spark NVFP4 MegaMoE staging requires hidden_size to be a multiple of 64, got {hidden_size}."
         )
     if topk_weights.shape != topk_ids.shape:
-        raise ValueError("MuseSpark1x NVFP4 MegaMoE staging requires topk_weights and topk_ids to have the same shape.")
+        raise ValueError("Muse Spark NVFP4 MegaMoE staging requires topk_weights and topk_ids to have the same shape.")
 
     top_k = topk_ids.shape[1]
     num_elements = num_tokens * hidden_size

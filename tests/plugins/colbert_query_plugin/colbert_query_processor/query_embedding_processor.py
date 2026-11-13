@@ -95,7 +95,7 @@ class ColBERTQueryEmbeddingProcessor(IOProcessor[ColBERTEmbeddingCompletionReque
         tokenizer,
         content_ids: list[int],
     ) -> TokensPrompt:
-        """[CLS] [QueryMarker] <tokens> [SEP] [MASK]... up to QUERY_MAXLEN."""
+        """`[CLS] [QueryMarker] <tokens> [SEP] [MASK]...` up to `QUERY_MAXLEN`."""
         query_marker_id, _ = self._resolve_marker_ids(tokenizer)
         mask_token_id = tokenizer.mask_token_id
         if mask_token_id is None:
@@ -117,7 +117,7 @@ class ColBERTQueryEmbeddingProcessor(IOProcessor[ColBERTEmbeddingCompletionReque
         tokenizer,
         content_ids: list[int],
     ) -> TokensPrompt:
-        """[CLS] [DocumentMarker] <tokens> [SEP]."""
+        """`[CLS] [DocumentMarker] <tokens> [SEP]`."""
         _, document_marker_id = self._resolve_marker_ids(tokenizer)
 
         content_ids = content_ids[: self.max_model_len - 3]

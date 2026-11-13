@@ -78,7 +78,7 @@ def _load_logitsprocs_plugins() -> list[type[LogitsProcessor]]:
 
 
 def _load_logitsprocs_by_fqcns(
-    logits_processors: Sequence[str | type[LogitsProcessor]] | None,
+    logits_processors: Sequence[str | type] | None,
 ) -> list[type[LogitsProcessor]]:
     """Load logit processor types, identifying them by fully-qualified class
     names (FQCNs).
@@ -148,7 +148,7 @@ def _load_logitsprocs_by_fqcns(
 
 
 def _load_custom_logitsprocs(
-    logits_processors: Sequence[str | type[LogitsProcessor]] | None,
+    logits_processors: Sequence[str | type] | None,
 ) -> list[type[LogitsProcessor]]:
     """Load all custom logits processors.
 
@@ -179,7 +179,7 @@ def build_logitsprocs(
     device: torch.device,
     is_pin_memory: bool,
     is_pooling_model: bool,
-    custom_logitsprocs: Sequence[str | type[LogitsProcessor]] = (),
+    custom_logitsprocs: Sequence[str | type] = (),
 ) -> LogitsProcessors:
     if is_pooling_model:
         if custom_logitsprocs:
@@ -218,7 +218,7 @@ cached_load_custom_logitsprocs = lru_cache(_load_custom_logitsprocs)
 
 
 def validate_logits_processors_parameters(
-    logits_processors: Sequence[str | type[LogitsProcessor]] | None,
+    logits_processors: Sequence[str | type] | None,
     sampling_params: SamplingParams,
 ):
     logits_processors = tuple(logits_processors) if logits_processors is not None else None

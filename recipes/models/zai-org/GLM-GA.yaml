@@ -75,7 +75,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   uv pip install git+https://github.com/huggingface/transformers.git
   ```
 
@@ -85,7 +85,7 @@ guide: |
 
   ```bash
   export SONAR_VIDEO_LOADER_BACKEND=glm4_6v
-  sonar serve zai-org/GLM-GA \
+  sonar run zai-org/GLM-GA \
        --tool-call-parser glm45 \
        --reasoning-parser glm45 \
        --enable-auto-tool-choice \
@@ -151,7 +151,7 @@ guide: |
   ## Troubleshooting
 
   - **Long-context memory:** At 128K context, tune `--max-num-batched-tokens` and
-    `--gpu-memory-utilization` to prevent OOM.
+    `--max-num-seqs` to prevent OOM.
   - **Video loading errors:** Ensure OpenCV or PyAV is installed for video decoding.
 
   ## References

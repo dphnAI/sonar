@@ -15,7 +15,7 @@ from sonar.distributed.kv_transfer.kv_connector.v1.base import (
 from sonar.distributed.kv_transfer.kv_connector.v1.lmcache_connector import (
     LMCacheKVEvents,
 )
-from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.connector import (
     MooncakeStoreKVEvents,
 )
 from sonar.v1.outputs import KVConnectorOutput, ModelRunnerOutput

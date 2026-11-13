@@ -12,11 +12,12 @@ A check mark means that the platform class declares the method. NVIDIA CUDA acce
 | `awq` | SM 7.5 | ✓ | ✓ |
 | `auto_awq` | SM 7.5 | ✓ | ✓ |
 | `fp8` | SM 7.5 | ✓ | ✓ |
+| `w4afp8` | SM 7.5 | — | — |
 | `fbgemm_fp8` | SM 8.0 | ✓ | — |
-| `fp_quant` | SM 10.0 | — | — |
 | `modelopt` | SM 8.0 | ✓ | ✓ |
 | `modelopt_fp4` | SM 7.5 | ✓ | — |
 | `modelopt_mxfp8` | SM 8.0 | ✓ | — |
+| `modelopt_int8` | SM 7.5 | — | — |
 | `modelopt_mixed` | SM 7.5 | ✓ | — |
 | `auto_gptq` | SM 6.0 | ✓ | ✓ |
 | `gptq` | SM 6.0 | ✓ | ✓ |
@@ -44,6 +45,8 @@ A check mark means that the platform class declares the method. NVIDIA CUDA acce
 | `mxfp8` | SM 8.0 | ✓ | ✓ |
 | `mxfp6` | SM 11.0 | — | — |
 | `nf12` | SM 8.0 | — | — |
+| `lut_b_moe` | SM 7.5 | ✓ | — |
+| `mxfp4_hadamard32` | SM 7.5 | ✓ | — |
 
 ## Read the table
 

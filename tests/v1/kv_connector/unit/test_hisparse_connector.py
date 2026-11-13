@@ -168,7 +168,6 @@ def test_full_graph_step_prepares_host_mirror_outside_model():
     handle = HiSparseCacheHandle(runtime)
     handle.mirror_slot_mapping = torch.tensor([4, 5])
     worker = object.__new__(HiSparseConnectorWorker)
-    worker.cache_layer_names = ["layer"]
     worker.cache_handles = [handle]
     worker._group_leaders = (("layer", handle),)
     worker._per_layer_mirrored = set()
@@ -243,6 +242,11 @@ def test_draft_layer_rows_mirrored_after_drafter(monkeypatch, cg_mode):
     monkeypatch.setattr(torch, "Stream", lambda *args, **kwargs: MagicMock())
     compute_stream = MagicMock()
     monkeypatch.setattr(torch.accelerator, "current_stream", lambda: compute_stream)
+    backend = SimpleNamespace(
+        swap_blocks_batch=swap_blocks_batch,
+        is_current_stream_capturing=lambda: False,
+    )
+    monkeypatch.setattr(worker_module, "get_hisparse_backend", lambda: backend)
     monkeypatch.setattr(
         runtime_module,
         "get_forward_context",
@@ -256,6 +260,7 @@ def test_draft_layer_rows_mirrored_after_drafter(monkeypatch, cg_mode):
         runtime = SimpleNamespace(
             is_group_leader=True,
             eager_host_mirror=True,
+            max_swap_rows=block_size,
             resident_source_index=0,
             host_cache=torch.zeros(4 * block_size, width),
             request_state_indices=request_state_indices,
@@ -278,11 +283,9 @@ def test_draft_layer_rows_mirrored_after_drafter(monkeypatch, cg_mode):
         ),
         MagicMock(),
     )
-    monkeypatch.setattr(worker.backend, "swap_blocks_batch", swap_blocks_batch)
     worker.initialize(
         handles,
         ["target", "draft"],
-        MagicMock(),
         max_num_reqs=1,
         host_num_blocks=4,
         device=torch.device("cpu"),
@@ -299,7 +302,6 @@ def test_draft_layer_rows_mirrored_after_drafter(monkeypatch, cg_mode):
                         transfer_id=transfer_id,
                         host_block_id=host_block,
                         resident_block_ids=(resident_block,),
-                        after_forward=True,
                     )
                 ]
             ),

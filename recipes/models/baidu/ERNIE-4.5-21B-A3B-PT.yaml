@@ -44,8 +44,6 @@ variants:
     extra_args:
       - "--tensor-parallel-size"
       - "8"
-      - "--gpu-memory-utilization"
-      - "0.95"
       - "--quantization"
       - "fp8"
 
@@ -61,9 +59,6 @@ kv_offload_support:
 
 hardware_overrides:
   amd:
-    extra_args:
-      - "--gpu-memory-utilization"
-      - "0.9"
     extra_env:
       SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
@@ -91,7 +86,7 @@ guide: |
   ```bash
   uv venv --python 3.12 --seed
   source .venv/bin/activate
-  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ## Launch commands
@@ -99,28 +94,27 @@ guide: |
   21B on 1x80GB GPU:
 
   ```bash
-  sonar serve baidu/ERNIE-4.5-21B-A3B-PT
+  sonar run baidu/ERNIE-4.5-21B-A3B-PT
   ```
 
   300B on 8x80GB with Sonar FP8 online quantization:
 
   ```bash
-  sonar serve baidu/ERNIE-4.5-300B-A47B-PT \
+  sonar run baidu/ERNIE-4.5-300B-A47B-PT \
     --tensor-parallel-size 8 \
-    --gpu-memory-utilization 0.95 \
     --quantization fp8
   ```
 
   300B on 16x80GB native BF16 (multi-node via Ray):
 
   ```bash
-  sonar serve baidu/ERNIE-4.5-300B-A47B-PT --tensor-parallel-size 16
+  sonar run baidu/ERNIE-4.5-300B-A47B-PT --tensor-parallel-size 16
   ```
 
   ERNIE-MTP speculative decoding (21B example):
 
   ```bash
-  sonar serve baidu/ERNIE-4.5-21B-A3B-PT \
+  sonar run baidu/ERNIE-4.5-21B-A3B-PT \
     --speculative-config '{"method":"ernie_mtp","model":"baidu/ERNIE-4.5-21B-A3B-PT","num_speculative_tokens":1}'
   ```
 
@@ -131,7 +125,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model baidu/ERNIE-4.5-21B-A3B-PT \
     --dataset-name random \
     --random-input-len 8000 --random-output-len 1000 \

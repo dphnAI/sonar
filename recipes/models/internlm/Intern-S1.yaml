@@ -99,7 +99,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### Install Sonar (AMD ROCm)
@@ -113,7 +113,7 @@ guide: |
   BF16 on 8xH800:
 
   ```bash
-  sonar serve internlm/Intern-S1 \
+  sonar run internlm/Intern-S1 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --enable-auto-tool-choice \
@@ -124,7 +124,7 @@ guide: |
   FP8 on 4xH800:
 
   ```bash
-  sonar serve internlm/Intern-S1-FP8 \
+  sonar run internlm/Intern-S1-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 4 \
     --enable-auto-tool-choice \
@@ -137,7 +137,7 @@ guide: |
   ```bash
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_USE_AITER_MOE=0
-  sonar serve internlm/Intern-S1-FP8 \
+  sonar run internlm/Intern-S1-FP8 \
     --trust-remote-code --tensor-parallel-size 8 \
     --enable-auto-tool-choice --reasoning-parser deepseek_r1 --tool-call-parser internlm
   ```
@@ -162,7 +162,10 @@ guide: |
 
   ## Troubleshooting
 
-  - `ValueError: No available memory for the cache blocks.` — add `--gpu-memory-utilization 0.95`.
+  - `ValueError: No available memory for the cache blocks.` — lower `--max-model-len` or
+    `--max-num-seqs`, or use more GPUs. If you set `--gpu-memory-utilization`, raise it or leave it
+    unset (extensible KV caches use 1.0; other cache paths keep their platform default; see
+    [details](https://docs.vllm.ai/en/latest/configuration/optimization/#gpu-memory-utilization)).
 
   ## References
 

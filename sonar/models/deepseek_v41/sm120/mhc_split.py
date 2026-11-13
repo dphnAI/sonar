@@ -596,7 +596,7 @@ def lagged_post_pre(
     Inputs and outputs are contiguous: BF16 x/y[M,H], residual/residual_out
     [M,4,H] and weight[H]; FP32 prev_post/pre_mix/post/pre_out[M,4],
     prev_comb/comb[M,4,4], fn[24,4H], scale[3] and bias[24]. Callers must call
-    ``join_mhc_split`` before reading post, comb or pre_out, or reusing them.
+    `join_mhc_split` before reading post, comb or pre_out, or reusing them.
     """
     split = _SPLITS.get(residual.device.index)
     if split is None:

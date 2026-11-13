@@ -96,7 +96,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
   
   ### pip (Intel Xeon 6 CPUs)
@@ -118,7 +118,7 @@ guide: |
   export HF_TOKEN=<your HF token>
   export TP=1
   export MAX_MODEL_LEN=4096
-  sonar serve Qwen/Qwen3-4B \
+  sonar run Qwen/Qwen3-4B \
     --seed 42 \
     --gpu-memory-utilization 0.98 \
     --max-num-batched-tokens 1024 \
@@ -129,7 +129,7 @@ guide: |
 
   ### Single GPU (BF16)
   ```bash
-  sonar serve Qwen/Qwen3-4B \
+  sonar run Qwen/Qwen3-4B \
     --host 0.0.0.0 \
     --port 8000
   ```
@@ -152,7 +152,7 @@ guide: |
   ## Configuration Tips
 
   - `--max-model-len 4096` is the TPU-recipe default; native context is 40K — raise it if you have headroom.
-  - Sonar uses 90% of device memory by default; the TPU recipe pushes `--gpu-memory-utilization 0.98` to maximize KV cache.
+  - On TPU, the recipe raises `--gpu-memory-utilization` to 0.98 to maximize KV cache.
   - For thinking mode Qwen recommends `temperature=0.6, top_p=0.95, top_k=20`; for non-thinking, `temperature=0.7, top_p=0.8`.
 
   ## Benchmarking
@@ -160,7 +160,7 @@ guide: |
   Launch the server with `--no-enable-prefix-caching` for consistent measurements.
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --host 0.0.0.0 \
     --port 8000 \
     --model Qwen/Qwen3-4B \

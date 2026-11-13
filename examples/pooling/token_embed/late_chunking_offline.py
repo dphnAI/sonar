@@ -36,9 +36,11 @@ def main(args: Namespace):
 
     # E5 document inputs use the "passage: " prefix; it also counts toward chunks.
     documents = [
-        "passage: Berlin is the capital of Germany. The city has many museums. "
-        "They display art and historical collections from around the world.",
-        "passage: Kyoto is a city in Japan. Its historic temples attract visitors throughout the year.",
+        (
+            "passage: Berlin is the capital of Germany. The city has many museums. "
+            "They display art and historical collections from around the world."
+        ),
+        ("passage: Kyoto is a city in Japan. Its historic temples attract visitors throughout the year."),
     ]
     outputs = llm.embed(
         documents,

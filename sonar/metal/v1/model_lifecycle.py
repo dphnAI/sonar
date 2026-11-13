@@ -45,7 +45,7 @@ def reset_model_cache() -> None:
 
     Intended for tests that load multiple large models in sequence and
     need a deterministic start between variants.  Uses the same lock
-    that protects every other ``_MODEL_CACHE`` access.
+    that protects every other `_MODEL_CACHE` access.
 
     This is a narrow, test-oriented API so callers do not need to reach
     into the private module global directly.
@@ -65,17 +65,17 @@ def _stt_cache_key(model_name: str) -> tuple[str, str]:
 
 @contextmanager
 def _mlx_lm_compatible_model_path(model_name: str):
-    """Yield a model path compatible with ``mlx_lm.load`` shard discovery.
+    """Yield a model path compatible with `mlx_lm.load` shard discovery.
 
-    Some local checkpoints ship valid ``.safetensors`` shards and a
-    ``model.safetensors.index.json`` file, but use custom shard names such as
-    ``layers-*.safetensors`` or ``outside.safetensors``. ``mlx_lm.load`` only
-    discovers shards whose basename matches ``model*.safetensors``.
+    Some local checkpoints ship valid `.safetensors` shards and a
+    `model.safetensors.index.json` file, but use custom shard names such as
+    `layers-*.safetensors` or `outside.safetensors`. `mlx_lm.load` only
+    discovers shards whose basename matches `model*.safetensors`.
 
     For those checkpoints, create a temporary directory that mirrors the
     original config/tokenizer files and exposes the indexed shard files via
-    ``model-xxxxx-of-yyyyy.safetensors`` symlinks. The actual weight bytes stay
-    in place; only the filenames are adapted for ``mlx_lm``.
+    `model-xxxxx-of-yyyyy.safetensors` symlinks. The actual weight bytes stay
+    in place; only the filenames are adapted for `mlx_lm`.
     """
     model_path = Path(model_name)
     if not model_path.is_dir():

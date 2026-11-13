@@ -8,6 +8,7 @@ import types
 import pytest
 import torch
 
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
 from sonar.config import SonarConfig
 from sonar.model_executor.kernels.linear.scaled_mm.b12x import (
     B12xFp8BlockScaledMMKernel,
@@ -31,6 +32,7 @@ from sonar.utils.flashinfer import (
     has_flashinfer_fp8_blockscale_gemm,
 )
 from sonar.utils.import_utils import has_deep_gemm
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.quant_utils import (
     native_per_token_group_quant_fp8,
     native_w8a8_block_matmul,
@@ -70,10 +72,6 @@ def setup_cuda():
     torch.set_default_device("cuda")
 
 
-@pytest.mark.skipif(
-    current_platform.is_fp8_fnuz(),
-    reason="This platform supports e4m3fnuz, not e4m3fn.",
-)
 @pytest.mark.parametrize(
     "num_tokens,d,dtype,group_size,column_major_scales,tma_aligned_scales,seed",
     itertools.product(
@@ -342,6 +340,51 @@ def test_w8a8_block_fp8_flashinfer_matmul(M, N, K, block_size, out_dtype, seed):
         torch.abs(ref_out.to(torch.bfloat16))
     )
     assert rel_diff < 0.001
+
+
+@pytest.mark.skipif(
+    not is_aiter_found_and_supported() or current_platform.is_fp8_fnuz(),
+    reason="AITER block-scaled FP8 GEMM requires ROCm with aiter and e4m3fn.",
+)
+@pytest.mark.parametrize(
+    "M,N,K,block_size,out_dtype,seed",
+    itertools.product(M, N, [k for k in K if k % 128 == 0], BLOCK_SIZE, OUT_DTYPES, SEEDS),
+)
+@pytest.mark.parametrize(
+    "gemm,max_rel_diff",
+    # CK split-K configs reduce partial sums into the bf16 output with atomics.
+    [("ck", 0.005), ("ck_bpreshuffle", 0.005), ("triton", 0.001)],
+)
+@torch.inference_mode()
+def test_w8a8_block_fp8_aiter_matmul(M, N, K, block_size, out_dtype, seed, gemm, max_rel_diff):
+    set_random_seed(seed)
+    fp8_max = torch.finfo(torch.float8_e4m3fn).max
+
+    A_bf16 = (torch.rand(M, K, dtype=torch.bfloat16) - 0.5) * 2 * fp8_max
+    B_bf16 = (torch.rand(N, K, dtype=torch.bfloat16) - 0.5) * 2 * fp8_max
+
+    A_fp8, As = per_token_group_quant_fp8(A_bf16, block_size[1], use_ue8m0=False)
+    B_fp8, Bs = per_block_cast_to_fp8(B_bf16, block_size, use_ue8m0=False)
+
+    ref_out = native_w8a8_block_matmul(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
+
+    if gemm == "ck":
+        out = rocm_aiter_ops.gemm_a8w8_blockscale(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
+    elif gemm == "triton":
+        out = rocm_aiter_ops.triton_gemm_a8w8_blockscale(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
+    else:
+        out = rocm_aiter_ops.gemm_a8w8_blockscale_bpreshuffle(
+            A_fp8,
+            rocm_aiter_ops.shuffle_weight(B_fp8, layout=(16, 16)),
+            As.t().contiguous().t(),
+            Bs,
+            out_dtype,
+        )
+
+    rel_diff = torch.mean(torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))) / torch.mean(
+        torch.abs(ref_out.to(torch.float32))
+    )
+    assert rel_diff < max_rel_diff
 
 
 @pytest.mark.parametrize(

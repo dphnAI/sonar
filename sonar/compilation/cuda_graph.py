@@ -14,7 +14,6 @@ import torch
 
 from sonar.compilation.counter import compilation_counter
 from sonar.compilation.cudagraph_pool import capture_pool
-from sonar.compilation.monitor import validate_cudagraph_capturing_enabled
 from sonar.config import CUDAGraphMode, SonarConfig
 from sonar.forward_context import (
     BatchDescriptor,
@@ -255,9 +254,6 @@ class CUDAGraphWrapper:
                     self.runtime_mode.name,
                     entry.batch_descriptor,
                 )
-            # validate that cudagraph capturing is legal at this point.
-            validate_cudagraph_capturing_enabled()
-
             input_addresses = [x.data_ptr() for x in args if isinstance(x, torch.Tensor)]
             entry.input_addresses = input_addresses
             cudagraph = torch.cuda.CUDAGraph()

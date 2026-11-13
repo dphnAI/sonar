@@ -8,9 +8,9 @@ import pytest
 import pytest_asyncio
 import regex as re
 from openai import BadRequestError
-from pydantic import ValidationError
 
 from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.exceptions import SonarValidationError
 from sonar.sampling_params import SamplingParams
 from sonar.tokenizers import get_tokenizer
 from tests.utils import RemoteOpenAIServer
@@ -258,7 +258,7 @@ async def test_too_many_completion_logprobs(client: openai.AsyncOpenAI, model_na
             logprobs=30,
             stream=True,
         )
-        async for chunk in stream:
+        async for _ in stream:
             ...
 
     # the server should still work afterwards
@@ -402,7 +402,9 @@ async def test_parallel_streaming(client: openai.AsyncOpenAI, model_name: str):
     async for chunk in stream:
         index = chunk.choices[0].index
         text = chunk.choices[0].text
-        chunks[index].append(text)
+        # The last chunk of a sample may carry only the finish_reason (Rust).
+        if text or chunk.choices[0].finish_reason is None:
+            chunks[index].append(text)
         if chunk.choices[0].finish_reason is not None:
             finish_reason_count += 1
     # Assert `n` completions with correct finish reasons
@@ -784,7 +786,7 @@ def test_completion_request_logprob_token_ids_to_sampling_params():
 
 
 def test_completion_request_rejects_logprob_token_ids_without_logprobs():
-    with pytest.raises(ValidationError, match="logprobs"):
+    with pytest.raises(SonarValidationError, match="logprobs"):
         CompletionRequest(
             model="test-model",
             prompt="Hello",
@@ -793,7 +795,7 @@ def test_completion_request_rejects_logprob_token_ids_without_logprobs():
 
 
 def test_completion_request_rejects_logprob_token_ids_without_generated_tokens():
-    with pytest.raises(ValidationError, match="no output tokens are generated"):
+    with pytest.raises(SonarValidationError, match="no output tokens are generated"):
         CompletionRequest(
             model="test-model",
             prompt="Hello",
@@ -805,7 +807,7 @@ def test_completion_request_rejects_logprob_token_ids_without_generated_tokens()
 
 
 def test_completion_request_rejects_logprob_token_ids_with_beam_search():
-    with pytest.raises(ValidationError, match="beam search"):
+    with pytest.raises(SonarValidationError, match="beam search"):
         CompletionRequest(
             model="test-model",
             prompt="Hello",

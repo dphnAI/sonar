@@ -61,13 +61,17 @@ pub struct ModelFileSources {
     /// Source of `config.json` and `generation_config.json`, or `None` for
     /// `model`. When set, it must provide `config.json`.
     pub hf_config: Option<ModelSource>,
+    /// Resolve no tokenizer-side files (tokenizer, tokenizer config, chat
+    /// template), like Python's `skip_tokenizer_init`. `tokenizer` is ignored.
+    pub skip_tokenizer_init: bool,
 }
 
 /// Concrete tokenizer/config file locations resolved for one HF model id.
 #[derive(Debug, Clone)]
 pub struct ResolvedModelFiles {
-    /// The selected tokenizer source for this model.
-    pub tokenizer: TokenizerSource,
+    /// The selected tokenizer source for this model, or `None` with
+    /// [`ModelFileSources::skip_tokenizer_init`].
+    pub tokenizer: Option<TokenizerSource>,
     pub tokenizer_config_path: Option<PathBuf>,
     pub generation_config_path: Option<PathBuf>,
     pub preprocessor_config_path: Option<PathBuf>,
@@ -109,6 +113,7 @@ impl ResolvedModelFiles {
             },
             tokenizer: None,
             hf_config: None,
+            skip_tokenizer_init: false,
         })
         .await
     }
@@ -119,27 +124,39 @@ impl ResolvedModelFiles {
             model,
             tokenizer,
             hf_config,
+            skip_tokenizer_init,
         } = sources;
         // A cached model snapshot must contain the files that only the model provides.
         let model_required = match (tokenizer, hf_config) {
-            (None, _) => RequiredFile::Tokenizer,
-            (Some(_), None) => RequiredFile::Config,
-            (Some(_), Some(_)) => RequiredFile::Nothing,
+            (None, _) if !*skip_tokenizer_init => RequiredFile::Tokenizer,
+            (_, None) => RequiredFile::Config,
+            (_, Some(_)) => RequiredFile::Nothing,
         };
         let model_files = SourceFiles::open(model, model_required).await?;
-        let tokenizer_files = match tokenizer {
-            Some(source) => Some(SourceFiles::open(source, RequiredFile::Tokenizer).await?),
-            None => None,
+        // Under `skip_tokenizer_init` no tokenizer-side file is read: not the
+        // tokenizer, its config, or the chat template.
+        let (tokenizer, tokenizer_config_path, chat_template_path) = if *skip_tokenizer_init {
+            (None, None, None)
+        } else {
+            let tokenizer_files = match tokenizer {
+                Some(source) => Some(SourceFiles::open(source, RequiredFile::Tokenizer).await?),
+                None => None,
+            };
+            let tokenizer_files = tokenizer_files.as_ref().unwrap_or(&model_files);
+            let tokenizer_config_path = tokenizer_files.get("tokenizer_config.json").await?;
+            let tokenizer_config = load_tokenizer_config(tokenizer_config_path.as_deref())?;
+            (
+                Some(tokenizer_files.tokenizer(&tokenizer_config).await?),
+                tokenizer_config_path,
+                tokenizer_files.chat_template().await?,
+            )
         };
-        let tokenizer_files = tokenizer_files.as_ref().unwrap_or(&model_files);
         let config_files = match hf_config {
             Some(source) => Some(SourceFiles::open(source, RequiredFile::Config).await?),
             None => None,
         };
         let config_files = config_files.as_ref().unwrap_or(&model_files);
 
-        let tokenizer_config_path = tokenizer_files.get("tokenizer_config.json").await?;
-        let tokenizer_config = load_tokenizer_config(tokenizer_config_path.as_deref())?;
         let config_path = config_files.get("config.json").await?;
         if config_path.is_none()
             && let Some(source) = hf_config
@@ -152,7 +169,7 @@ impl ResolvedModelFiles {
         }
 
         Ok(Self {
-            tokenizer: tokenizer_files.tokenizer(&tokenizer_config).await?,
+            tokenizer,
             tokenizer_config_path,
             generation_config_path: config_files.get("generation_config.json").await?,
             preprocessor_config_path: model_files.get("preprocessor_config.json").await?,
@@ -160,7 +177,7 @@ impl ResolvedModelFiles {
                 .get("video_preprocessor_config.json")
                 .await?,
             processor_config_path: model_files.get("processor_config.json").await?,
-            chat_template_path: tokenizer_files.chat_template().await?,
+            chat_template_path,
             config_path,
             config_temp_path: None,
         })
@@ -212,12 +229,14 @@ enum SourceFiles {
         model_id: String,
         repo: ApiRepo,
         siblings: BTreeSet<String>,
+        /// Files already cached at this repo's immutable revision.
+        snapshot: Option<PathBuf>,
     },
 }
 
 impl SourceFiles {
-    /// Open a local model directory when `source` points to one, otherwise a
-    /// cached snapshot that contains `required`, and finally the Hub.
+    /// Open a local directory or resolve Hub metadata at the cached revision.
+    /// Online lookups fill partial caches when the Hub is reachable.
     async fn open(source: &ModelSource, required: RequiredFile) -> Result<Self> {
         let model_id = source.id.as_str();
         if Path::new(model_id).is_dir() {
@@ -232,12 +251,13 @@ impl SourceFiles {
         let cache = std::env::var_os("HF_HUB_CACHE")
             .map(|path| Cache::new(path.into()))
             .unwrap_or_else(Cache::from_env);
-        if let Some(snapshot) = cached_snapshot_dir(&cache, &repo).map(Self::Dir)
-            && snapshot.contains(required).await?
-        {
-            return Ok(snapshot);
-        }
+        let snapshot = cached_snapshot_dir(&cache, &repo);
         if is_hf_hub_offline() {
+            if let Some(snapshot) = snapshot.map(Self::Dir)
+                && snapshot.contains(required).await?
+            {
+                return Ok(snapshot);
+            }
             return Err(Error::Tokenizer(format!(
                 "model '{model_id}' at revision '{}' has no {required} in cache '{}' \
                  and HF_HUB_OFFLINE is enabled",
@@ -246,19 +266,44 @@ impl SourceFiles {
             )));
         }
 
+        // Fill gaps in a partial cache from the same commit, not the current
+        // branch head: mixing tokenizer and config revisions changes behavior.
+        let repo = match snapshot.as_deref().and_then(Path::file_name) {
+            Some(commit) => Repo::with_revision(
+                model_id.to_string(),
+                RepoType::Model,
+                commit.to_string_lossy().into_owned(),
+            ),
+            None => repo,
+        };
+
         let api = build_api(&cache).map_err(|error| Error::Tokenizer(error.to_report_string()))?;
         let repo = api.repo(repo);
-        let info = repo.info().await.map_err(|error| {
-            Error::Tokenizer(format!(
-                "failed to fetch model '{model_id}': {}",
-                error.as_report()
-            ))
-        })?;
+        let info = match repo.info().await {
+            Ok(info) => info,
+            Err(error) => {
+                if let Some(snapshot) = snapshot.map(Self::Dir)
+                    && snapshot.contains(required).await?
+                {
+                    tracing::warn!(
+                        model_id,
+                        error = %error.as_report(),
+                        "Cannot check the Hub for missing files, using cached snapshot"
+                    );
+                    return Ok(snapshot);
+                }
+                return Err(Error::Tokenizer(format!(
+                    "failed to fetch model '{model_id}': {}",
+                    error.as_report()
+                )));
+            }
+        };
         let siblings = info.siblings.into_iter().map(|sibling| sibling.rfilename).collect();
         Ok(Self::Remote {
             model_id: model_id.to_string(),
             repo,
             siblings,
+            snapshot,
         })
     }
 
@@ -270,10 +315,18 @@ impl SourceFiles {
                 model_id,
                 repo,
                 siblings,
-            } => match siblings.contains(filename) {
-                true => download_known_file(repo, model_id, filename).await.map(Some),
-                false => Ok(None),
-            },
+                snapshot,
+            } => {
+                if let Some(path) =
+                    snapshot.as_deref().and_then(|dir| local_file_if_exists(dir, filename))
+                {
+                    return Ok(Some(path));
+                }
+                match siblings.contains(filename) {
+                    true => download_known_file(repo, model_id, filename).await.map(Some),
+                    false => Ok(None),
+                }
+            }
         }
     }
 
@@ -295,12 +348,8 @@ impl SourceFiles {
         }
         match self {
             Self::Dir(dir) => Ok(discover_tiktoken_in_dir(dir)),
-            Self::Remote {
-                model_id,
-                repo,
-                siblings,
-            } => match find_tiktoken_sibling(siblings) {
-                Some(filename) => download_known_file(repo, model_id, filename).await.map(Some),
+            Self::Remote { siblings, .. } => match find_tiktoken_sibling(siblings) {
+                Some(filename) => self.get(filename).await,
                 None => Ok(None),
             },
         }
@@ -336,12 +385,8 @@ impl SourceFiles {
     async fn chat_template(&self) -> Result<Option<PathBuf>> {
         match self {
             Self::Dir(dir) => Ok(discover_chat_template_in_dir(dir)),
-            Self::Remote {
-                model_id,
-                repo,
-                siblings,
-            } => match remote_chat_template_name(siblings) {
-                Some(filename) => download_known_file(repo, model_id, filename).await.map(Some),
+            Self::Remote { siblings, .. } => match remote_chat_template_name(siblings) {
+                Some(filename) => self.get(filename).await,
                 None => Ok(None),
             },
         }
@@ -581,7 +626,7 @@ mod tests {
             .await
             .expect("resolve local model files");
 
-        match files.tokenizer {
+        match files.tokenizer.expect("tokenizer resolved") {
             TokenizerSource::HuggingFace(path) => {
                 assert_eq!(path, dir.path().join("tokenizer.json"));
             }
@@ -617,6 +662,7 @@ mod tests {
             model: source(model.path(), None),
             tokenizer: Some(source(tokenizer.path(), None)),
             hf_config: Some(source(config.path(), None)),
+            skip_tokenizer_init: false,
         })
         .await
         .unwrap();
@@ -626,7 +672,10 @@ mod tests {
             ["model", "tokenizer", "config"][dirs.iter().position(|d| d.path() == dir).unwrap()]
         };
         let origins = [
-            ("tokenizer", Some(files.tokenizer.path())),
+            (
+                "tokenizer",
+                files.tokenizer.as_ref().map(TokenizerSource::path),
+            ),
             ("tokenizer_config", files.tokenizer_config_path.as_deref()),
             ("chat_template", files.chat_template_path.as_deref()),
             ("config", files.config_path.as_deref()),
@@ -676,11 +725,12 @@ mod tests {
             model: source(model.path(), None),
             tokenizer: Some(source(tokenizer.path(), None)),
             hf_config: Some(source(tokenizer.path(), None)),
+            skip_tokenizer_init: false,
         })
         .await
         .unwrap();
         assert_eq!(
-            files.tokenizer.path(),
+            files.tokenizer.unwrap().path(),
             tokenizer.path().join("tokenizer.json")
         );
         assert_eq!(
@@ -700,6 +750,7 @@ mod tests {
             model: source(model.path(), None),
             tokenizer: None,
             hf_config: Some(source(model.path(), Some("release"))),
+            skip_tokenizer_init: false,
         })
         .await
         .unwrap_err();
@@ -739,13 +790,225 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn online_resolution_completes_partial_cache_at_cached_revision() {
+        use std::io::{BufRead as _, Write as _};
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        const CHILD: &str = "SONAR_TEST_HF_PARTIAL_CACHE_CHILD";
+        const COMMIT: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        if std::env::var_os(CHILD).is_some() {
+            let files = ResolvedModelFiles::new("test/model", None).await.unwrap();
+            let cache = PathBuf::from(std::env::var_os("HF_HUB_CACHE").unwrap());
+            let snapshot = cache.join("models--test--model/snapshots").join(COMMIT);
+            assert_eq!(
+                files.tokenizer.as_ref().unwrap().path(),
+                snapshot.join("tokenizer.json")
+            );
+            assert_eq!(files.config_path, Some(snapshot.join("config.json")));
+            assert_eq!(
+                files.generation_config_path,
+                Some(snapshot.join("generation_config.json"))
+            );
+            let config =
+                super::super::config::load_model_config(files.config_path.as_deref()).unwrap();
+            assert_eq!(config.vocab_size().unwrap(), 128896);
+            let generation = super::super::config::load_generation_config(
+                files.generation_config_path.as_deref(),
+            )
+            .unwrap();
+            assert_eq!(
+                generation.eos_token_id.unwrap().as_slice(),
+                &[151643, 151645, 151672]
+            );
+            assert!(files.preprocessor_config_path.is_none());
+            assert!(!snapshot.join("model.safetensors").exists());
+            return;
+        }
+
+        // A Python tokenizer-only download is not a complete model snapshot.
+        // Serve the missing small configs, never weights or the cached tokenizer.
+        let dir = tempdir().unwrap();
+        let cache = dir.path().join("hub-cache");
+        let repo = cache.join("models--test--model");
+        let snapshot = repo.join("snapshots").join(COMMIT);
+        fs::create_dir_all(&snapshot).unwrap();
+        fs::create_dir_all(repo.join("refs")).unwrap();
+        fs::write(repo.join("refs/main"), COMMIT).unwrap();
+        fs::write(snapshot.join("tokenizer.json"), "{}").unwrap();
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        listener.set_nonblocking(true).unwrap();
+        let done = Arc::new(AtomicBool::new(false));
+        let server_done = done.clone();
+        let server = std::thread::spawn(move || {
+            let mut requests = Vec::new();
+            while !server_done.load(Ordering::Relaxed) {
+                let (mut stream, _) = match listener.accept() {
+                    Ok(connection) => connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                    Err(error) => panic!("accept: {error}"),
+                };
+                stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+                let mut reader = std::io::BufReader::new(&stream);
+                let mut request = String::new();
+                reader.read_line(&mut request).unwrap();
+                let path = request.split_whitespace().nth(1).unwrap().to_string();
+                loop {
+                    let mut header = String::new();
+                    reader.read_line(&mut header).unwrap();
+                    if header == "\r\n" || header.is_empty() {
+                        break;
+                    }
+                }
+                requests.push(path.clone());
+                let (status, body, headers) = if path
+                    == format!("/api/models/test/model/revision/{COMMIT}")
+                {
+                    (
+                        "200 OK",
+                        serde_json::json!({
+                            "sha": COMMIT,
+                            "siblings": [
+                                {"rfilename": "tokenizer.json"},
+                                {"rfilename": "config.json"},
+                                {"rfilename": "generation_config.json"},
+                                {"rfilename": "model.safetensors"}
+                            ]
+                        })
+                        .to_string(),
+                        String::new(),
+                    )
+                } else {
+                    let prefix = format!("/test/model/resolve/{COMMIT}/");
+                    let file = path.strip_prefix(&prefix).unwrap_or_default();
+                    let body = match file {
+                        "config.json" => Some(r#"{"text_config":{"vocab_size":128896}}"#),
+                        "generation_config.json" => {
+                            Some(r#"{"eos_token_id":[151643,151645,151672]}"#)
+                        }
+                        _ => None,
+                    };
+                    match body {
+                        Some(body) => (
+                            "200 OK",
+                            body.to_string(),
+                            format!(
+                                "x-repo-commit: {COMMIT}\r\netag: {file}\r\ncontent-range: bytes 0-{}/{}\r\n",
+                                body.len() - 1,
+                                body.len(),
+                            ),
+                        ),
+                        None => ("404 Not Found", String::new(), String::new()),
+                    }
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\ncontent-length: {}\r\nconnection: close\r\n{headers}\r\n{body}",
+                    body.len(),
+                )
+                .unwrap();
+            }
+            requests
+        });
+        // Isolate HF environment changes, as in the offline cache regression.
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "backend::hf::model_files::tests::online_resolution_completes_partial_cache_at_cached_revision", "--nocapture"])
+            .env(CHILD, "1")
+            .env("HF_HOME", dir.path().join("hf-home"))
+            .env("HF_HUB_CACHE", &cache)
+            .env("HF_HUB_OFFLINE", "0")
+            .env("HF_ENDPOINT", endpoint)
+            .env("NO_PROXY", "127.0.0.1")
+            .output();
+        done.store(true, Ordering::Relaxed);
+        let requests = server.join().unwrap();
+        let output = output.unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(requests.len(), 5, "{requests:?}");
+        assert!(
+            requests.iter().all(|path| path.contains(COMMIT)),
+            "{requests:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn unavailable_hub_uses_cached_tokenizer_and_configs() {
+        const CHILD: &str = "SONAR_TEST_HF_UNAVAILABLE_CHILD";
+        const COMMIT: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        if std::env::var_os(CHILD).is_some() {
+            let files = ResolvedModelFiles::new("test/model", None).await.unwrap();
+            assert!(files.tokenizer.is_some());
+            let config =
+                super::super::config::load_model_config(files.config_path.as_deref()).unwrap();
+            assert_eq!(config.vocab_size().unwrap(), 128896);
+            let generation = super::super::config::load_generation_config(
+                files.generation_config_path.as_deref(),
+            )
+            .unwrap();
+            assert_eq!(
+                generation.eos_token_id.unwrap().as_slice(),
+                &[151643, 151645]
+            );
+            let error = ResolvedModelFiles::new("test/missing", None).await.unwrap_err();
+            let message = thiserror_ext::AsReport::to_report_string(&error);
+            assert!(
+                message.contains("failed to fetch model 'test/missing'"),
+                "{message}"
+            );
+            return;
+        }
+
+        let dir = tempdir().unwrap();
+        let cache = dir.path().join("hub-cache");
+        let repo = cache.join("models--test--model");
+        let snapshot = repo.join("snapshots").join(COMMIT);
+        fs::create_dir_all(&snapshot).unwrap();
+        fs::create_dir_all(repo.join("refs")).unwrap();
+        fs::write(repo.join("refs/main"), COMMIT).unwrap();
+        fs::write(snapshot.join("tokenizer.json"), "{}").unwrap();
+        fs::write(snapshot.join("config.json"), r#"{"vocab_size":128896}"#).unwrap();
+        fs::write(
+            snapshot.join("generation_config.json"),
+            r#"{"eos_token_id":[151643,151645]}"#,
+        )
+        .unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "backend::hf::model_files::tests::unavailable_hub_uses_cached_tokenizer_and_configs", "--nocapture"])
+            .env(CHILD, "1")
+            .env("HF_HOME", dir.path().join("hf-home"))
+            .env("HF_HUB_CACHE", &cache)
+            .env("HF_HUB_OFFLINE", "0")
+            .env("HF_ENDPOINT", "http://127.0.0.1:1")
+            .env("NO_PROXY", "127.0.0.1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[tokio::test]
     async fn offline_resolution_uses_hub_cache_and_reports_cache_misses() {
         const CHILD: &str = "SONAR_TEST_HF_OFFLINE_CHILD";
         if std::env::var_os(CHILD).is_some() {
             let files = ResolvedModelFiles::new("test/model", Some("release")).await.unwrap();
             let cache = PathBuf::from(std::env::var_os("HF_HUB_CACHE").unwrap());
             assert_eq!(
-                files.tokenizer.path(),
+                files.tokenizer.as_ref().unwrap().path(),
                 cache.join("models--test--model/snapshots/commit/tokenizer.json")
             );
             let error = ResolvedModelFiles::new("test/model", Some("missing")).await.unwrap_err();
@@ -758,10 +1021,11 @@ mod tests {
                 model: source("test/weights", Some("release")),
                 tokenizer: Some(source("test/model", Some("release"))),
                 hf_config: Some(source("test/config", Some("release"))),
+                skip_tokenizer_init: false,
             };
             let files = ResolvedModelFiles::from_sources(&sources).await.unwrap();
             assert_eq!(
-                files.tokenizer.path(),
+                files.tokenizer.as_ref().unwrap().path(),
                 cache.join("models--test--model/snapshots/commit/tokenizer.json")
             );
             assert_eq!(
@@ -819,7 +1083,7 @@ mod tests {
             .expect("resolve real Kimi K2.5 model files");
 
         let tokenizer_path = match &files.tokenizer {
-            TokenizerSource::Tiktoken(path) => path.clone(),
+            Some(TokenizerSource::Tiktoken(path)) => path.clone(),
             other => panic!("expected tiktoken tokenizer source, got {other:?}"),
         };
 

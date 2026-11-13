@@ -2,14 +2,14 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Paged attention shared utilities — context, prepare functions, and helpers.
 
-Provides the thread-local ``PagedAttentionContext`` and ``OffsetCache`` used by
+Provides the thread-local `PagedAttentionContext` and `OffsetCache` used by
 both the Metal kernel paged attention backend and the model runner.
 
 Usage:
-    1. Before each forward pass call ``prepare_unified()``
-    2. Run ``model(input_ids, cache=offset_caches)`` as normal
-    3. The attention wrapper reads ``get_context()`` for paged metadata
-    4. Call ``clear_context()`` after the forward pass
+    1. Before each forward pass call `prepare_unified()`
+    2. Run `model(input_ids, cache=offset_caches)` as normal
+    3. The attention wrapper reads `get_context()` for paged metadata
+    4. Call `clear_context()` after the forward pass
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ _thread_local = threading.local()
 class PagedAttentionContext:
     """Context set before each forward pass, read by patched attention.
 
-    All forward passes use the varlen kernel with ``cu_seqlens`` to handle
+    All forward passes use the varlen kernel with `cu_seqlens` to handle
     variable-length subsequences (both prefill and decode tokens packed
     into a single flat sequence).
     """
@@ -83,19 +83,19 @@ def clear_context() -> None:
 class OffsetCache:
     """Fake KV cache that stores no data — only satisfies mlx_lm's protocol.
 
-    The mlx_lm model expects ``cache=`` to be a list of cache objects (one
+    The mlx_lm model expects `cache=` to be a list of cache objects (one
     per layer) and reads two things from each:
-    - ``cache.offset``: RoPE position index for the current token(s).
-    - ``cache.make_mask(N)``: attention mask (``"causal"`` for multi-token
-      prefill, ``None`` for single-token decode where no mask is needed).
+    - `cache.offset`: RoPE position index for the current token(s).
+    - `cache.make_mask(N)`: attention mask (`"causal"` for multi-token
+      prefill, `None` for single-token decode where no mask is needed).
 
     With paged attention, real K/V lives in the MPS paged cache (managed by
     the attention wrapper), NOT in these objects.  OffsetCache is a shim so
     that mlx_lm's RoPE and masking logic work without changes.
 
     Note: during batched decode the model runner passes a single shared
-    ``OffsetCache(max_offset)`` per layer.  The actual per-request RoPE
-    offsets come from ``ctx.offsets`` inside the attention wrapper, not
+    `OffsetCache(max_offset)` per layer.  The actual per-request RoPE
+    offsets come from `ctx.offsets` inside the attention wrapper, not
     from this object.
     """
 
@@ -167,15 +167,15 @@ def prepare_unified(
     """Compute metadata for a unified prefill + decode forward pass.
 
     Packs decode tokens (1 per request) followed by prefill tokens into a
-    single flattened sequence.  ``cu_seqlens`` marks request boundaries so
+    single flattened sequence.  `cu_seqlens` marks request boundaries so
     the varlen kernel handles both decode (length-1) and prefill (length-N)
     subsequences in one dispatch.
 
     Args:
-        decode_requests: list of ``(block_ids, seq_len)`` for decode requests.
-            ``seq_len`` = tokens already cached before this step.
-        prefill_requests: list of ``(block_ids, num_tokens, start_pos)`` for
-            prefill.  ``start_pos`` is the position of the first token in this
+        decode_requests: list of `(block_ids, seq_len)` for decode requests.
+            `seq_len` = tokens already cached before this step.
+        prefill_requests: list of `(block_ids, num_tokens, start_pos)` for
+            prefill.  `start_pos` is the position of the first token in this
             chunk (0 for a fresh prefill, >0 for continuation chunks).
         block_size: tokens per KV cache block.
     """

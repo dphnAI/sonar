@@ -24,7 +24,10 @@ DTYPES = [torch.float32, torch.float16]
 @pytest.mark.parametrize("repetition_penalty", REPETITION_PENALTY_VALUES)
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("seed", SEEDS)
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test for checking CUDA kernel")
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(),
+    reason="This test for checking CUDA/ROCm kernel",
+)
 @torch.inference_mode()
 def test_apply_repetition_penalties(
     num_seqs: int,
@@ -74,7 +77,10 @@ def test_apply_repetition_penalties(
     )
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test for checking CUDA kernel")
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(),
+    reason="This test for checking CUDA/ROCm kernel",
+)
 @torch.inference_mode()
 def test_apply_repetition_penalties_zero_seqs() -> None:
     """Test the apply_repetition_penalties custom op with num_seqs=0

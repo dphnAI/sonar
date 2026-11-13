@@ -17,6 +17,7 @@ import sonar.envs as envs
 from sonar.logger import init_logger
 from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
+from . import rocm_device_memory
 from .interface import DeviceCapability, Platform, PlatformEnum, in_wsl, log_extension_import_failure
 
 if TYPE_CHECKING:
@@ -215,6 +216,7 @@ _ON_GFX11 = "gfx11" in _GCN_ARCH
 _ON_GFX1100 = "gfx1100" in _GCN_ARCH
 _ON_GFX1151 = "gfx1151" in _GCN_ARCH
 _ON_GFX115X = "gfx115" in _GCN_ARCH
+_ON_GFX1201 = "gfx1201" in _GCN_ARCH
 _ON_GFX12X = any(arch in _GCN_ARCH for arch in ["gfx12"])
 _ON_MI3XX = any(arch in _GCN_ARCH for arch in ["gfx942", "gfx950"])
 _ON_GFX9 = any(arch in _GCN_ARCH for arch in ["gfx90a", "gfx942", "gfx950"])
@@ -318,6 +320,10 @@ def on_gfx1151() -> bool:
 
 def on_gfx115x() -> bool:
     return _ON_GFX115X
+
+
+def on_gfx1201() -> bool:
+    return _ON_GFX1201
 
 
 def on_gfx12x() -> bool:
@@ -490,39 +496,6 @@ def use_rocm_custom_paged_attention(
         )
 
 
-@cache
-def flash_attn_triton_available() -> bool:
-    if not on_gfx1x():
-        return False
-    try:
-        from importlib.util import find_spec
-
-        # Locate the Triton-AMD kernels. Older ROCm/flash-attention (pre
-        # 2026-03) shipped them as the flash_attn.flash_attn_triton_amd
-        # subpackage. The main_perf migration commit 3f94643 moved them
-        # into aiter at aiter.ops.triton._triton_kernels.flash_attn_triton_amd,
-        # so accept either location.
-        def _has_spec(name: str) -> bool:
-            try:
-                return find_spec(name) is not None
-            except (ImportError, ValueError):
-                return False
-
-        if not (
-            _has_spec("flash_attn.flash_attn_triton_amd")
-            or _has_spec("aiter.ops.triton._triton_kernels.flash_attn_triton_amd")
-        ):
-            return False
-        if os.environ.get("FLASH_ATTENTION_TRITON_AMD_ENABLE") != "TRUE":
-            logger.info_once(
-                "Set FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE to enable Flash Attention Triton backend on RDNA."
-            )
-            return False
-        return True
-    except ImportError:
-        return False
-
-
 def _get_backend_priorities(
     use_mla: bool,
     use_sparse: bool,
@@ -670,6 +643,8 @@ class RocmPlatform(Platform):
         "fp8_per_tensor",
         "fp8_per_block",
         "fp8_per_channel",
+        "mxfp4_hadamard32",
+        "lut_b_moe",
         "online",
         "gpt_oss_mxfp4",
     ]
@@ -735,6 +710,22 @@ class RocmPlatform(Platform):
         # TODO: Make this explicit in the selector in a future PR.
         if is_encoder_decoder and AttentionBackendEnum.ROCM_ATTN in backend_priorities:
             backend_priorities.remove(AttentionBackendEnum.ROCM_ATTN)
+        # On gfx1201 and gfx1100, prefer TRITON_ATTN over ROCM_ATTN. An
+        # fp8_e5m2 KV cache keeps ROCM_ATTN: Attention rejects fp8_e5m2 for
+        # backends that take an fp8 query, as TRITON_ATTN does on gfx1201.
+        if (
+            (on_gfx1201() or on_gfx1100())
+            and AttentionBackendEnum.ROCM_ATTN in backend_priorities
+            and AttentionBackendEnum.TRITON_ATTN in backend_priorities
+            and attn_selector_config.kv_cache_dtype != "fp8_e5m2"
+        ):
+            # Swap the two so every other backend keeps its position.
+            rocm_idx = backend_priorities.index(AttentionBackendEnum.ROCM_ATTN)
+            triton_idx = backend_priorities.index(AttentionBackendEnum.TRITON_ATTN)
+            backend_priorities[rocm_idx], backend_priorities[triton_idx] = (
+                AttentionBackendEnum.TRITON_ATTN,
+                AttentionBackendEnum.ROCM_ATTN,
+            )
         is_turboquant_run = _uses_turboquant(sonar_config)
         is_ultraquant_run = _uses_ultraquant(sonar_config)
         for priority, backend in enumerate(backend_priorities):
@@ -911,13 +902,12 @@ class RocmPlatform(Platform):
             logger.info_once("Using AITER Flash Attention backend for ViT model.")
             return AttentionBackendEnum.ROCM_AITER_FA
 
-        if on_cdna() and find_spec("flash_attn") is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
+        if (
+            (on_cdna() or on_gfx1x())
+            and find_spec("flash_attn") is not None
+            and (dtype == torch.float16 or dtype == torch.bfloat16)
+        ):
             logger.info_once("Using Flash Attention backend for ViT model.")
-            return AttentionBackendEnum.FLASH_ATTN
-
-        # RDNA3/RDNA4 (gfx11xx/gfx12xx): Use Flash Attention Triton backend
-        if on_gfx1x() and flash_attn_triton_available() and (dtype == torch.float16 or dtype == torch.bfloat16):
-            logger.info_once("Using Flash Attention (Triton backend) for ViT model on RDNA.")
             return AttentionBackendEnum.FLASH_ATTN
 
         logger.info_once("Using Torch SDPA backend for ViT model.")
@@ -1187,6 +1177,11 @@ class RocmPlatform(Platform):
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(device)
         return torch.cuda.max_memory_allocated(device)
+
+    @classmethod
+    def free_device_memory(cls, device: torch.device | None = None) -> int:
+        free = rocm_device_memory.exact_free_memory(device)
+        return super().free_device_memory(device) if free is None else free
 
     @classmethod
     def get_device_communicator_cls(cls) -> str:

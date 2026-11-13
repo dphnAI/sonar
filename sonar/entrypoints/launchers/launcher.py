@@ -32,6 +32,7 @@ from sonar.utils.system_utils import set_ulimit
 from sonar.version import __version__ as SONAR_VERSION
 
 from .utils.constants import (
+    DISABLED_ROUTE_TAG,
     H11_MAX_HEADER_COUNT_DEFAULT,
     H11_MAX_INCOMPLETE_EVENT_SIZE_DEFAULT,
 )
@@ -52,7 +53,7 @@ class NoSignalServer(uvicorn.Server):
     Callers register their own handlers on the event loop for graceful
     shutdown; uvicorn's would race with and override them (see #49668).
 
-    With ``peer_loads`` (several API workers on one shared socket: a shared
+    With `peer_loads` (several API workers on one shared socket: a shared
     array with one slot per worker, and this worker's index), each worker
     publishes its number of open connections, and a pending connection is
     accepted by the least loaded worker. The event loop's own server would
@@ -276,7 +277,13 @@ def _log_full_routes(app: FastAPI) -> None:
         if methods is None or path is None:
             continue
 
-        logger.info("Route: %s, Methods: %s", path, _normalize_methods(methods))
+        disabled = DISABLED_ROUTE_TAG in getattr(route, "tags", ())
+        logger.info(
+            "Route: %s, Methods: %s%s",
+            path,
+            _normalize_methods(methods),
+            " (disabled)" if disabled else "",
+        )
 
     for route in app.routes:
         endpoint = getattr(route, "endpoint", None)
@@ -304,6 +311,8 @@ def _log_compact_routes(app: FastAPI) -> None:
         compact_path = _compact_route_path(path)
         if compact_path in _KOBOLD_COMPACT_HIDDEN_ROUTES:
             continue
+        if DISABLED_ROUTE_TAG in getattr(route, "tags", ()):
+            compact_path += " (disabled)"
 
         methods = getattr(route, "methods", None)
         if methods is None:

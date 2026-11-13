@@ -27,8 +27,6 @@ model:
   base_args:
     - "--trust-remote-code"
     - "--enable-expert-parallel"
-    - "--gpu-memory-utilization"
-    - "0.9"
     - "--enable-chunked-prefill"
     - "--compilation-config"
     - '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
@@ -94,11 +92,10 @@ guide: |
   ## Launching the Server
 
   ```bash
-  sonar serve inclusionAI/Ling-3.1-flash \
+  sonar run inclusionAI/Ling-3.1-flash \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \
@@ -113,11 +110,10 @@ guide: |
   enable AITER and launch using the command:
 
   ```bash
-  SONAR_ROCM_USE_AITER=1 sonar serve inclusionAI/Ling-3.1-flash \
+  SONAR_ROCM_USE_AITER=1 sonar run inclusionAI/Ling-3.1-flash \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \

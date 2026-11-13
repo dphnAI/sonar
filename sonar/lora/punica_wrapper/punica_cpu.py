@@ -131,7 +131,7 @@ class PunicaWrapperCPU(PunicaWrapperBase):
         y_slice_size: int,
         add_inputs: bool = True,
     ):
-        """Perform the ` y[:,y_offset:y_offset+y_slice_size]+=x@w_t_all`
+        """Perform the `y[:,y_offset:y_offset+y_slice_size]+=x@w_t_all`
         computation, which is suitable for the
         GEMM of lora'b.
         """
@@ -139,7 +139,7 @@ class PunicaWrapperCPU(PunicaWrapperBase):
         expand_slice_fun(y, x, w_t_all, y_offset, y_slice_size, add_inputs)
 
     def _apply_shrink(self, y: torch.Tensor, x: torch.Tensor, w_t_all: torch.Tensor, scale: float):
-        """Perform the ` y+=x@w_t_all` computation, which is suitable for the
+        """Perform the `y+=x@w_t_all` computation, which is suitable for the
         GEMM of lora'a.
         When `is_prefill is` true, it indicates that it is currently the
         prefill stage, and the `_shrink_prefill` function should be called.

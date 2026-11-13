@@ -3,10 +3,13 @@
 
 import json
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionToolsParam
 from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.tool_parsers.step3_tool_parser import Step3ToolParser
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,
@@ -119,3 +122,55 @@ class TestStep3ToolParser(ToolParserTests):
             "sql": "SELECT * FROM t WHERE a < 5",
             "html": "<b>hi</b>",
         }
+
+
+_SCHEMA_PROPERTIES = {
+    "count": {"type": "integer"},
+    "opt_count_list": {"type": ["integer", "null"]},
+    "opt_count_any_of": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+    "opt_ratio": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+    "opt_flag": {"oneOf": [{"type": "boolean"}, {"type": "null"}]},
+    "opt_name": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    "zip_code": {"type": "string"},
+    "filters": {"type": "object"},
+    "tags": {"type": "array"},
+    "untyped": {},
+}
+
+
+def _cast(params: dict[str, str]) -> dict[str, Any]:
+    tool = ChatCompletionToolsParam(
+        type="function",
+        function={
+            "name": "search",
+            "parameters": {"type": "object", "properties": _SCHEMA_PROPERTIES},
+        },
+    )
+    parser = Step3ToolParser(MagicMock(), tools=[tool])
+    return parser._cast_arguments("search", dict(params))
+
+
+@pytest.mark.parametrize(
+    ("key", "raw", "expected"),
+    [
+        ("count", "5", 5),
+        ("opt_count_list", "5", 5),
+        ("opt_count_any_of", "5", 5),
+        ("opt_count_any_of", "null", None),
+        ("opt_ratio", "0.5", 0.5),
+        ("opt_flag", "true", True),
+        ("opt_name", "Tokyo", "Tokyo"),
+        ("opt_name", "null", None),
+        ("zip_code", "10001", "10001"),
+        ("filters", '{"a": 1}', {"a": 1}),
+        ("tags", '["x", "y"]', ["x", "y"]),
+        ("untyped", "10001", "10001"),
+    ],
+)
+def test_cast_arguments_follows_schema_types(key: str, raw: str, expected: Any):
+    assert _cast({key: raw})[key] == expected
+
+
+def test_cast_arguments_keeps_uncoercible_values():
+    out = _cast({"opt_count_any_of": "many", "opt_flag": "maybe"})
+    assert out == {"opt_count_any_of": "many", "opt_flag": "maybe"}

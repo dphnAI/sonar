@@ -36,7 +36,7 @@ async def build_and_serve_renderer(
     """Build FastAPI app for a CPU-only render server, initialize state, and
     start serving.
 
-    ``app_builder`` selects the routes; the tokenizer-only server passes its
+    `app_builder` selects the routes; the tokenizer-only server passes its
     own. Returns the shutdown task for the caller to await.
     """
     # Get uvicorn log config (from file or with endpoint filter)

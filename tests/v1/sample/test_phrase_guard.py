@@ -10,7 +10,6 @@ from sonar.exceptions import SonarValidationError
 from sonar.sampling_params import SamplingParams
 from sonar.v1.phrase_guard.matcher import MAX_ZERO_WIDTH_TOKENS, PendingText, validate_phrases
 from sonar.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
-from sonar.v1.phrase_guard.worker import restore_requests
 from sonar.v1.sample.logits_processor.interface import BatchUpdate, MoveDirectionality
 
 pytestmark = pytest.mark.cpu_test
@@ -153,9 +152,7 @@ def test_compiled_cache_has_weighted_budget(monkeypatch):
         matcher._pattern_cache.clear()
 
 
-@pytest.mark.parametrize(
-    "case", ["missing", "slow", "v1_missing_processor", "sampling_mask", "routed", "default_scheduler"]
-)
+@pytest.mark.parametrize("case", ["missing", "slow", "sampling_mask", "routed", "default_scheduler"])
 def test_runtime_requirements_are_validated_before_core_dispatch(case):
     from tokenizers import Tokenizer, models
     from transformers import TokenizersBackend
@@ -176,7 +173,6 @@ def test_runtime_requirements_are_validated_before_core_dispatch(case):
         tokenizer=tokenizer,
         sonar_config=SimpleNamespace(
             model_config=model_config,
-            use_v2_model_runner=case != "v1_missing_processor",
             aux_output_config=SimpleNamespace(enabled=case == "routed"),
             scheduler_config=SimpleNamespace(
                 get_scheduler_cls=lambda: object if case == "default_scheduler" else PhraseScheduler
@@ -190,6 +186,23 @@ def test_runtime_requirements_are_validated_before_core_dispatch(case):
     # A client error maps to HTTP 400 instead of an opaque engine failure.
     with pytest.raises(SonarValidationError, match="--scheduler-cls" if case == "default_scheduler" else ""):
         InputProcessor._validate_params(processor, params, ("generate",))
+
+
+@pytest.mark.parametrize("metal", [False, True])
+def test_retry_processor_registration_is_only_required_for_metal(monkeypatch, metal):
+    from sonar.v1.phrase_guard import processor as retry_processor
+
+    monkeypatch.setattr("sonar.v1.engine.detokenizer.uses_fast_detokenizer", lambda tokenizer: True)
+    monkeypatch.setattr(retry_processor, "current_platform", SimpleNamespace(is_metal=lambda: metal))
+    config = SimpleNamespace(
+        model_config=SimpleNamespace(return_sampling_mask=False, logits_processors=[]),
+        aux_output_config=SimpleNamespace(enabled=False),
+    )
+    if metal:
+        with pytest.raises(ValueError, match="on Metal requires"):
+            PhraseRetryProcessor.validate_runtime(config, object())
+        config.model_config.logits_processors = [PhraseRetryProcessor]
+    PhraseRetryProcessor.validate_runtime(config, object())
 
 
 @pytest.mark.parametrize(
@@ -228,24 +241,29 @@ def test_exhausted_retry_returns_blocked_sentinel_only_for_affected_row():
     assert not logits[1].count_nonzero().item()
 
 
-def test_restore_does_not_change_other_request_or_rng():
-    from unittest.mock import Mock
+def test_readmission_preserves_seed_without_changing_other_request():
+    import numpy as np
 
-    states = {
-        rid: SimpleNamespace(
-            output_token_ids=[1, 2, 3],
-            sampling_params=None,
-            persistent_data={"old": 1},
-            prev_num_draft_len=0,
-            generator=object(),
-        )
-        for rid in ("a", "b")
-    }
-    runner = SimpleNamespace(requests=states, input_batch=Mock())
-    rng = states["a"].generator
-    restore_requests(runner, {"a": ([1], SamplingParams())})
-    assert states["a"].output_token_ids == [1]
-    assert states["a"].generator is rng
-    assert states["b"].output_token_ids == [1, 2, 3]
-    assert states["b"].persistent_data == {"old": 1}
-    runner.input_batch.remove_request.assert_called_once_with("a")
+    from sonar.v1.worker.gpu.sample.fork import GPUForkSamplingState
+
+    requests = SimpleNamespace(
+        device=torch.device("cpu"),
+        vocab_size=8,
+        index_to_req_id={0: "a", 1: "b"},
+        req_id_to_index={"a": 0, "b": 1},
+        prompt_len=SimpleNamespace(np=np.array([2, 2])),
+        prefill_len=SimpleNamespace(np=np.array([5, 5])),
+    )
+    state = GPUForkSamplingState(requests)
+    params = SamplingParams(temperature_last=True)
+    state.add_request(0, params, seed=11)
+    state.add_request(1, params, seed=17)
+    neighbor = state.requests[1]
+    neighbor.metadata.persistent_data[0] = {"kept": 1}
+    state.remove_request(0)
+    requests.prefill_len.np[0] = 3
+    state.add_request(0, params, seed=99)
+    assert state.requests[0].seed == 11
+    assert state.requests[1] is neighbor
+    assert neighbor.seed == 17
+    assert neighbor.metadata.persistent_data == {0: {"kept": 1}}

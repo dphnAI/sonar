@@ -71,8 +71,6 @@ hardware_overrides:
       - "ROCM_AITER_UNIFIED_ATTN"
       - "-cc.pass_config.fuse_rope_kvcache=True"
       - "-cc.use_inductor_graph_partition=True"
-      - "--gpu-memory-utilization"
-      - "0.95"
       - "--block-size=64"
     extra_env:
       SONAR_ROCM_USE_AITER: "1"
@@ -105,7 +103,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### pip (Intel Xeon 6 CPUs)
@@ -142,7 +140,7 @@ guide: |
   Single GPU (default — works on any 16GB+ card):
 
   ```bash
-  sonar serve openai/gpt-oss-20b
+  sonar run openai/gpt-oss-20b
   ```
 
   ### Intel Xeon 6
@@ -153,7 +151,7 @@ guide: |
 
   ```bash
 
-  sonar serve openai/gpt-oss-20b \
+  sonar run openai/gpt-oss-20b \
     --max-num-batched-tokens 16384 \
     --gpu-memory-utilization 0.8
   ```
@@ -175,7 +173,7 @@ guide: |
   Blackwell (B200) with FlashInfer MXFP4+MXFP8 MoE:
 
   ```bash
-  sonar serve openai/gpt-oss-20b
+  sonar run openai/gpt-oss-20b
   ```
 
   On Sonar v0.28.0+ the FlashInfer TRTLLM MXFP4 MoE path is selected automatically on Blackwell; it can be pinned explicitly with `--moe-backend flashinfer_trtllm --quantization-config.moe.activation mxfp8`.
@@ -190,11 +188,10 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve openai/gpt-oss-20b \
+  sonar run openai/gpt-oss-20b \
     --attention-backend ROCM_AITER_UNIFIED_ATTN \
     -cc.pass_config.fuse_rope_kvcache=True \
     -cc.use_inductor_graph_partition=True \
-    --gpu-memory-utilization 0.95 \
     --block-size 64
   ```
 
@@ -216,13 +213,13 @@ guide: |
   The `/v1/responses` endpoint supports built-in tools (browsing, python, MCP). Setup requires `uv pip install gpt-oss` and either Docker (for the Python sandbox) or `PYTHON_EXECUTION_BACKEND=dangerously_use_uv`. For demo tools:
 
   ```bash
-  sonar serve openai/gpt-oss-20b --tool-server demo
+  sonar run openai/gpt-oss-20b --tool-server demo
   ```
 
   For user-defined function calling (toggle the **Tool Calling** feature above, or pass manually):
 
   ```bash
-  sonar serve openai/gpt-oss-20b --tool-call-parser openai --enable-auto-tool-choice
+  sonar run openai/gpt-oss-20b --tool-call-parser openai --enable-auto-tool-choice
   ```
 
   ## Reasoning effort

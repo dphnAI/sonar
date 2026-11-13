@@ -28,3 +28,7 @@ Python sampling defaults, not protobuf zero values. The
 `dry_sequence_breakers` wrapper distinguishes an omitted list from an
 explicitly empty one; `dry_sequence_breaker_ids` accepts already-tokenized
 breakers.
+
+The Sonar schema retains `sonar_sampling` at wire field 19 for existing clients.
+`media_io_kwargs` uses field 20, unlike upstream vLLM's field 19. Generate
+bindings from this schema when using either extension.

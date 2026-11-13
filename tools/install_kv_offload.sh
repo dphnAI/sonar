@@ -17,7 +17,7 @@ if [[ -z "${VIRTUAL_ENV:-}" ]]; then
 fi
 
 uv pip install "${uv_target[@]}" \
-    "kvcr @ git+https://github.com/ai-dynamo/kvcr.git@v0.1.1"
+    "kvcr @ git+https://github.com/ai-dynamo/kvcr.git@5ce23b1527725cf623a3fc7feb94dc6d3d5fafaa"
 
 # KVCR depends on NIXL; keep its version but select the matching CUDA wheel.
 NIXL_VERSION=$(python3 -c 'import importlib.metadata; print(importlib.metadata.version("nixl"))')

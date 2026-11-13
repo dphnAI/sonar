@@ -15,11 +15,11 @@ from sonar.v1.attention.backends.utils import PAD_SLOT_ID
 from sonar.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
 from sonar.v1.worker.gpu.dp_utils import DPSyncState, dispatch_cg_and_sync_dp
 from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from sonar.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
-from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
-from sonar.v1.worker.gpu.spec_decode.target_dependent_ar.cudagraph_utils import (
+from sonar.v1.worker.gpu.spec_decode.autoregressive.cudagraph_utils import (
     SpeculatorCudaGraphManager,
 )
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
 from sonar.v1.worker.utils import get_uniform_decode_token_count
 
 logger = init_logger(__name__)
@@ -94,7 +94,9 @@ class MultiModuleMTPSpeculator(DraftModelSpeculator):
 
     def init_cudagraph_manager(self, cudagraph_mode: CUDAGraphMode) -> None:
         # Compiled piecewise graphs do not specialize the Python module index.
-        if cudagraph_mode.has_piecewise_cudagraphs() and not is_breakable_cudagraph_enabled():
+        if cudagraph_mode.has_piecewise_cudagraphs() and not is_breakable_cudagraph_enabled(
+            self.sonar_config.compilation_config
+        ):
             cudagraph_mode = (
                 CUDAGraphMode.FULL_DECODE_ONLY if cudagraph_mode.has_full_cudagraphs() else CUDAGraphMode.NONE
             )
@@ -102,7 +104,7 @@ class MultiModuleMTPSpeculator(DraftModelSpeculator):
             self.sonar_config,
             self.device,
             cudagraph_mode,
-            self.num_speculative_steps + 1,
+            self.sonar_config.get_decode_cudagraph_query_lens(self.num_speculative_steps + 1),
         )
 
     def capture(self) -> None:

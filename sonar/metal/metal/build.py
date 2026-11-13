@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """JIT build script for the native paged-attention Metal extension.
 
-Compiles ``paged_ops.cpp`` + nanobind into a shared library that dispatches
+Compiles `paged_ops.cpp` + nanobind into a shared library that dispatches
 Metal shaders through MLX's own command encoder.
 """
 

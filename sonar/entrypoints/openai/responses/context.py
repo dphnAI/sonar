@@ -44,6 +44,7 @@ from sonar.renderers.chat_utils import (
 )
 from sonar.tokenizers import TokenizerLike
 from sonar.utils import random_uuid
+from sonar.utils.gc_utils import untracked_list
 
 if TYPE_CHECKING:
     from mcp.client import ClientSession
@@ -188,7 +189,7 @@ class SimpleContext(ConversationContext):
 
         # Accumulated final output for streaming mode
         self._accumulated_text: str = ""
-        self._accumulated_token_ids: list[int] = []
+        self._accumulated_token_ids: list[int] = untracked_list()
         self._accumulated_logprobs: list = []
         # Items already sent as output_item.done events; the final
         # streaming response reuses them instead of reparsing.
@@ -337,7 +338,7 @@ class ParsableContext(ConversationContext):
 
         self.input_messages: list[ResponseRawMessageAndToken] = []
         self.output_messages: list[ResponseRawMessageAndToken] = []
-        self._accumulated_token_ids: list[int] = []
+        self._accumulated_token_ids: list[int] = untracked_list()
         self.kv_transfer_params: dict[str, Any] | None = None
         self.ec_transfer_params: dict[str, Any] | None = None
 

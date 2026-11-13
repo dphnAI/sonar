@@ -31,7 +31,7 @@ from tests.v1.attention.utils import (
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
 
-from sonar._custom_ops import (
+from sonar._cpu_ops import (
     cpu_attention_with_kv_cache,
     cpu_attn_get_scheduler_metadata,
     cpu_attn_reshape_and_cache,

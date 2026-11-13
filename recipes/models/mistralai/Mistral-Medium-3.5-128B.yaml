@@ -115,7 +115,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 \
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu132 \
     --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
@@ -126,7 +126,7 @@ guide: |
   8xH200 (or 8xB200):
 
   ```bash
-  sonar serve mistralai/Mistral-Medium-3.5-128B \
+  sonar run mistralai/Mistral-Medium-3.5-128B \
     --tensor-parallel-size 8 \
     --tokenizer_mode mistral --config_format mistral --load_format mistral \
     --enable-auto-tool-choice --tool-call-parser mistral \
@@ -152,9 +152,9 @@ guide: |
   Mistral's recommended serve command (from the EAGLE model card):
 
   ```bash
-  sonar serve mistralai/Mistral-Medium-3.5-128B --tensor-parallel-size 8 \
+  sonar run mistralai/Mistral-Medium-3.5-128B --tensor-parallel-size 8 \
     --tool-call-parser mistral --enable-auto-tool-choice --reasoning-parser mistral \
-    --max-num-batched-tokens 16384 --max-num-seqs 128 --gpu-memory-utilization 0.8 \
+    --max-num-batched-tokens 16384 --max-num-seqs 128 \
     --speculative-config '{"model":"mistralai/Mistral-Medium-3.5-128B-EAGLE","num_speculative_tokens":3,"method":"eagle","max_model_len":"65536"}'
   ```
 
@@ -203,14 +203,14 @@ guide: |
   **Single GPU** - Use `--tensor-parallel-size 1` and limit context, e.g.
   `--max-model-len 131072`. Without that limit, KV-cache allocation fails at the
   default **262144** context even in text-only mode. You can also reduce
-  `--max-num-batched-tokens` or change `--gpu-memory-utilization` if you still hit OOM.
+  `--max-num-batched-tokens` or `--max-num-seqs` if you still hit OOM.
   Here is a text-only example:
 
   ```bash
   docker run --device=/dev/kfd --device=/dev/dri \
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
-    -e SONAR_ROCM_USE_AITER=1 \
+    -e VLLM_ROCM_USE_AITER=1 \
     -e SAFETENSORS_FAST_GPU=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:nightly mistralai/Mistral-Medium-3.5-128B \
@@ -232,7 +232,7 @@ guide: |
   docker run --device=/dev/kfd --device=/dev/dri \
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
-    -e SONAR_ROCM_USE_AITER=1 \
+    -e VLLM_ROCM_USE_AITER=1 \
     -e SAFETENSORS_FAST_GPU=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:nightly mistralai/Mistral-Medium-3.5-128B \
@@ -257,7 +257,7 @@ guide: |
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
     -e SAFETENSORS_FAST_GPU=1 \
-    -e SONAR_ROCM_USE_AITER=1 \
+    -e VLLM_ROCM_USE_AITER=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:nightly mistralai/Mistral-Medium-3.5-128B \
       --tokenizer_mode mistral --config_format mistral --load_format mistral \
@@ -271,7 +271,7 @@ guide: |
 
   ### MI300X benchmarking (text-only)
 
-  Serving benchmark: `sonar bench serve` with 100 requests, max concurrency 32,
+  Serving benchmark: `sonar bench run` with 100 requests, max concurrency 32,
   1024 input + 1024 output tokens per request.
   Accuracy: `lm_eval` GSM8k (5-shot), `local-completions` backend.
 

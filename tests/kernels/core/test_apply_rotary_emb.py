@@ -193,7 +193,7 @@ def test_apply_rotary_emb_xpu_matches_native(
     rot_dim: int,
     is_neox_style: bool,
 ):
-    """ApplyRotaryEmb.forward_xpu (sonar_xpu_kernels SYCL op) must match
+    """ApplyRotaryEmb.forward_xpu (vllm_xpu_kernels SYCL op) must match
     forward_native (the CustomOp default fallback) exactly."""
     from sonar.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
 

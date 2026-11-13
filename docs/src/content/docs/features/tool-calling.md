@@ -22,6 +22,15 @@ fields. Select the parser documented for the model.
 Test explicit tool choice and automatic tool choice. Some models require a
 specific chat template in addition to the parser.
 
+Named tool choice and `tool_choice="required"` also need both flags. Without a
+loaded parser, these requests return HTTP 400, except for official-format
+Mistral and gpt-oss models. Both choices require a nonempty `tools` list.
+An empty tool list is treated as absent, and `tool_choice="auto"` without tools
+becomes `"none"`.
+
+Structured output constrains tool arguments, but schema enforcement depends on
+the parser and the tool's `strict` setting. Validate arguments before execution.
+
 ## Send tools
 
 Send tools through the OpenAI client.

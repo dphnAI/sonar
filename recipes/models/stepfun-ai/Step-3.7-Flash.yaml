@@ -73,8 +73,6 @@ variants:
       - "modelopt"
       - "--kv-cache-dtype"
       - "fp8"
-      - "--gpu-memory-utilization"
-      - "0.9"
       - "--async-scheduling"
     description: "NVFP4 quantized — Blackwell only; TP4+EP with FP8 KV cache"
 
@@ -123,7 +121,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre \
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu132 --pre \
       --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
@@ -138,7 +136,7 @@ guide: |
   ### BF16
 
   ```bash
-  sonar serve stepfun-ai/Step-3.7-Flash \
+  sonar run stepfun-ai/Step-3.7-Flash \
       --served-model-name step3p7-flash \
       --tensor-parallel-size 8 \
       --enable-expert-parallel \
@@ -153,7 +151,7 @@ guide: |
   ### FP8
 
   ```bash
-  sonar serve stepfun-ai/Step-3.7-Flash-FP8 \
+  sonar run stepfun-ai/Step-3.7-Flash-FP8 \
       --served-model-name step3p7-flash \
       --tensor-parallel-size 8 \
       --enable-expert-parallel \
@@ -170,10 +168,9 @@ guide: |
   Requires modelopt quantization and FP8 KV cache alignment.
 
   ```bash
-  sonar serve stepfun-ai/Step-3.7-Flash-NVFP4 \
+  sonar run stepfun-ai/Step-3.7-Flash-NVFP4 \
       --served-model-name step3p7 \
       --tensor-parallel-size 4 \
-      --gpu-memory-utilization 0.9 \
       --enable-expert-parallel \
       --quantization modelopt \
       --kv-cache-dtype fp8 \
@@ -192,10 +189,9 @@ guide: |
   not). Use the dedicated `vllm/vllm-openai:stepfun37` image and serve on a single GPU:
 
   ```bash
-  sonar serve stepfun-ai/Step-3.7-Flash-FP8 \
+  sonar run stepfun-ai/Step-3.7-Flash-FP8 \
       --served-model-name step3p7-flash \
       --tensor-parallel-size 1 \
-      --gpu-memory-utilization 0.95 \
       --kv-cache-dtype fp8 \
       --reasoning-parser step3p5 \
       --tool-call-parser step3p5 \
@@ -215,7 +211,6 @@ guide: |
       -v "$HOME/.cache/huggingface/hub:/root/.cache/huggingface/hub" \
       vllm/vllm-openai:stepfun37 \
       stepfun-ai/Step-3.7-Flash-FP8 \
-        --gpu-memory-utilization 0.95 \
         --trust-remote-code \
         --reasoning-parser step3p5 \
         --enable-auto-tool-choice \
@@ -229,7 +224,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
       --backend sonar \
       --model stepfun-ai/Step-3.7-Flash \
       --endpoint /v1/completions \

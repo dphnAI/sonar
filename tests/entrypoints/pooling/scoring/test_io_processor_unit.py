@@ -19,9 +19,9 @@ from sonar.entrypoints.pooling.scoring.io_processor import (
     LateInteractionIOProcessor,
     _apply_post_tokenization_to_token_type_ids,
 )
-from sonar.entrypoints.pooling.scoring.typing import ScoringData
+from sonar.entrypoints.pooling.scoring.types import ScoringData
 from sonar.entrypoints.pooling.scoring.utils import compress_token_type_ids
-from sonar.entrypoints.pooling.typing import (
+from sonar.entrypoints.pooling.types import (
     OfflineScoringInputsContext,
     ScoringRenderParams,
 )

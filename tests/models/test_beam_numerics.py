@@ -5,6 +5,8 @@
 import pytest
 import torch
 
+from sonar.platforms import current_platform
+
 
 def _torch_rms_norm(x, weight, eps):
     y = x.float()
@@ -43,7 +45,7 @@ def _assert_boundary_close(actual, expected, *, relative_tolerance=1e-4):
 @pytest.mark.parametrize("cap", [7.3, 30.0])
 @torch.inference_mode()
 def test_softcap_rounds_into_original_logits_without_touching_padding(dtype, rows, cap):
-    from sonar.models.beam.nvidia.activation import beam_softcap_logits
+    from sonar.models.beam import beam_softcap_logits
 
     torch.manual_seed(42)
     storage = torch.randn(rows, 264, device="cuda", dtype=dtype) * (cap * 3)
@@ -71,7 +73,7 @@ def test_softcap_rounds_into_original_logits_without_touching_padding(dtype, row
 def test_dense_activation_rounds_after_product(default_sonar_config, dtype, rows, width):
     """BF16 I/O must not round the SiLU result before multiplication."""
     import sonar._custom_ops  # noqa: F401
-    from sonar.models.beam.nvidia.activation import beam_silu_mul
+    from sonar.models.beam import beam_silu_mul
 
     torch.manual_seed(42)
     x = torch.randn(rows, 2 * width, device="cuda", dtype=dtype) * 4
@@ -96,7 +98,7 @@ def test_dense_activation_rounds_after_product(default_sonar_config, dtype, rows
 @torch.inference_mode()
 def test_fused_norm_preserves_fp32_affine_for_strided_rows(dtype, shape):
     """QKV slices and near-epsilon values retain the reference's FP32 affine."""
-    from sonar.models.beam.nvidia.layernorm import beam_rms_norm
+    from sonar.models.beam import beam_rms_norm
 
     generator = torch.Generator(device="cuda").manual_seed(42)
     storage = torch.randn(
@@ -126,7 +128,7 @@ def test_fused_norm_preserves_fp32_affine_for_strided_rows(dtype, shape):
 @torch.inference_mode()
 def test_norm_residual_norm_preserves_intermediate_rounding(dtype, shape, next_):
     """Both residual and next input must retain BF16 casts between fused stages."""
-    from sonar.models.beam.nvidia.layernorm import beam_norm_residual_norm
+    from sonar.models.beam import beam_norm_residual_norm
 
     torch.manual_seed(42)
     x = torch.randn(shape[0], shape[1] + 32, device="cuda", dtype=dtype)[:, 1 : shape[1] + 1]
@@ -185,7 +187,7 @@ def _separate_qk_norm_rope(
 @pytest.mark.parametrize("packed", [False, True])
 @torch.inference_mode()
 def test_output_gate_preserves_activation_dtype_rounding(dtype, rows, packed):
-    from sonar.models.beam.nvidia.attention_ops import beam_output_gate
+    from sonar.models.beam import beam_output_gate
 
     torch.manual_seed(42)
     x = torch.randn(rows, 768, device="cuda", dtype=dtype)
@@ -205,7 +207,7 @@ def test_output_gate_preserves_activation_dtype_rounding(dtype, rows, packed):
 @pytest.mark.parametrize("head_dim,q_heads,k_heads", [(128, 6, 1), (80, 4, 2)])
 @torch.inference_mode()
 def test_qk_norm_rope_keeps_norm_rounding_and_fp32_rotation(dtype, rotary_dim, neox, head_dim, q_heads, k_heads):
-    from sonar.models.beam.nvidia.attention_ops import beam_qk_norm_rope
+    from sonar.models.beam import beam_qk_norm_rope
 
     torch.manual_seed(42)
     rows = 17
@@ -234,7 +236,7 @@ def test_qk_norm_rope_keeps_norm_rounding_and_fp32_rotation(dtype, rotary_dim, n
 @torch.inference_mode()
 def test_qk_norm_rope_inserts_only_mapped_kv(rows, kv_heads, nhd, rotary_dim, neox):
     """Cache insertion preserves Q/K and follows live slot mappings on replay."""
-    from sonar.models.beam.nvidia.attention_ops import beam_qk_norm_rope
+    from sonar.models.beam import beam_qk_norm_rope
 
     torch.manual_seed(42)
     sizes = (6 * kv_heads * 128, kv_heads * 128, kv_heads * 128)
@@ -284,7 +286,7 @@ def test_qk_norm_rope_inserts_only_mapped_kv(rows, kv_heads, nhd, rotary_dim, ne
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
 @torch.inference_mode()
 def test_ssmax_fuses_after_norm_rounding_and_scales_only_queries(dtype):
-    from sonar.models.beam.nvidia.attention_ops import beam_qk_norm_rope
+    from sonar.models.beam import beam_qk_norm_rope
 
     torch.manual_seed(42)
     positions = torch.tensor([0, 1, 15, 2047, 2048, 16384, 100000, 1048575], device="cuda")
@@ -308,10 +310,7 @@ def test_ssmax_fuses_after_norm_rounding_and_scales_only_queries(dtype):
 @pytest.mark.parametrize("rotary_dim", [0, 128])
 @torch.inference_mode()
 def test_attention_fusions_replay_with_changed_positions_and_gates(rotary_dim):
-    from sonar.models.beam.nvidia.attention_ops import (
-        beam_output_gate,
-        beam_qk_norm_rope,
-    )
+    from sonar.models.beam import beam_output_gate, beam_qk_norm_rope
 
     torch.manual_seed(42)
     qkv = torch.randn(17, 1025, device="cuda", dtype=torch.bfloat16)[:, 1:]
@@ -357,7 +356,7 @@ def test_attention_fusions_replay_with_changed_positions_and_gates(rotary_dim):
         torch.testing.assert_close(actual, reference, rtol=0, atol=0)
 
 
-@pytest.mark.skipif(not torch.accelerator.is_available(), reason="CUDA required")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="CUDA required")
 @pytest.mark.parametrize("rotary_dim", [0, 128])
 @pytest.mark.parametrize("insert_kv", [False, True])
 @torch.inference_mode()
@@ -365,12 +364,13 @@ def test_fused_kernels_reuse_specializations_across_token_counts(monkeypatch, ro
     """Warm tile buckets once, then vary batch sizes, positions offsets and scales."""
     from triton import knobs
 
-    from sonar.models.beam.nvidia.activation import beam_softcap_logits
-    from sonar.models.beam.nvidia.attention_ops import (
+    from sonar.models.beam import (
+        beam_norm_residual_norm,
         beam_output_gate,
         beam_qk_norm_rope,
+        beam_rms_norm,
+        beam_softcap_logits,
     )
-    from sonar.models.beam.nvidia.layernorm import beam_norm_residual_norm, beam_rms_norm
 
     device = "cuda"
     dtype = torch.bfloat16
@@ -419,7 +419,7 @@ def test_fused_kernels_reuse_specializations_across_token_counts(monkeypatch, ro
         run(tokens, 0, (0.125, 0.9682458365518543))
 
     def unexpected_compile(**kwargs):
-        if kwargs["fn"].module.startswith("sonar.models.beam.nvidia"):
+        if kwargs["fn"].module.startswith(("sonar.models.beam.amd", "sonar.models.beam.nvidia")):
             pytest.fail(f"Unexpected shape specialization: {kwargs['fn'].name}")
 
     with monkeypatch.context() as patch:
@@ -431,6 +431,8 @@ def test_fused_kernels_reuse_specializations_across_token_counts(monkeypatch, ro
 
 
 def _skip_without_beam_allreduce():
+    if current_platform.is_rocm():
+        pytest.skip("Beam multicast all-reduce is specific to the NVIDIA backend")
     if not hasattr(torch.ops._C, "beam_allreduce_norm"):
         pytest.skip("Beam all-reduce kernel not built")
     mnnvl = pytest.importorskip("flashinfer.comm.mnnvl")
@@ -649,7 +651,11 @@ def test_moe_finalize_allreduce_preserves_local_rounding_and_replay(world_size):
     )
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+@pytest.mark.skipif(
+    current_platform.is_rocm(),
+    reason="Packed projection is specific to the NVIDIA backend",
+)
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="CUDA required")
 @pytest.mark.parametrize("rows", [1, 2, 4, 8, 12, 16, 24, 64])
 @pytest.mark.parametrize("qkv_rows,gate_rows", [(2048, 1536), (1024, 768)])
 @torch.inference_mode()

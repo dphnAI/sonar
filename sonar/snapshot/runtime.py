@@ -78,7 +78,7 @@ _CACHE_UNREADABLE = "unreadable"
 def _generated_cache_prefixes() -> tuple[str, ...]:
     """Path prefixes of the generated caches an engine process keeps open.
 
-    Sonar redirects Inductor and Triton under ``SONAR_CACHE_ROOT`` when it
+    Sonar redirects Inductor and Triton under `SONAR_CACHE_ROOT` when it
     compiles, but a process can still hold their upstream defaults open.
     A cache root is resolved and separator-terminated so that it still matches
     the kernel-canonical descriptor targets under a symlinked root, and so that
@@ -138,7 +138,7 @@ def _process_comm(pid: int) -> str:
 
 
 def _decode_endpoint(family: str, raw: str) -> str:
-    """Render a ``/proc/net/tcp`` ``HEXADDR:HEXPORT`` field as ``ip:port``.
+    """Render a `/proc/net/tcp` `HEXADDR:HEXPORT` field as `ip:port`.
 
     The kernel prints the address as little-endian 32-bit words: one for IPv4,
     four in order for IPv6.

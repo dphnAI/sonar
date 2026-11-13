@@ -195,8 +195,8 @@ class MetalWorker(WorkerBase):
 
         Computes num_blocks from Metal memory headroom, model weight size, and
         a configurable memory fraction, rather than blindly scaling from
-        max_model_len.  ``overhead`` is the measured intermediate-buffer
-        footprint from :pymeth:`MetalModelRunner.profile_run`.
+        max_model_len.  `overhead` is the measured intermediate-buffer
+        footprint from `MetalModelRunner.profile_run`.
         """
         WorkerCachePlanner(self).setup_paged_attention(overhead=overhead)
 
@@ -217,9 +217,9 @@ class MetalWorker(WorkerBase):
         """Bytes for one max-length sequence of cache state.
 
         Uses block-aligned token count so the estimate matches the upstream
-        ``_check_enough_kv_cache_memory`` calculation, which rounds
-        ``max_model_len`` up to the nearest ``block_size`` boundary via
-        ``cdiv(max_model_len, block_size) * page_size_bytes``.
+        `_check_enough_kv_cache_memory` calculation, which rounds
+        `max_model_len` up to the nearest `block_size` boundary via
+        `cdiv(max_model_len, block_size) * page_size_bytes`.
         """
         block_size = self.sonar_config.cache_config.block_size
         return self.model_runner.estimate_one_sequence_kv_bytes(
@@ -392,9 +392,9 @@ class MetalWorker(WorkerBase):
     ) -> None:
         """Start or stop a Metal frame capture.
 
-        Routed via the engine's ``collective_rpc("profile", ...)``, which is
-        triggered by ``LLM.start_profile`` / ``LLM.stop_profile`` and by the
-        ``POST /start_profile`` / ``POST /stop_profile`` HTTP endpoints. We
+        Routed via the engine's `collective_rpc("profile", ...)`, which is
+        triggered by `LLM.start_profile` / `LLM.stop_profile` and by the
+        `POST /start_profile` / `POST /stop_profile` HTTP endpoints. We
         get all of those for free — only this method needs to exist.
         """
         profiler_config = self.sonar_config.profiler_config
