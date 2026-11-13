@@ -6,6 +6,7 @@ mod cache;
 mod capacity;
 mod checkpoint;
 mod collective_rpc;
+mod decisions;
 mod health;
 mod inference;
 mod kv_event_sources;
@@ -39,6 +40,8 @@ use tracing::{info, warn};
 use crate::middleware;
 use crate::routes::openai::utils::types::{ErrorDetail, ErrorResponse};
 use crate::state::AppState;
+
+pub(crate) use self::decisions::Availability as DecisionsAvailability;
 
 const SCALE_OUT_DISABLED_MESSAGE: &str =
     "Scale-out endpoints are disabled. Restart sonar serve with --enable-scale-out to enable them.";
@@ -167,9 +170,22 @@ fn build_router_with_gates(state: Arc<AppState>, gates: RouteGates) -> Router {
         .route("/v1/messages/count_tokens", post(not_supported))
         // TODO: implement batched chat completions.
         .route("/v1/chat/completions/batch", post(not_supported))
-        // TODO: implement the decisions APIs.
-        .route("/v1/decisions", post(not_supported))
-        .route("/v1/systemone", post(not_supported))
+        .route(
+            "/v1/decisions",
+            if dphn_enabled {
+                post(crate::dphn::unsupported)
+            } else {
+                post(decisions::decisions)
+            },
+        )
+        .route(
+            "/v1/systemone",
+            if dphn_enabled {
+                post(crate::dphn::unsupported)
+            } else {
+                post(decisions::systemone)
+            },
+        )
         // TODO: implement elastic EP scaling.
         .route("/scale_elastic_ep", post(not_supported))
         .route("/is_scaling_elastic_ep", post(not_supported))

@@ -38,6 +38,9 @@ pub enum ApiError {
     ServerError { message: String },
     /// The engine rejected the request with a retryable error.
     ServiceUnavailable { message: String },
+    /// The server cannot serve the request, though another frontend or model
+    /// could.
+    NotImplemented { message: String },
 }
 
 impl ApiError {
@@ -50,6 +53,7 @@ impl ApiError {
             Self::ServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Self::JsonParseError { .. } | Self::InvalidQuery { .. } => StatusCode::BAD_REQUEST,
             Self::ServiceUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            Self::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
         }
     }
 
@@ -83,6 +87,7 @@ impl ApiError {
             Self::ServiceUnavailable { message } => {
                 ("ServiceUnavailableError", message.clone(), None)
             }
+            Self::NotImplemented { message } => ("NotImplementedError", message.clone(), None),
         };
 
         ErrorResponse {

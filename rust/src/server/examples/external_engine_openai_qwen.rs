@@ -91,6 +91,8 @@ async fn main() -> Result<()> {
         lora_modules: Vec::new(),
         chat_template_content_format: ChatTemplateContentFormatOption::Auto,
         max_logprobs: None,
+        logprobs_mode: Default::default(),
+        diffusion_canvas_length: None,
         stream_interval: NonZeroU32::MIN,
         api_server_options: ApiServerOptions::default(),
         fingerprint_mode: Default::default(),

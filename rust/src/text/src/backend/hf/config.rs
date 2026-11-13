@@ -358,6 +358,11 @@ pub fn load_model_config(path: Option<&Path>) -> Result<ModelConfig> {
     read_json_file(path)
 }
 
+/// Load the whole model config (`config.json`), or `null` without one.
+pub(super) fn load_model_config_json(path: Option<&Path>) -> Result<serde_json::Value> {
+    read_json_file(path)
+}
+
 fn read_json_file<T>(path: Option<&Path>) -> Result<T>
 where
     T: for<'de> Deserialize<'de> + Default,

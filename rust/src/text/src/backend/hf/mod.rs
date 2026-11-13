@@ -15,7 +15,7 @@ use sonar_tokenizer::{
 };
 use tracing::info;
 
-use self::config::{GenerationConfig, load_generation_config};
+use self::config::{GenerationConfig, load_generation_config, load_model_config_json};
 pub use self::config::{
     HfChatTemplate, HfNamedChatTemplate, HfSpecialTokens, HfTokenizerConfig, ModelConfig,
     NamedSpecialToken, load_model_config, load_tokenizer_config,
@@ -52,6 +52,11 @@ pub struct HfTextBackend {
     model_vocab_size: usize,
     /// Model config (`config.json`).
     model_config: ModelConfig,
+    /// The whole `config.json`, for frontends that read fields the typed
+    /// config does not keep.
+    hf_config: serde_json::Value,
+    /// The tokenizer config's padding token, when it resolves to an ID.
+    pad_token_id: Option<u32>,
 }
 
 impl HfTextBackend {
@@ -63,6 +68,7 @@ impl HfTextBackend {
     ) -> Result<Self> {
         let tokenizer_config = load_tokenizer_config(files.tokenizer_config_path.as_deref())?;
         let model_config = load_model_config(files.config_path.as_deref())?;
+        let hf_config = load_model_config_json(files.config_path.as_deref())?;
         let model_vocab_size = model_config.vocab_size()? as usize;
         let tokenizer = match &files.tokenizer {
             Some(tokenizer) => load_tokenizer(tokenizer)?,
@@ -75,6 +81,11 @@ impl HfTextBackend {
             &generation_config,
             tokenizer.as_ref(),
         );
+        let pad_token_id = tokenizer_config
+            .special_tokens
+            .pad_token
+            .as_ref()
+            .and_then(|token| tokenizer.token_to_id(token.as_str()));
 
         info!(
             model_id,
@@ -91,6 +102,8 @@ impl HfTextBackend {
             generation_config_mode,
             model_vocab_size,
             model_config,
+            hf_config,
+            pad_token_id,
         })
     }
 
@@ -156,6 +169,14 @@ impl TextBackend for HfTextBackend {
 
     fn config_dtype(&self) -> Option<ModelDtype> {
         self.model_config.dtype()
+    }
+
+    fn hf_config(&self) -> &serde_json::Value {
+        &self.hf_config
+    }
+
+    fn pad_token_id(&self) -> Option<u32> {
+        self.pad_token_id
     }
 
     fn model_id(&self) -> &str {

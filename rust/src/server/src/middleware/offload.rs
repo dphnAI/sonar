@@ -27,6 +27,8 @@ const OFFLOADED_PATHS: &[&str] = &[
     "/v1/chat/completions",
     "/v1/completions",
     "/v1/responses",
+    "/v1/decisions",
+    "/v1/systemone",
     "/tokenize",
     "/detokenize",
     "/inference/v1/generate",
