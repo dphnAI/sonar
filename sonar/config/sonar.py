@@ -3265,6 +3265,8 @@ class SonarConfig:
 
     @model_validator(mode="after")
     def validate_mamba_cached_kernel(self) -> "SonarConfig":
+        if self.cache_config.mamba_spec_state_layout == "compact":
+            return self._validate_compact_spec_state()
         if not self.cache_config.use_replayssm:
             self.cache_config.use_kda_recoverssm = False
             return self
@@ -3283,16 +3285,7 @@ class SonarConfig:
         if self.mamba_config.backend == MambaBackendEnum.FLASHINFER and self.cache_config.replayssm_buffer_len > 16:
             raise ValueError("FlashInfer ReplaySSM requires --replayssm-buffer-len <= 16")
         if self.cache_config.use_kda_recoverssm:
-            if self.mamba_config.enable_stochastic_rounding:
-                raise ValueError(
-                    "RecoverSSM supports bfloat16/float32 "
-                    "SSM state caches, not --enable-mamba-cache-stochastic-"
-                    "rounding, which requires an explicit float16 cache"
-                )
-            if self.parallel_config.pipeline_parallel_size > 1:
-                raise ValueError("RecoverSSM currently requires pipeline_parallel_size=1")
-            if self.mamba_config.backend != MambaBackendEnum.TRITON:
-                raise ValueError("RecoverSSM requires --mamba-backend triton")
+            self._verify_kda_recoverssm()
         elif self.mamba_config.backend not in (
             MambaBackendEnum.TRITON,
             MambaBackendEnum.FLASHINFER,
@@ -3338,6 +3331,33 @@ class SonarConfig:
                 "--use-replayssm is incompatible with KV connectors (P/D disaggregation, KV cache offload)"
             )
         return self
+
+    def _validate_compact_spec_state(self) -> "SonarConfig":
+        layout = 'mamba_spec_state_layout="compact"'
+        if self.num_speculative_tokens == 0:
+            raise ValueError(f"{layout} requires speculative decoding")
+        if self.cache_config.use_replayssm:
+            raise ValueError(f"{layout} excludes --use-replayssm")
+        if self.model_config is not None and not self.model_config.supports_compact_spec_state:
+            raise ValueError(f"{layout} is not supported for architecture {self.model_config.architecture!r}")
+        if not current_platform.is_cuda():
+            raise ValueError(f"{layout} requires CUDA")
+        if self.kv_transfer_config is not None and self.kv_transfer_config.kv_connector != "MooncakeStoreConnector":
+            raise ValueError(f"{layout} does not support KV connectors other than MooncakeStoreConnector")
+        self.cache_config.use_kda_recoverssm = True
+        self._verify_kda_recoverssm()
+        return self
+
+    def _verify_kda_recoverssm(self) -> None:
+        if self.mamba_config.enable_stochastic_rounding:
+            raise ValueError(
+                "RecoverSSM supports bfloat16/float32 SSM state caches, not "
+                "--enable-mamba-cache-stochastic-rounding, which requires an explicit float16 cache"
+            )
+        if self.parallel_config.pipeline_parallel_size > 1:
+            raise ValueError("RecoverSSM currently requires pipeline_parallel_size=1")
+        if self.mamba_config.backend != MambaBackendEnum.TRITON:
+            raise ValueError("RecoverSSM requires --mamba-backend triton")
 
 
 _current_sonar_config: SonarConfig | None = None

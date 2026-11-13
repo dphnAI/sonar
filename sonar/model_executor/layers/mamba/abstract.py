@@ -24,6 +24,9 @@ class MambaBase(AttentionLayerBase):
     # Contains the KV cache (mamba state) for the layer
     # in the shape specified by `self.get_state_shape`.
     kv_cache: tuple[torch.Tensor, ...]
+    # Every Mamba layer must support verification without per-draft states
+    # before its model can declare SupportsCompactSpecState.
+    supports_compact_spec_state: bool = False
     use_replayssm: bool = False
     use_flashinfer_replayssm: bool = False
     use_replayssm_trackers: bool = False
@@ -76,7 +79,11 @@ class MambaBase(AttentionLayerBase):
         return None
 
     def get_kv_cache_spec(self, sonar_config: SonarConfig) -> KVCacheSpec | None:
-        mamba_block_size = sonar_config.cache_config.mamba_block_size
+        cache_config = sonar_config.cache_config
+        compact = cache_config.use_kda_recoverssm and not cache_config.use_replayssm
+        if compact and not self.supports_compact_spec_state:
+            raise ValueError(f"{type(self).__name__} does not support compact speculative state")
+        mamba_block_size = cache_config.mamba_block_size
         assert mamba_block_size is not None
         page_size_padded = sonar_config.cache_config.mamba_page_size_padded
         return MambaSpec(
@@ -88,11 +95,11 @@ class MambaBase(AttentionLayerBase):
             page_size_padded=page_size_padded,
             mamba_type=self.mamba_type,
             tp_replicated=self.is_kv_cache_tp_replicated,
-            mamba_cache_mode=sonar_config.cache_config.mamba_cache_mode,
-            # ReplaySSM verifies the whole window off one checkpoint, so it
-            # never writes the baseline's per-draft-token state slots.
+            mamba_cache_mode=cache_config.mamba_cache_mode,
+            # ReplaySSM and RecoverSSM verify from one checkpoint rather than
+            # writing a recurrent state for every draft position.
             num_speculative_blocks=(
-                0 if sonar_config.cache_config.use_replayssm else sonar_config.num_speculative_tokens
+                0 if cache_config.use_replayssm or compact else sonar_config.num_speculative_tokens
             ),
         )
 

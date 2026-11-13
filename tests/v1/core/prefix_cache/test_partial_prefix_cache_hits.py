@@ -191,6 +191,8 @@ def test_dcp_fine_hit_retention_uses_hash_alignment(
         mamba_partial_cache_hit=True,
         mamba_shared_prefix_checkpoint=False,
         mamba_has_prefill_checkpoint_blocks=bool(checkpoint_blocks),
+        mamba_checkpoints=None,
+        mamba_prefill_export=False,
         mamba_prefill_checkpoint_alignment=16,
     )
     producer = make_request("producer", list(range(prompt_tokens)), hash_block_size, sha256)
@@ -243,6 +245,8 @@ def test_mamba_align_split_partial_tail_schedule(dcp_world_size: int):
         mamba_partial_cache_hit=True,
         mamba_shared_prefix_checkpoint=False,
         mamba_has_prefill_checkpoint_blocks=False,
+        mamba_checkpoints=None,
+        mamba_prefill_export=False,
     )
     split = Scheduler._mamba_block_aligned_split
 
@@ -292,6 +296,8 @@ def test_mamba_align_split_when_block_exceeds_scheduling_budget():
         mamba_partial_cache_hit=False,
         mamba_shared_prefix_checkpoint=False,
         mamba_has_prefill_checkpoint_blocks=False,
+        mamba_checkpoints=None,
+        mamba_prefill_export=False,
     )
     req = make_request("0", [0] * prompt_length, 32, sha256)
     split = Scheduler._mamba_block_aligned_split
@@ -332,6 +338,8 @@ def test_mamba_align_split_when_block_exceeds_long_prefill_threshold():
         mamba_partial_cache_hit=False,
         mamba_shared_prefix_checkpoint=False,
         mamba_has_prefill_checkpoint_blocks=False,
+        mamba_checkpoints=None,
+        mamba_prefill_export=False,
     )
     req = make_request("0", [0] * prompt_length, 32, sha256)
     split = Scheduler._mamba_block_aligned_split
@@ -581,10 +589,10 @@ def test_partial_hit_then_internal_checkpoint_uses_distinct_mamba_blocks():
         num_prefill_checkpoint_blocks=1,
     )
 
-    # The producer ends inside its first physical block, so it exports a
-    # partial tail. After realignment, the replay exports state@96 with a
-    # 64-token offset that satisfies the backend's 16-token alignment.
-    owner = make_request("owner", list(range(16)), hash_block_size, sha256)
+    # Stop the producer's first chunk at a reusable hash boundary, leaving
+    # one prompt token for logits. After realignment, the replay exports
+    # state@96 with a 64-token offset satisfying the backend's alignment.
+    owner = make_request("owner", list(range(17)), hash_block_size, sha256)
     computed_blocks, num_computed, _ = manager.get_computed_blocks(owner)
     assert manager.allocate_slots(owner, 16, num_computed, computed_blocks) is not None
     manager.free(owner)
@@ -1931,6 +1939,8 @@ def test_mamba_align_split_stops_below_eagle_proof_boundary():
         mamba_partial_cache_hit=True,
         mamba_shared_prefix_checkpoint=False,
         mamba_has_prefill_checkpoint_blocks=False,
+        mamba_checkpoints=None,
+        mamba_prefill_export=False,
     )
     split = Scheduler._mamba_block_aligned_split
 

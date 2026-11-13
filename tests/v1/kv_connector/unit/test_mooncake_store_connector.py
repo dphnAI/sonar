@@ -107,6 +107,21 @@ def _make_kv_cache_config() -> KVCacheConfig:
     )
 
 
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    "extra_config",
+    [{"frontier_write_through": True}, {"unit_policy_url": "http://localhost:9000"}],
+)
+def test_rejects_unsupported_flashstates_host_tier(extra_config):
+    config = create_sonar_config(
+        kv_connector="MooncakeStoreConnector",
+        kv_role="kv_both",
+        kv_connector_extra_config=extra_config,
+    )
+    with pytest.raises(ValueError, match="FlashStates host-tier"):
+        mooncake_store_connector.MooncakeStoreConnector(config, KVConnectorRole.SCHEDULER, _make_kv_cache_config())
+
+
 def _make_qsa_hybrid_kv_cache_config(mamba_mode: str):
     full_spec = FullAttentionSpec(block_size=800, num_kv_heads=8, head_size=64, dtype=None)
     qsa_spec = CircularBufferSpec(

@@ -568,6 +568,8 @@ def _make_decode_norm_weight_loader(
 
 
 class KimiK3DeltaAttention(GatedDeltaNetAttention):
+    supports_compact_spec_state = True
+
     def get_attn_backend(self) -> type[AttentionBackend]:
         return KimiK3KDAAttentionBackend
 

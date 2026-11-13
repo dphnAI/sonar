@@ -158,3 +158,25 @@ def test_builder_emits_nothing_outside_align_mode():
     meta = _build(builder, seq_lens=[900], query_lens=[900])
 
     assert meta.checkpoint_chunk_idx is None
+
+
+def test_explicit_checkpoint_splits_resumed_prefill_at_selected_position():
+    builder = _create_mamba2_builder()
+    common = create_common_attn_metadata(
+        BatchSpec(seq_lens=[1200], query_lens=[944]),
+        MAMBA_BLOCK_SIZE,
+        DEVICE,
+        arange_block_indices=True,
+    ).replace(
+        is_prefilling=torch.ones(1, dtype=torch.bool),
+        prefill_checkpoint_positions=[768],
+    )
+    meta = builder.build(common_prefix_len=0, common_attn_metadata=common)
+    assert meta.checkpoint_meta is not None
+    assert meta.checkpoint_chunk_idx is not None
+    assert meta.cu_chunk_seqlen_p is not None
+    assert meta.checkpoint_meta.offsets == [512]
+    checkpoint_chunk = meta.checkpoint_chunk_idx[0]
+    assert meta.cu_chunk_seqlen_p[checkpoint_chunk + 1].item() == 512
+    # Destination is the reserved penultimate page, not position // block size.
+    assert meta.checkpoint_meta.state_indices.item() == common.block_table_tensor[0, 3].item()

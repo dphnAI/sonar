@@ -68,6 +68,7 @@ from sonar.model_executor.models.interfaces import (
     IsHybrid,
     MambaStateShapes,
     MixtureOfExperts,
+    SupportsCompactSpecState,
     SupportsEagle3,
     SupportsEncoderCudaGraph,
     SupportsMultiModal,
@@ -1409,6 +1410,7 @@ class KimiLinearForCausalLM(
     IsHybrid,
     SupportsEagle3,
     SupportsReplaySSM,
+    SupportsCompactSpecState,
 ):
     def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
@@ -1569,6 +1571,7 @@ class KimiK3ForConditionalGeneration(
     HasInnerState,
     IsHybrid,
     SupportsReplaySSM,
+    SupportsCompactSpecState,
     GQADraftKVCacheGrouping,
 ):
     """Kimi-K3 model with Kimi-K2.5 vision and KimiLinear text."""

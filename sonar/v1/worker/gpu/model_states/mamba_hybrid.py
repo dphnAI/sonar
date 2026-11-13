@@ -21,6 +21,7 @@ from sonar.v1.attention.backends.short_conv_attn import (
     PleShortConvAttentionMetadataBuilder,
     ShortConvAttentionMetadataBuilder,
 )
+from sonar.v1.core.kv_cache_utils import MambaStateGather
 from sonar.v1.core.sched.output import NewRequestData
 from sonar.v1.kv_cache_interface import KVCacheConfig, MambaSpec
 from sonar.v1.worker.gpu.attn_utils import build_attn_metadata
@@ -46,9 +47,14 @@ class MambaHybridAttnMetadata(ModelSpecificAttnMetadata):
     is_prefilling: torch.Tensor
     num_accepted_tokens: torch.Tensor | None = None
     num_decode_draft_tokens_cpu: torch.Tensor | None = None
+    # Absolute checkpoint offsets in current batch-row order.
+    prefill_checkpoint_positions: list[int] | None = None
 
     def get_extra_common_attn_kwargs(self, kv_cache_group_id: int, num_reqs: int) -> dict[str, Any]:
-        return {"is_prefilling": self.is_prefilling[:num_reqs]}
+        kwargs: dict[str, Any] = {"is_prefilling": self.is_prefilling[:num_reqs]}
+        if self.prefill_checkpoint_positions is not None:
+            kwargs["prefill_checkpoint_positions"] = self.prefill_checkpoint_positions[:num_reqs]
+        return kwargs
 
     def get_extra_attn_kwargs(self, attn_metadata_builder: Any, num_reqs: int) -> dict[str, Any]:
         if not isinstance(
@@ -166,6 +172,10 @@ class MambaHybridModelState(DefaultModelState):
             [block_tables.block_tables[gid].gpu for gid in mamba_group_ids],
             [block_tables.input_block_tables[gid] for gid in mamba_group_ids],
         )
+
+    def apply_mamba_state_gathers(self, gathers: list[MambaStateGather]) -> None:
+        assert self._align_mode and self._mamba_ctx is not None
+        self._mamba_ctx.run_state_gathers(gathers)
 
     def preprocess_state(
         self,
@@ -304,10 +314,16 @@ class MambaHybridModelState(DefaultModelState):
                 for group_idx, builder in aligned_index_builders:
                     builder.mamba_aligned_state_indices = all_group_indices[group_idx]
 
+        exports = input_batch.prefill_checkpoint_positions
         mamba_attn_metadata = MambaHybridAttnMetadata(
             is_prefilling=is_prefilling,
             num_accepted_tokens=num_accepted_tokens,
             num_decode_draft_tokens_cpu=num_decode_draft_tokens_cpu,
+            prefill_checkpoint_positions=(
+                [exports.get(req_id, 0) for req_id in input_batch.req_ids[:num_reqs]]
+                if exports and not for_capture
+                else None
+            ),
         )
         attn_metadata = build_attn_metadata(
             attn_groups=attn_groups,

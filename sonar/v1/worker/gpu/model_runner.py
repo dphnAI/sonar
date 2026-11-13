@@ -185,6 +185,7 @@ from sonar.v1.worker.gpu.spec_decode.rejection_sampler import (
     get_max_chunk_logits,
 )
 from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.v1.worker.gpu.spec_decode.stop_conditions import StopConditions
 from sonar.v1.worker.gpu.spec_decode.utils import (
     DraftTokensHandler,
     get_drafter_hidden_states,
@@ -353,6 +354,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         # model_state exists (num_new_sampled_tokens_per_step from ModelState).
         self.sampler: Sampler | None = None
         self.rejection_sampler: RejectionSampler | None = None
+        self.stop_conditions: StopConditions | None = None
         self.batch_sharder: BatchSharder | None = None
         # Full-vocab draft logits, rebuilt per batch only when verification
         # falls back from vocab-parallel sampling.
@@ -526,19 +528,30 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                     **sampler_kwargs,
                 )
             custom = self.model_state.custom_sampler(self.sampler)
+            truncate_at_stop = (
+                self.speculative_config is not None and self.speculative_config.truncate_acceptance_at_stop
+            )
 
             if custom:
+                if truncate_at_stop:
+                    raise ValueError(
+                        "speculative_config.truncate_acceptance_at_stop needs "
+                        "Sonar's rejection sampler; this model supplies its own"
+                    )
                 assert draft_logits is None or draft_logits.row_mapping is None, (
                     "A custom rejection sampler cannot read batch-sharded draft logits"
                 )
                 self.sonar_config._check_supports_watermarking(custom_sampler=True)
                 self.sampler, self.rejection_sampler = custom
             elif self.speculative_config is not None:
+                if truncate_at_stop:
+                    self.stop_conditions = StopConditions(self.req_states)
                 self.rejection_sampler = RejectionSampler(
                     self.sampler,
                     self.speculative_config,
                     self.device,
                     watermark_key=speculative_target_watermark_key(self.sonar_config.watermark_config),
+                    stop_conditions=self.stop_conditions,
                 )
             self.prompt_logprobs_worker = PromptLogprobsWorker(
                 self.max_num_reqs,
@@ -1315,16 +1328,23 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             if self.is_last_pp_rank and new_req_data.sampling_params is not None:
                 assert self.sampler is not None
                 self.sampler.add_request(req_index, new_req_data.sampling_params)
+                if self.stop_conditions is not None:
+                    self.stop_conditions.add_request(req_index, new_req_data.sampling_params)
                 assert self.prompt_logprobs_worker is not None
                 self.prompt_logprobs_worker.add_request(req_id, req_index, new_req_data.sampling_params)
 
         if scheduler_output.scheduled_new_reqs:
             self.req_states.apply_staged_writes()
             self.model_state.apply_staged_writes()
+            if self.stop_conditions is not None:
+                self.stop_conditions.apply_staged_writes()
             if self.sampler is not None:
                 self.sampler.apply_staged_writes()
 
     def update_requests(self, scheduler_output: SchedulerOutput) -> None:
+        # Complete published states before any copies or readers consume them.
+        if scheduler_output.mamba_state_gathers:
+            self.model_state.apply_mamba_state_gathers(scheduler_output.mamba_state_gathers)
         # Add new blocks and update num_computed_tokens for the existing requests.
         reqs = scheduler_output.scheduled_cached_reqs
         num_computed_tokens_np = self.req_states.num_computed_tokens_np
@@ -1613,6 +1633,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             prompt_lens=prompt_lens,
             fast_prefill=fast_prefill,
             max_query_len=(int(num_scheduled_tokens_upper_bound.max()) if adaptive_verification is not None else None),
+            prefill_checkpoint_positions=scheduler_output.prefill_checkpoint_positions,
         )
         if self.pcp_manager is not None:
             input_batch = self.pcp_manager.partition_batch(input_batch, batch_desc)

@@ -184,6 +184,31 @@ sonar serve MODEL --no-enable-prefix-caching
 Keep it enabled unless the target platform or a specific feature requires it to
 be disabled.
 
+### Hybrid-model checkpoints
+
+[FlashStates](https://github.com/FutureMLS-Lab/FlashStates) retains recurrent
+checkpoints at completed conversation turns, reducing repeated prefill. The
+checkpoints also consume GPU cache capacity.
+
+For Qwen3.5-4B on B300 or RTX 6000 Blackwell:
+
+```bash
+sonar serve Qwen/Qwen3.5-4B \
+  --max-num-seqs 32 \
+  --block-size 1024 --mamba-block-size 1024 \
+  --mamba-ssm-cache-dtype float32 \
+  --mamba-frontier-checkpoint --mamba-prefill-export
+```
+
+Attention and recurrent-state cache groups must have matching logical block
+sizes. Prefill export requires a supporting backend. Context parallelism is
+not supported.
+
+For cost-aware eviction, add `--prefix-cache-eviction gds` and
+`--prefill-cost-coefficients D E`, fitted to prefill timings. `1 0` gives a
+linear token-count cost model. `--prefix-cache-leaf-last` prefers retaining
+each session's newest checkpoint.
+
 ## Quantize model weights
 
 Quantized weights reduce model memory. The saved memory can hold a larger KV

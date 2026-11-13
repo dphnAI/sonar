@@ -149,6 +149,195 @@ def test_fused_recurrent_kda_strided_inputs_bit_identical_to_contiguous(num_seqs
     torch.testing.assert_close(state, state_ref, rtol=0, atol=0)
 
 
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="GLM compact state uses the NVIDIA RecoverSSM path")
+@pytest.mark.parametrize("state_dtype", [torch.float32, torch.bfloat16])
+@torch.inference_mode()
+def test_glm_recoverssm_commits_only_accepted_updates(state_dtype):
+    from types import SimpleNamespace
+
+    from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+    from sonar.models.glm5next.common.kda import _recoverssm_view
+    from sonar.models.kimi_k3.nvidia.ops.recoverssm import (
+        KDARecoverSSMCommitContext,
+        KDARecoverSSMRecords,
+        kda_recoverssm_verify,
+    )
+
+    torch.manual_seed(5)
+    num_seqs, window, history = 3, 3, 3
+    device = torch.device("cuda")
+    inputs, state = make_inputs(num_seqs, window, device)
+    state = state.to(state_dtype)
+    initial_state = state.clone()
+    indices = inputs["ssm_state_indices"][:, 0].contiguous()
+    accepted = torch.tensor([1, 2, 3], dtype=torch.int32, device=device)
+    conv = torch.randn(state.shape[0], 3 * H * D, history + window - 1, device=device, dtype=torch.bfloat16)
+    initial_conv = conv.clone()
+    records = KDARecoverSSMRecords.allocate(num_seqs, H, window, D, torch.bfloat16, device)
+    # GLM stores A_log broadcast-shaped, unlike Kimi's flat head vector.
+    layer = SimpleNamespace(
+        kv_cache=(conv if is_conv_state_dim_first() else conv.transpose(-1, -2), state),
+        recoverssm_records=records,
+        A_log=inputs["a_log"].view(1, 1, H, 1),
+        dt_bias=inputs["g_bias"],
+        local_num_heads=H,
+        head_dim=D,
+        kda_lower_bound=LOWER_BOUND,
+    )
+    view = _recoverssm_view(layer)
+    output = torch.empty_like(inputs["v"])
+    kda_recoverssm_verify(
+        q=inputs["q"],
+        k=inputs["k"],
+        v=inputs["v"],
+        raw_g=inputs["g"],
+        raw_beta=inputs["beta"],
+        A_log=view.A_log,
+        dt_bias=view.dt_bias,
+        lower_bound=view.gate_lower_bound,
+        checkpoint_state=state,
+        records=records,
+        query_start_loc=inputs["cu_seqlens"],
+        state_indices=indices,
+        spec_query_len=window,
+        out=output,
+    )
+    torch.testing.assert_close(state, initial_state, rtol=0, atol=0)
+    context = KDARecoverSSMCommitContext.create([view], spec_query_len=window, max_num_reqs=num_seqs)
+    context.commit(accepted, indices, inputs["cu_seqlens"])
+
+    expected_state = initial_state.clone()
+    expected_conv = initial_conv.clone()
+    for row, count in enumerate(accepted.tolist()):
+        slot = indices[row]
+        tokens = slice(row * window, (row + 1) * window)
+        expected_out, _ = naive_recurrent_kda(
+            inputs["q"][0, tokens],
+            inputs["k"][0, tokens],
+            inputs["v"][0, tokens],
+            inputs["g"][0, tokens],
+            inputs["beta"][0, tokens],
+            view.A_log,
+            view.dt_bias.view(H, D),
+            initial_state[slot].float(),
+        )
+        torch.testing.assert_close(output[0, tokens].float(), expected_out, rtol=3e-2, atol=3e-2)
+        accepted_tokens = slice(row * window, row * window + count)
+        _, committed = naive_recurrent_kda(
+            inputs["q"][0, accepted_tokens],
+            inputs["k"][0, accepted_tokens],
+            inputs["v"][0, accepted_tokens],
+            inputs["g"][0, accepted_tokens],
+            inputs["beta"][0, accepted_tokens],
+            view.A_log,
+            view.dt_bias.view(H, D),
+            initial_state[slot].float(),
+        )
+        expected_state[slot] = committed.to(state_dtype)
+        expected_conv[slot, :, :history] = initial_conv[slot, :, count - 1 : count - 1 + history]
+    torch.testing.assert_close(state.float(), expected_state.float(), rtol=2e-2, atol=2e-2)
+    torch.testing.assert_close(conv, expected_conv, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="GLM compact state uses the NVIDIA RecoverSSM path")
+@pytest.mark.parametrize("state_dtype", [torch.float32, torch.bfloat16])
+@torch.inference_mode()
+def test_glm_compact_verify_matches_per_position(monkeypatch, state_dtype):
+    from types import SimpleNamespace
+
+    from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+    from sonar.models.glm5next.common import kda
+    from sonar.models.kimi_k3.nvidia.kda_metadata import KimiK3KDAMetadata
+    from sonar.models.kimi_k3.nvidia.ops.recoverssm import (
+        KDARecoverSSMCommitContext,
+        KDARecoverSSMRecords,
+    )
+
+    torch.manual_seed(7)
+    device = torch.device("cuda")
+    num_seqs, window, history = 2, 3, 3
+    inputs, initial_state = make_inputs(num_seqs, window, device)
+    initial_state = initial_state.to(state_dtype)
+    slots = inputs["ssm_state_indices"]
+    qkv = torch.cat([inputs[name][0].flatten(1) for name in ("q", "k", "v")], dim=-1)
+    initial_conv = torch.randn(
+        initial_state.shape[0],
+        3 * H * D,
+        history + window - 1,
+        dtype=torch.bfloat16,
+        device=device,
+    )
+    weights = torch.randn(3 * H * D, 1, history + 1, device=device) * 0.1
+
+    def run(compact):
+        layer = object.__new__(kda.Glm5NextLinearAttention)
+        torch.nn.Module.__init__(layer)
+        layer.prefix = "layer.0"
+        layer.local_num_heads, layer.head_dim = H, D
+        layer.local_projection_size = H * D
+        layer.num_spec = window - 1
+        layer.kda_safe_gate = True
+        layer.kda_lower_bound = LOWER_BOUND
+        layer._conv_state_dim_first = is_conv_state_dim_first()
+        layer.conv1d = SimpleNamespace(weight=weights, bias=None)
+        layer.A_log = inputs["a_log"].view(1, 1, H, 1)
+        layer.dt_bias = inputs["g_bias"]
+        conv = initial_conv.clone()
+        layer.kv_cache = (
+            conv if layer._conv_state_dim_first else conv.transpose(-1, -2),
+            initial_state.clone(),
+        )
+        layer.recoverssm_records = (
+            KDARecoverSSMRecords.allocate(num_seqs, H, window, D, torch.bfloat16, device) if compact else None
+        )
+        metadata = KimiK3KDAMetadata(
+            num_prefills=0,
+            num_prefill_tokens=0,
+            num_decodes=0,
+            num_decode_tokens=0,
+            num_spec_decodes=num_seqs,
+            num_spec_decode_tokens=num_seqs * window,
+            num_actual_tokens=num_seqs * window,
+            spec_query_start_loc=inputs["cu_seqlens"],
+            spec_state_indices_tensor=slots[:, :1].contiguous() if compact else slots,
+            spec_sequence_masks=None if compact else torch.ones(num_seqs, dtype=torch.bool, device=device),
+            num_accepted_tokens=torch.ones(num_seqs, dtype=torch.int32, device=device),
+        )
+        monkeypatch.setattr(
+            kda,
+            "get_forward_context",
+            lambda: SimpleNamespace(attn_metadata={layer.prefix: metadata}),
+        )
+        out = torch.empty_like(inputs["v"])
+        layer._forward(qkv.clone(), inputs["g"], inputs["beta"], out)
+        return layer, out, conv
+
+    reference, expected_output, expected_conv = run(False)
+    compact, output, conv = run(True)
+    torch.testing.assert_close(output.float(), expected_output.float(), rtol=3e-2, atol=3e-3)
+    torch.testing.assert_close(conv, expected_conv, rtol=0, atol=0)
+    torch.testing.assert_close(compact.kv_cache[1], initial_state, rtol=0, atol=0)
+
+    accepted = torch.tensor([1, window], dtype=torch.int32, device=device)
+    context = KDARecoverSSMCommitContext.create(
+        [kda._recoverssm_view(compact)],
+        spec_query_len=window,
+        max_num_reqs=num_seqs,
+    )
+    context.commit(accepted, slots[:, 0].contiguous(), inputs["cu_seqlens"])
+    committed_conv = expected_conv.clone()
+    for row, count in enumerate(accepted.tolist()):
+        first = slots[row, 0]
+        torch.testing.assert_close(
+            compact.kv_cache[1][first].float(),
+            reference.kv_cache[1][slots[row, count - 1]].float(),
+            rtol=2e-2,
+            atol=2e-2,
+        )
+        committed_conv[first, :, :history] = expected_conv[first, :, count - 1 : count - 1 + history]
+    torch.testing.assert_close(conv, committed_conv, rtol=0, atol=0)
+
+
 @pytest.mark.skipif(
     not current_platform.is_cuda_alike(),
     reason="Both implementations require zero-copy token-strided layouts",
@@ -280,6 +469,8 @@ def test_prefill_checkpoint_resumes_suffix(monkeypatch, dim_first, num_spec, off
     layer.local_projection_size = heads * D
     layer.kda_safe_gate = True
     layer.kda_lower_bound = -5.0
+    layer.num_spec = num_spec
+    layer.recoverssm_records = None
     layer.kda_prefill_backend = "flashkda"
     layer._conv_state_dim_first = dim_first
     layer.conv1d = SimpleNamespace(weight=torch.randn(width, 1, 4, device=device) * 0.1, bias=None)

@@ -543,6 +543,10 @@ class SpeculativeConfig:
     activation scales on the platform's FP8 linear kernel; "nvfp4" is
     weight-only on the platform's W4A16 kernel. The target verifies with its
     own head, so only the acceptance length can change."""
+    truncate_acceptance_at_stop: bool = False
+    """Truncate accepted draft tokens at EOS, stop-token IDs, or the output
+    length limit so recurrent state matches the returned sequence. Does not
+    mirror stop strings or repetition detection."""
     use_local_argmax_reduction: bool = False
     """Use vocab-parallel local argmax instead of all-gathering full logits
     for draft token generation. Reduces communication from O(vocab_size) to

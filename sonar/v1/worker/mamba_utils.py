@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import dataclasses
+from collections.abc import Sequence
 from typing import Any
 
+import numpy as np
 import torch
 
 from sonar.logger import init_logger
@@ -16,7 +18,9 @@ from sonar.model_executor.layers.mamba.mamba_utils import (
 )
 from sonar.triton_utils import tl, triton
 from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.utils.torch_utils import async_tensor_h2d
 from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.core.kv_cache_utils import MambaStateGather
 from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -1078,6 +1082,63 @@ class MambaSpecDecodeGPUContext:
             CONV_STATE_DIM_FIRST=is_conv_state_dim_first(),
             HAS_IDX_MAPPING=idx_mapping is not None,
             ZERO_TEMPORAL_TOKEN_BIAS=self.replayssm is not None,
+            TEMPORAL_TILES=_TEMPORAL_TILES,
+        )
+
+    def run_state_gathers(self, gathers: Sequence[MambaStateGather]) -> None:
+        """Fold explicit draft block IDs into published states before reuse.
+
+        Synthetic rows [dst, dst, src, ...] let the existing fused copy shift
+        dst's convolution window and copy src's recurrent state independently
+        of request slots, which may already belong to new requests.
+        """
+        if not gathers:
+            return
+        assert self.is_initialized
+        num_rows = len(gathers)
+        width = 2 + max(gather.column for gather in gathers)
+        local_index = {gid: i for i, gid in enumerate(self.mamba_group_ids)}
+        group_ids = sorted(local_index)
+        tables = np.empty((self.num_groups, num_rows, width), dtype=np.int32)
+        for row, gather in enumerate(gathers):
+            assert gather.column > 0
+            assert sorted(gather.group_ids) == group_ids
+            for gid, dst, src in zip(gather.group_ids, gather.dst_block_ids, gather.src_block_ids, strict=True):
+                tables[local_index[gid], row, :2] = dst
+                tables[local_index[gid], row, 2:] = src
+        device = self.block_table_ptrs.device
+        # Raw pointers remain live through the launch on the current stream.
+        tables_gpu = async_tensor_h2d(tables, device=device)
+        group_stride = tables_gpu.stride(0) * tables_gpu.element_size()
+        table_ptrs = async_tensor_h2d(
+            [_reinterpret_u64_as_i64(tables_gpu.data_ptr() + i * group_stride) for i in range(self.num_groups)],
+            device=device,
+            dtype=torch.int64,
+        )
+        copy_indices = async_tensor_h2d(
+            [[0] * num_rows, [1] * num_rows, [gather.column for gather in gathers]],
+            device=device,
+            dtype=torch.int32,
+        )
+        precopy_mamba_align_fused_kernel[(num_rows, self.num_states, _TEMPORAL_TILES)](
+            copy_indices[0],
+            copy_indices[1],
+            copy_indices[2],
+            table_ptrs,
+            width,
+            self.state_base_addrs,
+            self.state_block_strides,
+            self.state_elem_sizes,
+            self.state_inner_sizes,
+            self.state_conv_widths,
+            self.state_group_indices,
+            self.state_dim_row_count,
+            self.state_dim_row_stride,
+            None,
+            num_rows,
+            COPY_BLOCK_SIZE=1024,
+            CONV_STATE_DIM_FIRST=is_conv_state_dim_first(),
+            HAS_IDX_MAPPING=False,
             TEMPORAL_TILES=_TEMPORAL_TILES,
         )
 

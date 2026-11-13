@@ -1210,6 +1210,28 @@ def supports_replayssm(
 
 
 @runtime_checkable
+class SupportsCompactSpecState(Protocol):
+    """Every recurrent layer verifies drafts from one state and commits the
+    accepted updates after sampling, without per-draft recurrent states."""
+
+    supports_compact_spec_state: ClassVar[Literal[True]] = True
+
+
+@overload
+def supports_compact_spec_state(model: type[object]) -> TypeIs[type[SupportsCompactSpecState]]: ...
+
+
+@overload
+def supports_compact_spec_state(model: object) -> TypeIs[SupportsCompactSpecState]: ...
+
+
+def supports_compact_spec_state(
+    model: type[object] | object,
+) -> TypeIs[type[SupportsCompactSpecState]] | TypeIs[SupportsCompactSpecState]:
+    return getattr(model, "supports_compact_spec_state", False)
+
+
+@runtime_checkable
 class SupportsCrossEncoding(Protocol):
     """The interface required for all models that support cross encoding."""
 

@@ -27,8 +27,11 @@ import torch
 
 from sonar.model_executor.layers.mamba import mamba_utils as layer_mamba_utils
 from sonar.platforms import current_platform
+from sonar.v1.core.kv_cache_utils import MambaStateGather
+from sonar.v1.worker import mamba_utils as worker_mamba_utils
 from sonar.v1.worker.mamba_utils import (
     _TEMPORAL_TILES,
+    MambaSpecDecodeGPUContext,
     postprocess_mamba_fused_kernel,
     precopy_mamba_align_fused_kernel,
 )
@@ -136,6 +139,58 @@ def _reference(convs, ssms, bt, src_col, dst_col, bias, num_reqs, conv_dim_first
                 conv_ref[layer][dblk, : CONV_WIDTH - tb] = conv_pre[layer][sblk, tb:]
             ssm_ref[layer][dblk] = ssm_pre[layer][tblk]
     return conv_ref, ssm_ref
+
+
+@_parametrize("conv_state_dim_first", [False, True])
+@_cuda_required
+def test_state_gathers_fold_explicit_blocks_across_groups(monkeypatch, conv_state_dim_first):
+    device = torch.device("cuda")
+    torch.manual_seed(0)
+    convs, ssms = _build_state(16, device, conv_state_dim_first)
+    # Two groups use different block IDs; gather order is not local group order.
+    gathers = [
+        MambaStateGather(1, (9, 5), (8, 3), (10, 4)),
+        MambaStateGather(2, (5, 9), (7, 11), (9, 13)),
+    ]
+    conv_ref = [c.clone() for c in convs]
+    ssm_ref = [s.clone() for s in ssms]
+    for gather in gathers:
+        blocks = dict(zip(gather.group_ids, zip(gather.dst_block_ids, gather.src_block_ids)))
+        for layer in range(NUM_LAYERS):
+            dst, src = blocks[5 if layer < 2 else 9]
+            column = gather.column
+            if conv_state_dim_first:
+                conv_ref[layer][dst, :, : CONV_WIDTH - column] = convs[layer][dst, :, column:]
+            else:
+                conv_ref[layer][dst, : CONV_WIDTH - column] = convs[layer][dst, column:]
+            ssm_ref[layer][dst] = ssms[layer][src]
+    base, blk_stride, elem, inner, width, group, drc, drs = _build_meta(convs, ssms, device, conv_state_dim_first)
+    group[4:] = 1
+    context = MambaSpecDecodeGPUContext(
+        state_base_addrs=base,
+        state_block_strides=blk_stride,
+        state_elem_sizes=elem,
+        state_inner_sizes=inner,
+        state_conv_widths=width,
+        state_group_indices=group,
+        state_dim_row_count=drc,
+        state_dim_row_stride=drs,
+        block_size=16,
+        num_states=NUM_LAYERS * 2,
+        mamba_group_ids=[5, 9],
+        num_groups=2,
+        num_accepted_tokens_snapshot=torch.ones(1, dtype=torch.int32, device=device),
+        # Null request-table pointers prove the gather only reads explicit IDs.
+        block_table_ptrs=torch.zeros(2, dtype=torch.int64, device=device),
+        aligned_index_block_table_ptrs=torch.zeros(2, dtype=torch.int64, device=device),
+        is_initialized=True,
+    )
+    monkeypatch.setattr(worker_mamba_utils, "is_conv_state_dim_first", lambda: conv_state_dim_first)
+    context.run_state_gathers(gathers)
+    torch.cuda.synchronize()
+    for layer in range(NUM_LAYERS):
+        torch.testing.assert_close(convs[layer], conv_ref[layer], rtol=0, atol=0)
+        torch.testing.assert_close(ssms[layer], ssm_ref[layer], rtol=0, atol=0)
 
 
 @_parametrize("conv_state_dim_first", [False, True])

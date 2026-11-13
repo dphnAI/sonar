@@ -12,7 +12,7 @@ from enum import IntEnum, StrEnum, unique
 from fractions import Fraction
 from functools import cached_property
 from math import prod
-from typing import TYPE_CHECKING, Self, TypeVar
+from typing import TYPE_CHECKING, Literal, Self, TypeVar
 
 import torch
 
@@ -962,6 +962,16 @@ class CircularBufferSpec(AttentionSpec):
     drafts included, before acceptance is known, while the next step still
     reads the open group's committed keys from the ring.
     """
+
+    resume_catchup: Literal["decode", "prefill"] | None = None
+    """Paths that can restore an open group; None disallows frontier restore."""
+
+    compression_ratio: int | None = None
+    """Tokens per compression group, independent of speculative ring capacity."""
+
+    @property
+    def group_size(self) -> int:
+        return self.compression_ratio or self.block_size
 
     @property
     def block_table_token_alignment(self) -> int | None:

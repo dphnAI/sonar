@@ -2741,6 +2741,8 @@ def test_hybrid_cache_mamba_align_shared_prefix_detection():
         mamba_partial_cache_hit=False,
         mamba_shared_prefix_checkpoint=False,
         mamba_has_prefill_checkpoint_blocks=False,
+        mamba_checkpoints=None,
+        mamba_prefill_export=False,
     )
     num_new_tokens_adjusted = Scheduler._mamba_block_aligned_split(
         self=mock,

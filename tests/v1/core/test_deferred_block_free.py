@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 
 from sonar.config import SonarConfig
-from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy, MambaStateGather
 from sonar.v1.core.sched.output import SchedulerOutput
 from sonar.v1.metrics.stats import PrefixCacheStats
 from sonar.v1.outputs import ModelRunnerOutput
@@ -622,3 +622,40 @@ def test_abort_deferred_async_load_frees_after_inflight_step():
         scheduler.update_from_output(output, _make_model_runner_output(output))
     assert not scheduler.deferred_frees
     assert pool.get_num_free_blocks() > num_free_held
+
+
+@pytest.mark.parametrize("empty_step", [False, True])
+def test_mamba_gather_retentions_follow_execution_fence(empty_step: bool) -> None:
+    scheduler = _create_deferring_scheduler()
+    pool = scheduler.kv_cache_manager.block_pool
+    source, target = pool.get_new_blocks(2)
+    gather = MambaStateGather(
+        column=1,
+        group_ids=(0,),
+        dst_block_ids=(target.block_id,),
+        src_block_ids=(source.block_id,),
+    )
+    checkpoints = MagicMock()
+    checkpoints.speculative = None
+    checkpoints.take_state_gathers.return_value = ([gather], [source, target])
+    checkpoints.request_finished.return_value = None
+    scheduler.mamba_checkpoints = checkpoints
+    (request,) = create_requests(1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=5)
+    if not empty_step:
+        scheduler.add_request(request)
+    output = scheduler.schedule()
+    assert output.mamba_state_gathers == [gather]
+    assert source.ref_cnt == target.ref_cnt == 1
+    assert len(scheduler.deferred_frees) == 1
+
+    checkpoints.take_state_gathers.return_value = ([], [])
+    if empty_step:
+        # No model output retires an empty step. Its operations are protected
+        # through the next non-empty step on the same execution stream.
+        assert output.total_num_scheduled_tokens == 0
+        scheduler.add_request(request)
+        output = scheduler.schedule()
+        assert source.ref_cnt == target.ref_cnt == 1
+    scheduler.update_from_output(output, _make_model_runner_output(output))
+    assert source.ref_cnt == target.ref_cnt == 0
+    assert not scheduler.deferred_frees

@@ -684,6 +684,15 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
         )
         self.counter_prefix_cache_hits = create_metric_per_engine(counter_prefix_cache_hits, per_engine_labelvalues)
 
+        self.counter_prefix_cache_frontier_hits: dict[int, Counter] | None = None
+        if sonar_config.cache_config.mamba_frontier_checkpoint:
+            frontier_hits = self._counter_cls(
+                name="sonar:prefix_cache_frontier_hits",
+                documentation="Cached tokens served beyond the block-aligned hit by recurrent frontier checkpoints.",
+                labelnames=labelnames,
+            )
+            self.counter_prefix_cache_frontier_hits = create_metric_per_engine(frontier_hits, per_engine_labelvalues)
+
         #
         # External - KV connector prefix cache
         #
@@ -1114,6 +1123,10 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
 
             self.counter_prefix_cache_queries[engine_idx].inc(scheduler_stats.prefix_cache_stats.queries)
             self.counter_prefix_cache_hits[engine_idx].inc(scheduler_stats.prefix_cache_stats.hits)
+            if self.counter_prefix_cache_frontier_hits is not None:
+                self.counter_prefix_cache_frontier_hits[engine_idx].inc(
+                    scheduler_stats.prefix_cache_stats.frontier_hits
+                )
 
             labelvalues = self.per_engine_labelvalues[engine_idx]
             self.counter_prompt_tokens_cached_by_source.labels(*labelvalues, CacheHitSource.DEVICE.value).inc(

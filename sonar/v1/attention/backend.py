@@ -446,6 +446,10 @@ class CommonAttentionMetadata:
     (num_computed_tokens < num_prompt_tokens). Used by some backends to
     distinguish actual decodes from short extends."""
 
+    prefill_checkpoint_positions: list[int] | None = None
+    """(batch_size,) absolute Mamba checkpoint positions for non-final
+    prefill chunks; 0 for rows without an override, None when absent."""
+
     seq_lens_cpu_upper_bound: torch.Tensor | None = None
     """(batch_size,) CPU upper bound on seq_lens. Precise for prefill rows
     and for all rows outside async spec decode; optimistic for async-spec
@@ -532,6 +536,7 @@ class CommonAttentionMetadata:
             dcp_local_seq_lens=maybe_slice_reqs(self.dcp_local_seq_lens),
             dcp_local_seq_lens_cpu_upper_bound=maybe_slice_reqs(self.dcp_local_seq_lens_cpu_upper_bound),
             is_prefilling=maybe_slice_reqs(self.is_prefilling),
+            prefill_checkpoint_positions=maybe_slice_reqs(self.prefill_checkpoint_positions),
             req_idx=maybe_slice_reqs(self.req_idx),
             rswa_prefix_lens=maybe_slice_reqs(self.rswa_prefix_lens),
         )

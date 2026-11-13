@@ -95,6 +95,9 @@ pub struct PrefixCacheStats {
     /// `hits` split by the cache tier that supplied them (connector stats only).
     #[serde(default)]
     pub hits_by_source: CachedTokensBySource,
+    /// Cached tokens served beyond the ordinary block-aligned prefix hit.
+    #[serde(default)]
+    pub frontier_hits: u64,
 }
 
 /// Single KV cache block eviction sample.

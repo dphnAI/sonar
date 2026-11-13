@@ -522,3 +522,38 @@ def test_plan_flashinfer_checkpoints_selects_the_state_at_each_offset():
     # Row 1: state after 128 tokens of the first prefill. Row 3: after 192
     # tokens of the third prefill, whose states start at index 3.
     assert rows == [0, 1, 0, 5]
+
+
+@pytest.mark.parametrize("num_spec", [0, 3])
+def test_explicit_checkpoint_positions_select_non_spec_rows(num_spec):
+    builder, common, kwargs = _create_checkpoint_builder_and_batch(num_spec)
+    # A chunk can export earlier than the default position (96). The first
+    # row is a decode; the final prefill has an unaligned query start.
+    common = common.replace(prefill_checkpoint_positions=[32, 64, 80])
+    actual = builder.build(0, common, **kwargs)
+    checkpoint = actual.checkpoint
+    assert checkpoint is not None
+    assert checkpoint.request_rows is not None
+    assert checkpoint.offsets == ([64, 0] if num_spec else [0, 64, 0])
+    assert checkpoint.request_rows.tolist() == ([1, 2] if num_spec else [0, 1, 2])
+    assert checkpoint.state_indices[-2].item() == common.block_table_tensor[1, 0].item()
+
+    other_table = common.block_table_tensor + 100
+    regathered = checkpoint.regather_state_indices(other_table)
+    assert regathered.state_indices[-2].item() == other_table[1, 0].item()
+    torch.testing.assert_close(regathered.checkpoint_offsets, checkpoint.checkpoint_offsets)
+
+
+@pytest.mark.parametrize("position", [1, 17, 100, 112])
+def test_explicit_checkpoint_positions_still_require_valid_exports(position):
+    builder, common, kwargs = _create_checkpoint_builder_and_batch(3)
+    common = common.replace(prefill_checkpoint_positions=[0, position, 0])
+    assert builder.build(0, common, **kwargs).checkpoint is None
+
+
+def test_common_metadata_unpadding_slices_checkpoint_rows():
+    _, common, _ = _create_checkpoint_builder_and_batch(0)
+    common = common.replace(prefill_checkpoint_positions=[0, 64, 80])
+    unpadded = common.unpadded(num_actual_tokens=101, num_actual_reqs=2)
+    assert unpadded.prefill_checkpoint_positions == [0, 64]
+    assert common.prefill_checkpoint_positions == [0, 64, 80]

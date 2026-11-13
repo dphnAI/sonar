@@ -186,6 +186,11 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         assert kv_cache_config is not None, "kv_cache_config is required"
         self.kv_role = sonar_config.kv_transfer_config.kv_role
         extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config
+        if extra_config.get("frontier_write_through") or extra_config.get("unit_policy_url"):
+            raise ValueError(
+                "FlashStates host-tier options require its custom Mooncake store integration. "
+                "Sonar currently supports GPU-resident FlashStates checkpoints."
+            )
         save_decode_cache = extra_config.get("save_decode_cache", False)
         # Capacity-only: contributes its segment to the store pool but transfers
         # no KV, so the KV-cache-shape invariants below cannot be reached.
