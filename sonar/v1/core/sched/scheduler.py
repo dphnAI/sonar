@@ -817,7 +817,7 @@ class Scheduler(SchedulerInterface):
                 self.mamba_checkpoints is not None
                 and self.mamba_checkpoints.speculative is None
                 and request.num_computed_tokens > request.num_prompt_tokens
-                and request.num_computed_tokens % self.cache_config.block_size == 0
+                and request.num_computed_tokens % self.mamba_checkpoints.block_size == 0
             ):
                 sources = self.mamba_checkpoints.decode_boundary_sources(request)
                 if sources is not None:

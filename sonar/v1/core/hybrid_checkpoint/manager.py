@@ -107,15 +107,23 @@ def layout_groups(
                 f"indexer-ring groups only; group {group_id} is "
                 f"{type(manager).__name__}"
             )
-    if any(
-        coordinator.single_type_managers[group_id].block_size != coordinator.scheduler_block_size
-        for group_id in pages + states
-    ):
-        raise ValueError(
-            "mamba_frontier_checkpoint requires full-attention and Mamba groups with the scheduler block size"
-        )
     if not pages or not states:
         raise ValueError("mamba_frontier_checkpoint needs a full-attention and a Mamba group")
+    managers = coordinator.single_type_managers
+    state_block_size = managers[states[0]].block_size
+    # DCP shards attention pages but every recurrent rank consumes the full
+    # token history. State columns therefore keep their unscaled block size.
+    if (
+        any(managers[g].block_size != state_block_size for g in states)
+        or any(managers[g].block_size != coordinator.scheduler_block_size for g in pages)
+        or coordinator.scheduler_block_size % state_block_size
+    ):
+        raise ValueError(
+            "mamba_frontier_checkpoint requires full-attention groups with the "
+            "scheduler block size and uniform Mamba blocks dividing it"
+        )
+    if any(managers[g].kv_cache_spec.dcp_sharded for g in states + rings):
+        raise ValueError("mamba_frontier_checkpoint requires unsharded recurrent state and indexer rings")
     return pages, states, rings
 
 
@@ -158,8 +166,11 @@ def check_frontier_checkpoint_config(
         refusal = "a KV connector, if any, with kv_role 'kv_both' and kv_load_failure_policy 'recompute'"
     elif enable_kv_cache_events and not recovery_unit_events:
         refusal = "no KV cache events, or kv_events_config.recovery_unit_events"
-    elif parallel.decode_context_parallel_size != 1 or parallel.prefill_context_parallel_size != 1:
-        refusal = "decode and prefill context parallel size 1"
+    elif parallel.prefill_context_parallel_size != 1:
+        refusal = (
+            "prefill context parallel size 1: recurrent backends need the complete "
+            "token history and do not implement distributed state propagation"
+        )
     if refusal is not None:
         raise ValueError(f"mamba_frontier_checkpoint needs {refusal}")
 
@@ -200,7 +211,9 @@ class HybridCheckpointManager:
         pages, states, rings = layout_groups(coordinator, speculative_decoding)
         managers = coordinator.single_type_managers
         self.pool = coordinator.block_pool
-        self.block_size = coordinator.scheduler_block_size
+        self.block_size = managers[states[0]].block_size
+        for group_id in pages:
+            managers[group_id].preserve_partial_block_hashes = managers[group_id].block_size > self.block_size
         self.mamba_managers: list[MambaManager] = [
             managers[g]  # type: ignore[misc]
             for g in states
@@ -285,6 +298,8 @@ class HybridCheckpointManager:
         has. `session_id` names the session for the published unit when
         `request` is None."""
         if self.complete(key):
+            if request is not None:
+                self._cache_attention_boundary(request, num_tokens)
             new = self.unit_events and key not in self.graph.units
             self.graph.inserted(key, num_tokens)
             if new and (unit := self.graph.units.get(key)) is not None:
@@ -460,7 +475,10 @@ class HybridCheckpointManager:
             if not rest and 0 < num_units <= len(request.block_hashes):
                 resume = request.block_hashes[num_units - 1]
         else:
-            for group in blocks.blocks:
+            # Attention pages can retain an older partial-prefix primary key.
+            # The recurrent block identifies the state actually resumed.
+            for group_id in self.frontiers.states:
+                group = blocks.blocks[group_id]
                 if group and (block_hash := group[-1].block_hash) is not None:
                     resume = get_block_hash(block_hash)
                     break
@@ -625,6 +643,23 @@ class HybridCheckpointManager:
         self.num_scratch_dropped += 1
         return True
 
+    def _cache_attention_boundary(self, request: "Request", boundary: int) -> None:
+        """Retain each aligned state's attention prefix without replacing
+        earlier aliases on the same append-only page."""
+        if boundary % self.block_size:
+            return
+        hash_index = boundary // self.pool.hash_block_size - 1
+        if hash_index < 0 or hash_index >= len(request.block_hashes):
+            return
+        key = request.block_hashes[hash_index]
+        for group_id in self.frontiers.pages:
+            manager = self.frontiers.managers[group_id]
+            if boundary % manager.block_size:
+                block = manager.req_to_blocks[request.request_id][boundary // manager.block_size]
+                grouped = make_block_hash_with_group_id(key, group_id)
+                if not self.pool.cached_block_hash_to_block.contain(grouped, block.block_id):
+                    self.pool.cache_block_under_key(block, grouped, boundary, request=request)
+
     def _publish_decode_boundary(self, request: "Request") -> BlockHash | None:
         """Cache the state at the last block boundary the output crossed in
         every Mamba group, or in none, and free the scratch blocks."""
@@ -637,6 +672,10 @@ class HybridCheckpointManager:
             and all(source is not None for source in sources)
             and len({source[1] for source in sources if source is not None}) == 1
         )
+        if complete:
+            assert sources[0] is not None
+            boundary = sources[0][1]
+            self._cache_attention_boundary(request, boundary)
         leaf = None
         for manager, source in zip(self.mamba_managers, sources):
             if complete and source is not None:

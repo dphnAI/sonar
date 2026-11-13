@@ -122,8 +122,9 @@ def checkpoints(engine: Engine):
 
 @pytest.mark.parametrize("layout", LAYOUTS)
 @pytest.mark.parametrize("async_scheduling", [True, False])
-def test_session_resumes_at_its_frontiers(layout: str, async_scheduling: bool):
-    engine = make_engine(layout, async_scheduling=async_scheduling)
+@pytest.mark.parametrize("dcp_world_size", [1, 2, 4])
+def test_session_resumes_at_its_frontiers(layout: str, async_scheduling: bool, dcp_world_size: int):
+    engine = make_engine(layout, async_scheduling=async_scheduling, dcp_world_size=dcp_world_size)
     lengths = session(engine)
     assert_clean(engine)
     manager = checkpoints(engine)
@@ -176,12 +177,13 @@ def test_without_truncation_a_stop_inside_accepted_drafts_publishes_nothing(
 
 
 @pytest.mark.parametrize("layout", LAYOUTS)
-def test_decode_boundary_state_at_a_crossed_boundary(layout: str):
+@pytest.mark.parametrize("dcp_world_size", [1, 2, 4])
+def test_decode_boundary_state_at_a_crossed_boundary(layout: str, dcp_world_size: int):
     """The output crosses several block boundaries; the state the last verify
     step left at the last of them is published as a decode-boundary state.
     Without a step in flight, align mode frees the block that holds it before
     it could cache it, so only the snapshot keeps it."""
-    engine = make_engine(layout, async_scheduling=False)
+    engine = make_engine(layout, async_scheduling=False, dcp_world_size=dcp_world_size)
     tokens = prompt(3, 3 * BLOCK - 40)
     engine.add("leaf", tokens, 300)
     engine.run("leaf")
@@ -193,31 +195,39 @@ def test_decode_boundary_state_at_a_crossed_boundary(layout: str):
 
 
 @pytest.mark.parametrize("layout", LAYOUTS)
-def test_in_chunk_export(layout: str):
-    """In 192-token steps the first request leaves its states at 192 and 384
-    and attention pages up to 640. A sibling sharing 300 tokens resumes at 192
-    and exports the state at its junction, 256, inside its next chunk; a third
-    request sharing those tokens resumes there."""
-    engine = make_engine(layout, max_num_batched_tokens=192, mamba_prefill_export=True)
-    shared = prompt(1, 640)
+@pytest.mark.parametrize("dcp_world_size", [1, 2, 4])
+def test_in_chunk_export(layout: str, dcp_world_size: int):
+    """A sibling exports its shared-prefix junction inside a prefill chunk.
+    Checkpoint offsets stay global while DCP expands attention page spans."""
+    chunk = 192 * dcp_world_size
+    common = 300 * dcp_world_size
+    engine = make_engine(layout, max_num_batched_tokens=chunk, mamba_prefill_export=True, dcp_world_size=dcp_world_size)
+    shared = prompt(1, 640 * dcp_world_size)
     engine.add("a", shared, 20)
     engine.run("a")
-    engine.add("b", shared[:300] + prompt(2, 400), 20)
+    exports = engine.device.counts["in_chunk_exports"]
+    engine.add("b", shared[:common] + prompt(2, 400 * dcp_world_size), 20)
     engine.run("b")
-    engine.add("c", shared[:300] + prompt(3, 90), 20)
+    assert engine.device.counts["in_chunk_exports"] > exports
+    engine.add("c", shared[:common] + prompt(3, 90 * dcp_world_size), 20)
     engine.run("c")
     assert_clean(engine)
-    assert engine.admissions["b"] == [192]
-    assert engine.admissions["c"] == [256]
+    assert engine.admissions["b"] == [chunk]
+    # The cached attention pages locate the shared-prefix junction. Their
+    # global span, rather than the recurrent stride, bounds that discovery.
+    page_span = BLOCK * dcp_world_size
+    assert engine.admissions["c"] == [common // page_span * page_span]
 
 
 @pytest.mark.parametrize("layout", LAYOUTS)
-def test_concurrent_sessions_under_pool_pressure(layout: str):
+@pytest.mark.parametrize("dcp_world_size", [1, 2])
+def test_concurrent_sessions_under_pool_pressure(layout: str, dcp_world_size: int):
     rng = random.Random(11)
     engine = make_engine(
         layout,
         num_blocks=180,
-        accept=lambda request_id, start: hash((request_id, start)) % (DRAFTS + 1),
+        dcp_world_size=dcp_world_size,
+        accept=default_accept,
     )
     tokens = {s: prompt(s, rng.randrange(200, 1400)) for s in range(10)}
     for turn in range(3):

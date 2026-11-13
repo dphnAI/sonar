@@ -24,7 +24,7 @@ from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactor
 from sonar.distributed.kv_transfer.kv_connector.v1.base import SupportsHMA
 from sonar.sampling_params import SamplingParams
 from sonar.utils.hashing import sha256
-from sonar.v1.core.kv_cache_utils import get_request_block_hasher
+from sonar.v1.core.kv_cache_utils import get_request_block_hasher, resolve_kv_cache_block_sizes
 from sonar.v1.core.sched.async_scheduler import AsyncScheduler
 from sonar.v1.core.sched.output import SchedulerOutput
 from sonar.v1.core.sched.scheduler import Scheduler
@@ -99,6 +99,7 @@ def make_hybrid_scheduler(
     async_scheduling: bool = False,
     compact_layout: bool = False,
     kv_events_config: KVEventsConfig | None = None,
+    dcp_world_size: int = 1,
     **cache_kwargs: Any,
 ) -> Scheduler:
     """`cache_kwargs` are CacheConfig fields; `ring` 0 builds no ring.
@@ -134,6 +135,9 @@ def make_hybrid_scheduler(
         ),
     )
     sonar_config.cache_config.num_gpu_blocks = num_blocks
+    # The CPU fixture exercises scheduler geometry, without constructing a
+    # distributed OPT model (whose head count would constrain TP).
+    sonar_config.parallel_config.decode_context_parallel_size = dcp_world_size
     if compact_layout:
         sonar_config.cache_config.mamba_spec_state_layout = "compact"
     groups = [
@@ -180,13 +184,14 @@ def make_hybrid_scheduler(
         )
     kv_cache_config = KVCacheConfig(num_blocks=num_blocks, kv_cache_tensors=[], kv_cache_groups=groups)
     register_all_kvcache_specs(sonar_config)
+    scheduler_block_size, resolved_hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, sonar_config)
     scheduler_cls = AsyncScheduler if async_scheduling else Scheduler
     return scheduler_cls(
         sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         structured_output_manager=StructuredOutputManager(sonar_config),
-        block_size=block_size,
-        hash_block_size=hash_block_size or block_size,
+        block_size=scheduler_block_size,
+        hash_block_size=hash_block_size or resolved_hash_block_size,
         log_stats=True,
     )
 

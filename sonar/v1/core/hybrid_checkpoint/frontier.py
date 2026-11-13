@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Frontier checkpoints: a finished request's state at its exact end.
 
-For a freed request that processed `L` tokens, `L` inside block `k`, a
-frontier checkpoint is the attention page holding `[kB, L)` in every
+For a freed request that processed `L` tokens inside a recurrent-state block,
+a frontier checkpoint keeps the attention page containing `L - 1` in every
 full-attention group, the running state block in every Mamba group and, when
 `L` is inside an indexer compression pool, the indexer's ring block. Each
 block is cached under `(key, group)` with the frontier key of `L`
@@ -93,7 +93,7 @@ class FrontierIndex:
     ) -> None:
         self.pool = coordinator.block_pool
         self.managers = coordinator.single_type_managers
-        self.block_size = coordinator.scheduler_block_size
+        self.block_size = self.managers[states[0]].block_size
         self.hash_block_size = self.pool.hash_block_size
         self.hash_fn = hash_fn
         self.pages = pages
@@ -177,10 +177,12 @@ class FrontierIndex:
         """The block to cache in every group and, when the state is in a later
         draft column, the gather that completes it."""
         request_id = request.request_id
-        k = num_tokens // self.block_size
+        # A DCP attention page spans more global tokens than a state column.
         blocks: dict[int, KVCacheBlock] = {}
         for group_id in self.pages:
-            table = self.managers[group_id].req_to_blocks.get(request_id) or []
+            manager = self.managers[group_id]
+            k = num_tokens // manager.block_size
+            table = manager.req_to_blocks.get(request_id) or []
             if len(table) <= k:
                 return None
             blocks[group_id] = table[k]
@@ -211,7 +213,6 @@ class FrontierIndex:
                     return None
                 blocks[group_id] = table[0]
         keyed = self.pool.cached_block_hashes_by_block
-        units_per_block = self.block_size // self.hash_block_size
         for group_id, block in blocks.items():
             if block.is_null:
                 return None
@@ -219,7 +220,7 @@ class FrontierIndex:
             # cached under the request's own key at a hash-unit boundary inside
             # it; the frontier key joins that key.
             if (block.block_hash is not None or block.block_id in keyed) and (
-                group_id not in self.pages or units_per_block == 1
+                group_id not in self.pages or self.managers[group_id].block_size == self.hash_block_size
             ):
                 return None
         return blocks, gather
@@ -305,7 +306,7 @@ class FrontierIndex:
                         self._remove(entry)
                     continue
                 k = num_tokens // self.block_size
-                pages = self._prefix_pages(request, blocks, hit, k)
+                pages = self._prefix_pages(request, blocks, hit, num_tokens)
                 if pages is None:
                     continue
                 return entry, k, pages
@@ -340,19 +341,22 @@ class FrontierIndex:
         request: "Request",
         blocks: HitBlocks,
         hit: int,
-        k: int,
+        num_tokens: int,
     ) -> dict[int, list[KVCacheBlock]] | None:
-        """Full-attention blocks `[0, k)`: the block-aligned hit's, then the
-        blocks cached under the request's own block hashes."""
-        num_hit_blocks = hit // self.block_size
-        pages = {g: list(blocks[g][:num_hit_blocks]) for g in self.pages}
-        per_block = self.block_size // self.hash_block_size
-        for i in range(num_hit_blocks, k):
-            found = self.pool.get_cached_block(request.block_hashes[(i + 1) * per_block - 1], self.pages)
-            if found is None:
-                return None
-            for group_id, block in zip(self.pages, found):
-                pages[group_id].append(block)
+        """Complete attention pages before the frontier, using each group's
+        global token span to index its rank-local block table."""
+        pages: dict[int, list[KVCacheBlock]] = {}
+        for group_id in self.pages:
+            block_size = self.managers[group_id].block_size
+            num_hit_blocks = hit // block_size
+            group_pages = list(blocks[group_id][:num_hit_blocks])
+            per_block = block_size // self.hash_block_size
+            for i in range(num_hit_blocks, num_tokens // block_size):
+                found = self.pool.get_cached_block(request.block_hashes[(i + 1) * per_block - 1], [group_id])
+                if found is None:
+                    return None
+                group_pages.append(found[0])
+            pages[group_id] = group_pages
         return pages
 
     def _hit_blocks(

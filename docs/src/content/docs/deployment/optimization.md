@@ -200,9 +200,17 @@ sonar serve Qwen/Qwen3.5-4B \
   --mamba-frontier-checkpoint --mamba-prefill-export
 ```
 
-Attention and recurrent-state cache groups must have matching logical block
-sizes. Prefill export requires a supporting backend. Context parallelism is
-not supported.
+Prefill export requires a supporting backend. Enable DCP with
+`--decode-context-parallel-size N`. Attention groups must share a logical
+block size divisible by the recurrent block size. With GQA, TP must exceed
+the number of KV heads, such as TP 8 for four KV heads and DCP 2. For GLM's
+four-token indexer compression, use `--cp-kv-cache-interleave-size 4`.
+
+Qwen3.5-4B at TP 8 can produce different greedy tokens between cached and
+fresh continuation, including with DCP disabled. Validate continuation on
+the intended model and topology.
+
+Prefill context parallelism (PCP) is not supported on this path.
 
 For cost-aware eviction, add `--prefix-cache-eviction gds` and
 `--prefill-cost-coefficients D E`, fitted to prefill timings. `1 0` gives a

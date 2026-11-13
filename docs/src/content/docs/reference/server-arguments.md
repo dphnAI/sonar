@@ -2371,6 +2371,9 @@ Default: `False`.
 
 Retain finished requests' recurrent checkpoints at non-block-aligned
 positions. Requires prefix caching and compatible recurrent cache groups.
+Supports decode context parallelism with a compatible attention backend.
+Prefill context parallelism requires distributed recurrent-state propagation
+and is not supported on this path.
 
 Default: `False`.
 

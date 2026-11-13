@@ -191,6 +191,10 @@ class GreedyDualSizeEviction:
         hashes = request.block_hashes
         n = min(num_tokens // self.block_size, len(hashes) // self.hashes_per_block)
         path = tuple(hashes[(j + 1) * self.hashes_per_block - 1] for j in range(n))
+        if num_tokens % self.block_size and num_tokens % self.frontiers.block_size == 0:
+            # A DCP page can contain a complete recurrent boundary. Its
+            # partial-prefix alias is required in addition to the full pages.
+            path += (key,)
         self.paths[key] = path
         unit = self.units.get(key)
         if unit is not None and not unit.path:
@@ -297,6 +301,7 @@ class GreedyDualSizeEviction:
             for p in path:
                 if p != key:
                     self._recheck(units.get(p))
+        self._refresh_page_aliases(unit.key)
         if unit.frontier:
             return
         for k in list(on_path.get(key, ())):
@@ -320,6 +325,7 @@ class GreedyDualSizeEviction:
         del self.units[key]
         self._gone[key] = self._resolve(unit)
         unit.version = -1
+        self._refresh_page_aliases(unit.key)
         self._parked.pop(key, None)
         self._fresh.discard(key)
         self.paths.pop(key, None)
@@ -409,8 +415,35 @@ class GreedyDualSizeEviction:
                 break
             for group_id in self.page_groups:
                 grouped = make_block_hash_with_group_id(p, group_id)
-                out.extend(cached.get_all_blocks(grouped))
+                for block in cached.get_all_blocks(grouped):
+                    # Several recurrent boundaries can alias one DCP page.
+                    # A private hash path does not imply private storage.
+                    if self.block_size != self.frontiers.block_size and any(
+                        (key != unit.key and key in units)
+                        or any(k != unit.key and k in units for k in self.on_path.get(key, ()))
+                        for other in self._keys(block)
+                        for key in (get_block_hash(other),)
+                    ):
+                        continue
+                    out.append(block)
         return out
+
+    def _refresh_page_aliases(self, key: BlockHash) -> None:
+        """Reprice units sharing a DCP page through different prefix keys."""
+        if self.block_size == self.frontiers.block_size:
+            return
+        cached = self.pool.cached_block_hash_to_block
+        affected: set[BlockHash] = set()
+        for group_id in self.frontiers.pages:
+            for block in cached.get_all_blocks(make_block_hash_with_group_id(key, group_id)):
+                for grouped in self._keys(block):
+                    alias = get_block_hash(grouped)
+                    affected.add(alias)
+                    affected.update(self.on_path.get(alias, ()))
+        for other in affected:
+            if other != key and (unit := self.units.get(other)) is not None:
+                unit.dirty = True
+                self._push(unit)
 
     def _shared_pages(self, unit: RecoveryUnit) -> list[KVCacheBlock]:
         """A frontier's pages that are also cached under a key of their own
@@ -476,6 +509,18 @@ class GreedyDualSizeEviction:
             other = units.get(k)
             if other is not None and other is not unit and other.num_tokens > unit.num_tokens:
                 return True
+        if self.block_size != self.frontiers.block_size and unit.num_tokens % self.block_size:
+            # Different recurrent boundaries can name the same attention
+            # page, so a deeper unit need not list this boundary's alias.
+            cached = self.pool.cached_block_hash_to_block
+            for group_id in self.page_groups:
+                for block in cached.get_all_blocks(make_block_hash_with_group_id(unit.key, group_id)):
+                    for grouped in self._keys(block):
+                        alias = get_block_hash(grouped)
+                        for key in (alias, *self.on_path.get(alias, ())):
+                            other = units.get(key)
+                            if other is not None and not other.dead and other.num_tokens > unit.num_tokens:
+                                return True
         return False
 
     def _forks(self, unit: RecoveryUnit) -> bool:
@@ -483,9 +528,17 @@ class GreedyDualSizeEviction:
         block right after it."""
         j = unit.num_tokens // self.block_size
         first = None
+        # Partial aliases at different positions in the next page differ
+        # even when they describe one uninterrupted token sequence.
         for k in self.on_path.get(unit.key, ()):
             other = self.units.get(k)
-            if other is None or other is unit or other.num_tokens <= unit.num_tokens or len(other.path) <= j:
+            if (
+                other is None
+                or other is unit
+                or other.num_tokens <= unit.num_tokens
+                or other.num_tokens < (j + 1) * self.block_size
+                or len(other.path) <= j
+            ):
                 continue
             if first is None:
                 first = other.path[j]

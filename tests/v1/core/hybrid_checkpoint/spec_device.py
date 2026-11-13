@@ -304,6 +304,8 @@ class Device:
         )
         if offsets[0] > 0 and columns[0] >= 0:
             position = start + offsets[0]
+            if request_id in positions:
+                self.counts["in_chunk_exports"] += 1
             for g in self.mamba_groups:
                 table = state.table[g]
                 if columns[0] < len(table):

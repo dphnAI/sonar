@@ -42,8 +42,9 @@ def make_scheduler(frontier: bool = True, **kwargs):
 
 
 @pytest.mark.parametrize("frontier", [False, True])
-def test_next_turn_resumes_at_the_previous_frontier(frontier: bool):
-    scheduler = make_scheduler(frontier=frontier)
+@pytest.mark.parametrize("dcp_world_size", [1, 2, 4])
+def test_next_turn_resumes_at_the_previous_frontier(frontier: bool, dcp_world_size: int):
+    scheduler = make_scheduler(frontier=frontier, dcp_world_size=dcp_world_size)
     first = add_request(scheduler, "t0", prompt(1, 150), max_tokens=10)
     run(scheduler, first)
     frontier_tokens = first.num_computed_tokens
@@ -314,3 +315,221 @@ def test_frontiers_reject_hashes_that_cover_future_speculative_tokens():
             use_v2_model_runner=True,
             enable_kv_cache_events=False,
         )
+
+
+@pytest.mark.parametrize("dcp_world_size", [1, 2, 4])
+@pytest.mark.parametrize("frontier_tokens", [63, 127, 191, 255, 319])
+@pytest.mark.parametrize("hash_unit", [16, BLOCK])
+def test_dcp_frontier_uses_global_positions_and_group_local_tables(
+    dcp_world_size: int, frontier_tokens: int, hash_unit: int
+):
+    scheduler = make_scheduler(dcp_world_size=dcp_world_size, prefix_match_unit=hash_unit, hash_block_size=hash_unit)
+    first = add_request(scheduler, "first", prompt(1, frontier_tokens - 9), max_tokens=10)
+    run(scheduler, first)
+    assert first.num_computed_tokens == frontier_tokens
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None
+    assert checkpoints.block_size == BLOCK
+    page_span = BLOCK * dcp_world_size
+    assert scheduler.block_size == page_span
+    [entry] = checkpoints.frontiers.entries.values()
+    assert entry.num_tokens == frontier_tokens
+    assert entry.key == frontier_key(sha256, first, frontier_tokens, hash_unit)
+
+    second = add_request(scheduler, "second", list(first.all_token_ids) + prompt(2, 80), max_tokens=3)
+    manager = scheduler.kv_cache_manager
+    blocks, hit, _ = manager.get_computed_blocks(second)
+    assert hit == frontier_tokens
+    assert len(blocks.blocks[0]) == frontier_tokens // page_span + 1
+    for i, page in enumerate(blocks.blocks[0][:-1]):
+        grouped = make_block_hash_with_group_id(first.block_hashes[(i + 1) * page_span // hash_unit - 1], 0)
+        assert manager.block_pool.cached_block_hash_to_block.contain(grouped, page.block_id)
+    for group_id in checkpoints.frontiers.states:
+        assert len(blocks.blocks[group_id]) == frontier_tokens // BLOCK + 1
+        assert all(block.is_null for block in blocks.blocks[group_id][:-1])
+        assert blocks.blocks[group_id][-1] is entry.blocks[group_id]
+    assert blocks.blocks[0][-1] is entry.blocks[0]
+    assert admitted_at(scheduler, second) == frontier_tokens
+    # The resumed request owns a private tail on every rank. The scheduler
+    # dispatches the same physical-page copy IDs to all workers.
+    assert (
+        manager.coordinator.single_type_managers[0].req_to_blocks["second"][frontier_tokens // page_span]
+        is not entry.blocks[0]
+    )
+    run(scheduler, second)
+
+
+@pytest.mark.parametrize("dcp_world_size", [2, 4])
+def test_dcp_recurrent_boundary_inside_attention_page_is_resumable(dcp_world_size: int):
+    scheduler = make_scheduler(dcp_world_size=dcp_world_size)
+    first = add_request(scheduler, "first", prompt(1, 150), max_tokens=43)
+    run(scheduler, first)
+    assert first.num_computed_tokens == 3 * BLOCK
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None
+    assert not checkpoints.frontiers.entries
+    key = first.block_hashes[2]
+    assert checkpoints.graph.units[key].num_tokens == 3 * BLOCK
+    assert not checkpoints.graph.units[key].frontier
+    page_key = make_block_hash_with_group_id(key, 0)
+    assert scheduler.kv_cache_manager.block_pool.cached_block_hash_to_block.get_one_block(page_key) is not None
+    second = add_request(scheduler, "second", list(first.all_token_ids) + prompt(2, 40), max_tokens=2)
+    assert admitted_at(scheduler, second) == 3 * BLOCK
+    assert checkpoints.graph.units[key].hits == 1
+    assert checkpoints.graph.resumed[second.request_id] == key
+
+
+@pytest.mark.parametrize("eviction", ["lru", "gds"])
+def test_dcp_frontier_eviction_and_reset(eviction: str):
+    kwargs = {} if eviction == "lru" else {"prefill_cost_coefficients": (1.0, 0.0)}
+    scheduler = make_scheduler(dcp_world_size=2, prefix_cache_eviction=eviction, **kwargs)
+    first = add_request(scheduler, "first", prompt(1, 280), max_tokens=10)
+    run(scheduler, first)
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None
+    [entry] = checkpoints.frontiers.entries.values()
+    pool = scheduler.kv_cache_manager.block_pool
+    if checkpoints.eviction is not None:
+        assert checkpoints.eviction.paths[entry.key] == (first.block_hashes[1], first.block_hashes[3])
+    pool.evict_blocks({entry.blocks[0].block_id})
+    assert not checkpoints.frontiers.entries
+    second = add_request(scheduler, "second", list(first.all_token_ids) + prompt(2, 40), max_tokens=2)
+    assert scheduler.kv_cache_manager.get_num_cached_tokens(second) < first.num_computed_tokens
+    run(scheduler, second)
+    assert scheduler.reset_prefix_cache()
+    assert not checkpoints.frontiers.entries and not checkpoints.graph.units
+    third = add_request(scheduler, "third", list(second.all_token_ids) + prompt(3, 40), max_tokens=1)
+    assert scheduler.kv_cache_manager.get_num_cached_tokens(third) == 0
+
+
+def test_dcp_eviction_tracks_partial_attention_dependency():
+    scheduler = make_scheduler(dcp_world_size=4, prefix_cache_eviction="gds", prefill_cost_coefficients=(1.0, 0.0))
+    first = add_request(scheduler, "first", prompt(1, 150), max_tokens=43)
+    run(scheduler, first)
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None and checkpoints.eviction is not None
+    key = first.block_hashes[2]
+    assert checkpoints.eviction.paths[key] == (key,)
+    pool = scheduler.kv_cache_manager.block_pool
+    page = pool.cached_block_hash_to_block.get_one_block(make_block_hash_with_group_id(key, 0))
+    assert page is not None
+    pool.evict_blocks({page.block_id})
+    assert checkpoints.graph.units[key].dead
+
+
+def test_prefill_context_parallel_requires_distributed_recurrence():
+    scheduler = make_scheduler(frontier=False)
+    scheduler.sonar_config.parallel_config.prefill_context_parallel_size = 2
+    with pytest.raises(ValueError, match="distributed state propagation"):
+        check_frontier_checkpoint_config(
+            scheduler.sonar_config,
+            block_size=BLOCK,
+            use_v2_model_runner=True,
+            enable_kv_cache_events=False,
+        )
+
+
+def test_dcp_evicting_boundary_keeps_page_shared_with_frontier():
+    scheduler = make_scheduler(dcp_world_size=4, prefix_cache_eviction="gds", prefill_cost_coefficients=(1.0, 0.0))
+    first = add_request(scheduler, "first", prompt(1, 150), max_tokens=60)
+    run(scheduler, first)
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None and checkpoints.eviction is not None
+    [entry] = checkpoints.frontiers.entries.values()
+    boundary = checkpoints.graph.units[first.block_hashes[2]]
+    page = entry.blocks[0]
+    assert page not in checkpoints.eviction._exclusive(boundary)
+    # The ordinary aligned checkpoint and decode scratch can both cache the
+    # state. Count every retained copy, but not the shared attention page.
+    assert checkpoints.eviction._size(boundary) == len(checkpoints.eviction._state_blocks(boundary))
+    evicted = checkpoints.eviction._evict(boundary)
+    assert page not in evicted
+    assert entry.key in checkpoints.frontiers.entries
+    second = add_request(scheduler, "second", list(first.all_token_ids) + prompt(2, 40), max_tokens=2)
+    assert admitted_at(scheduler, second) == first.num_computed_tokens
+
+
+@pytest.mark.parametrize("finish", [128, 256])
+def test_dcp_attention_page_keeps_earlier_boundary_aliases(finish: int):
+    scheduler = make_scheduler(
+        dcp_world_size=4,
+        prefix_cache_eviction="gds",
+        prefill_cost_coefficients=(1.0, 0.0),
+        prefix_cache_leaf_last=True,
+    )
+    first = add_request(scheduler, "first", prompt(1, 100), max_tokens=finish - 99)
+    run(scheduler, first)
+    assert first.num_computed_tokens == finish
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None and checkpoints.eviction is not None
+    pool = scheduler.kv_cache_manager.block_pool
+    earlier = first.block_hashes[0]
+    latest = first.block_hashes[finish // BLOCK - 1]
+    earlier_page = pool.cached_block_hash_to_block.get_one_block(make_block_hash_with_group_id(earlier, 0))
+    latest_page = pool.cached_block_hash_to_block.get_one_block(make_block_hash_with_group_id(latest, 0))
+    assert earlier_page is not None and earlier_page is latest_page
+    if finish == 256:
+        assert latest_page.block_hash == make_block_hash_with_group_id(latest, 0)
+        assert latest_page.block_hash_num_tokens == finish
+    assert not checkpoints.graph.units[earlier].dead
+    assert checkpoints.eviction._tier(checkpoints.graph.units[earlier]) == 1
+    branch = add_request(scheduler, "branch", list(first.all_token_ids[:BLOCK]) + prompt(2, 40), max_tokens=2)
+    assert admitted_at(scheduler, branch) == BLOCK
+
+
+def test_dcp_mid_decode_boundaries_have_attention_aliases():
+    scheduler = make_scheduler(dcp_world_size=4, prefix_cache_eviction="gds", prefill_cost_coefficients=(1.0, 0.0))
+    first = add_request(scheduler, "first", prompt(1, 100), max_tokens=200)
+    while first.num_computed_tokens < 196:
+        step(scheduler)
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None and checkpoints.eviction is not None
+    pool = scheduler.kv_cache_manager.block_pool
+    for boundary in (128, 192):
+        key = first.block_hashes[boundary // BLOCK - 1]
+        assert pool.cached_block_hash_to_block.get_one_block(make_block_hash_with_group_id(key, 0)) is not None
+        assert not checkpoints.graph.units[key].dead
+    branch = add_request(scheduler, "branch", list(first.all_token_ids[:128]) + prompt(2, 40), max_tokens=2)
+    assert admitted_at(scheduler, branch) == 128
+
+
+def test_dcp_partial_boundary_keys_do_not_make_a_false_fork():
+    scheduler = make_scheduler(
+        dcp_world_size=4,
+        prefix_cache_eviction="gds",
+        prefill_cost_coefficients=(1.0, 0.0),
+        prefix_cache_leaf_last=True,
+    )
+    first = add_request(scheduler, "first", prompt(1, 280), max_tokens=105)
+    run(scheduler, first)
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None and checkpoints.eviction is not None
+    unit = checkpoints.graph.units[first.block_hashes[3]]
+    assert checkpoints.eviction._deeper(unit)
+    assert not checkpoints.eviction._forks(unit)
+    assert checkpoints.eviction._tier(unit) == 1
+    partial = checkpoints.graph.units[first.block_hashes[4]]
+    assert checkpoints.eviction._deeper(partial)
+    assert checkpoints.eviction._tier(partial) == 1
+
+
+def test_dcp_real_fork_inside_attention_page_stays_a_leaf():
+    scheduler = make_scheduler(
+        dcp_world_size=4,
+        prefix_cache_eviction="gds",
+        prefill_cost_coefficients=(1.0, 0.0),
+        prefix_cache_leaf_last=True,
+    )
+    first = add_request(scheduler, "first", prompt(1, 100), max_tokens=29)
+    run(scheduler, first)
+    checkpoints = scheduler.mamba_checkpoints
+    assert checkpoints is not None and checkpoints.eviction is not None
+    parent = checkpoints.graph.units[first.block_hashes[1]]
+    for seed in (2, 3):
+        branch = add_request(
+            scheduler, f"branch-{seed}", list(first.all_token_ids[:128]) + prompt(seed, 40), max_tokens=25
+        )
+        assert admitted_at(scheduler, branch) == 128
+        run(scheduler, branch)
+    assert parent.is_branch_point
+    assert checkpoints.eviction._tier(parent) == 2

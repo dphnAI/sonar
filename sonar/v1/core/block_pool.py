@@ -231,6 +231,7 @@ class BlockPool:
         block_size: int,
         kv_cache_group_id: int,
         block_mask: list[bool] | None = None,
+        preserve_existing_hashes: bool = False,
     ) -> None:
         """Cache a list of full blocks for prefix caching.
         This function takes a list of blocks that will have their block hash
@@ -255,6 +256,9 @@ class BlockPool:
                 consults a subset of blocks (e.g. SWA tail-window), so blocks
                 that can never serve a hit stay out of the prefix-cache hash
                 map.
+            preserve_existing_hashes: Keep earlier prefix aliases when an
+                append-only attention page becomes full. Recurrent states
+                must replace aliases because their contents change in place.
 
         """
         if num_cached_blocks >= num_full_blocks:
@@ -284,10 +288,14 @@ class BlockPool:
                 # The only valid case where a "new full block" already has a
                 # hash is partial->full promotion of the same cache block.
                 assert blk.block_hash_num_tokens is not None and blk.block_hash_num_tokens < num_hash_tokens
-                removed_hashes = self._remove_cached_block_hashes(blk)
-                with self.removing("replaced"):
-                    self._emit_block_removed_events(removed_hashes)
-                promoted.extend(removed_hashes)
+                if preserve_existing_hashes:
+                    self.cached_block_hashes_by_block.setdefault(blk.block_id, set()).add(blk.block_hash)
+                    blk.reset_hash()
+                else:
+                    removed_hashes = self._remove_cached_block_hashes(blk)
+                    with self.removing("replaced"):
+                        self._emit_block_removed_events(removed_hashes)
+                    promoted.extend(removed_hashes)
             self._insert_block_hash(
                 block_hash_with_group_id,
                 blk,
@@ -633,7 +641,7 @@ class BlockPool:
         num_tokens: int | None,
     ) -> None:
         if block.block_hash is None:
-            # A block without a hash has no entries in the cache yet.
+            # Set the primary key for a new block or a promoted partial page.
             block.set_block_hash(block_hash_with_group_id, num_tokens=num_tokens)
         elif block.block_hash == block_hash_with_group_id or self.cached_block_hash_to_block.contain(
             block_hash_with_group_id, block.block_id

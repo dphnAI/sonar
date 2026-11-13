@@ -106,6 +106,9 @@ class SingleTypeKVCacheManager(ABC):
         # Hybrid fine-grained lookup may lower this after all participating
         # managers have been validated by the coordinator.
         self.cache_hit_alignment_tokens = scheduler_block_size
+        # FlashStates may retain several recurrent boundaries in one
+        # append-only attention page.
+        self.preserve_partial_block_hashes = False
         # The block size for this manager; used for actual block allocation.
         self.dcp_world_size = dcp_world_size if kv_cache_spec.dcp_sharded else 1
         self.pcp_world_size = pcp_world_size if kv_cache_spec.dcp_sharded else 1
@@ -504,6 +507,7 @@ class SingleTypeKVCacheManager(ABC):
             block_size=self.block_size,
             kv_cache_group_id=self.kv_cache_group_id,
             block_mask=block_mask,
+            preserve_existing_hashes=self.preserve_partial_block_hashes,
         )
 
         self.num_cached_block[request.request_id] = num_full_blocks
