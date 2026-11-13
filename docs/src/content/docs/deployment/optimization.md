@@ -210,7 +210,11 @@ Qwen3.5-4B at TP 8 can produce different greedy tokens between cached and
 fresh continuation, including with DCP disabled. Validate continuation on
 the intended model and topology.
 
-Prefill context parallelism (PCP) is not supported on this path.
+CUDA GLM-5.3-Flash and Kimi-K3 support `--prefill-context-parallel-size N`.
+Use `--language-model-only` and `--enforce-eager`. PCP replicates recurrent
+computation and KV storage across its ranks.
+GLM's FlashInfer sparse attention backend supports PCP or DCP separately,
+not both together.
 
 For cost-aware eviction, add `--prefix-cache-eviction gds` and
 `--prefill-cost-coefficients D E`, fitted to prefill timings. `1 0` gives a

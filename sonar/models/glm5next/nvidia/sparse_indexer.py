@@ -304,7 +304,7 @@ def sparse_attn_indexer_kpool(
         )
     )
     if not defer_topk:
-        topk_indices_buffer[: hidden_states.shape[0]] = -1
+        topk_indices_buffer[:num_tokens] = -1
     if has_prefill:
         prefill_metadata = attn_metadata_narrowed.prefill
         assert prefill_metadata is not None
@@ -790,8 +790,6 @@ class SparseAttnIndexerKpool(CustomOp):
         self.dcp_world_size = 1
         self.dcp_rank = 0
         if _parallel is not None and _parallel.decode_context_parallel_size > 1:
-            if _parallel.prefill_context_parallel_size > 1:
-                raise NotImplementedError("SparseAttnIndexerKpool does not support PCP+DCP.")
             self.dcp_world_size = _parallel.decode_context_parallel_size
             self.dcp_rank = get_dcp_group().rank_in_group
             if current_platform.is_cuda() and has_cutedsl():
@@ -802,6 +800,8 @@ class SparseAttnIndexerKpool(CustomOp):
 
                 _PACK_DCP_TOPK_CANDIDATES_KERNEL.register_warmup()
                 _STABLE_TOPK_FROM_GATHERED_CANDIDATES_KERNEL.register_warmup()
+
+        self._use_pcp = _parallel is not None and _parallel.prefill_context_parallel_size > 1
 
     @property
     def cp_kv_cache_interleave_size(self) -> int:
@@ -851,7 +851,29 @@ class SparseAttnIndexerKpool(CustomOp):
             q_values, q_scale = q_quant
         else:
             q_values, q_scale = q_quant, None
-        return sparse_attn_indexer_kpool(
+        pcp = None
+        topk_indices = self.topk_indices_buffer
+        if self._use_pcp:
+            shape = tuple(topk_indices.shape)
+            global_topk_indices = current_workspace_manager().get_persistent(
+                ("glm5next_pcp_topk", shape), shape, topk_indices.dtype
+            )
+            metadata = get_forward_context().attn_metadata
+            if isinstance(metadata, dict):
+                index_metadata = metadata.get(self.k_cache.prefix)
+                if isinstance(index_metadata, DeepseekV32IndexerMetadata):
+                    pcp = index_metadata.pcp_token_mapping
+                    if pcp is not None:
+                        topk_indices = global_topk_indices
+                        q_values = pcp.gather(q_values.view(torch.uint8)).view(q_values.dtype)
+                        if q_scale is not None:
+                            q_scale = pcp.gather(q_scale)
+                        k = pcp.gather(k)
+                        weights = pcp.gather(weights)
+                        if gate_score is not None:
+                            gate_score = pcp.gather(gate_score)
+                        positions = index_metadata.positions
+        result = sparse_attn_indexer_kpool(
             hidden_states,
             self.k_cache.prefix,
             self.k_cache.kv_cache,
@@ -865,7 +887,7 @@ class SparseAttnIndexerKpool(CustomOp):
             self.head_dim,
             self.max_pool_len,
             self.max_total_seq_len,
-            self.topk_indices_buffer,
+            topk_indices,
             self.skip_k_cache_insert,
             self.use_fp4_cache,
             gate_score,
@@ -880,3 +902,8 @@ class SparseAttnIndexerKpool(CustomOp):
             self.cp_kv_cache_interleave_size,
             self.logits_dtype,
         )
+        if pcp is not None:
+            local_result = self.topk_indices_buffer[: pcp.local_indices.numel()]
+            pcp.select(result, local_result)
+            return self.topk_indices_buffer
+        return result

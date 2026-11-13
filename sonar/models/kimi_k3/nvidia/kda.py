@@ -1092,6 +1092,28 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         spec_query_start_loc = m.spec_query_start_loc
         num_accepted_tokens = m.num_accepted_tokens
         num_actual_tokens = m.num_actual_tokens
+        pcp = m.pcp_token_mapping
+        local_output = core_attn_out
+        if pcp is not None:
+            gathered = pcp.gather(
+                torch.cat(
+                    (mixed_qkv, g1.squeeze(0).flatten(1), g2.flatten(1), beta.squeeze(0)),
+                    dim=-1,
+                )
+            )
+            mixed_qkv, global_g1, global_g2, global_beta = gathered.split(
+                (
+                    3 * self.local_projection_size,
+                    self.local_projection_size,
+                    self.local_projection_size,
+                    self.local_num_heads,
+                ),
+                dim=-1,
+            )
+            g1 = global_g1.view(1, num_actual_tokens, self.local_num_heads, self.head_dim)
+            g2 = global_g2.view(num_actual_tokens, self.local_num_heads, self.head_dim)
+            beta = global_beta.unsqueeze(0)
+            core_attn_out = local_output.new_empty((1, num_actual_tokens, self.local_num_heads, self.head_dim))
         checkpoint = m.checkpoint
         has_spec_decode = m.num_spec_decodes > 0
         mixed_qkv = mixed_qkv[:num_actual_tokens]
@@ -1120,7 +1142,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
                 x=mixed_qkv,
                 weight=self.decode_conv1d_weight,
                 conv_state=conv_state,
-                raw_gate=g1,
+                raw_gate=g1.contiguous(),
                 raw_beta=beta,
                 A_log=self.A_log,
                 dt_bias=self.dt_bias,
@@ -1134,6 +1156,8 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
                 norm_eps=self.o_norm.eps,
                 output=core_attn_out[:, :num_actual_tokens],
             )
+            if pcp is not None:
+                pcp.select(core_attn_out[0], local_output[0])
             return
 
         if (
@@ -1151,7 +1175,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
                     x=mixed_qkv,
                     weight=self.decode_conv1d_weight,
                     conv_state=conv_state,
-                    raw_gate=g1,
+                    raw_gate=g1.contiguous(),
                     raw_beta=beta,
                     A_log=self.A_log,
                     dt_bias=self.dt_bias,
@@ -1169,7 +1193,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
                     weight=self.decode_conv1d_weight,
                     bias=self.conv1d.bias,
                     conv_state=conv_state,
-                    raw_g=g1,
+                    raw_g=g1.contiguous(),
                     raw_beta=beta,
                     A_log=self.A_log,
                     dt_bias=self.dt_bias,
@@ -1181,6 +1205,8 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
                     norm_weight=self.decode_norm_weight,
                     norm_eps=self.o_norm.eps,
                 )
+            if pcp is not None:
+                pcp.select(core_attn_out[0], local_output[0])
             return
 
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
@@ -1496,3 +1522,5 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
         # Triton normalizes in place, so this is a self-copy with no device
         # work. Keep it for the out-of-place native implementation.
         core_attn_out.copy_(self.o_norm(core_attn_out, g2))
+        if pcp is not None:
+            pcp.select(core_attn_out[0], local_output[0])

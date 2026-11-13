@@ -137,7 +137,6 @@ def check_frontier_checkpoint_config(
 ) -> None:
     """Raise unless frontier checkpoints can run with this configuration."""
     cache = sonar_config.cache_config
-    parallel = sonar_config.parallel_config
     threshold = sonar_config.scheduler_config.long_prefill_token_threshold
     refusal = None
     if not cache.enable_prefix_caching or cache.mamba_cache_mode != "align":
@@ -166,11 +165,6 @@ def check_frontier_checkpoint_config(
         refusal = "a KV connector, if any, with kv_role 'kv_both' and kv_load_failure_policy 'recompute'"
     elif enable_kv_cache_events and not recovery_unit_events:
         refusal = "no KV cache events, or kv_events_config.recovery_unit_events"
-    elif parallel.prefill_context_parallel_size != 1:
-        refusal = (
-            "prefill context parallel size 1: recurrent backends need the complete "
-            "token history and do not implement distributed state propagation"
-        )
     if refusal is not None:
         raise ValueError(f"mamba_frontier_checkpoint needs {refusal}")
 

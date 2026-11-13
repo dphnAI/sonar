@@ -53,7 +53,7 @@ from sonar.platforms import current_platform
 from sonar.third_party.flash_linear_attention.ops.kda import FusedRMSNormGated
 from sonar.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd_block
 from sonar.v1.attention.backend import AttentionBackend
-from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata, PCPGDNAttentionBackend
 from sonar.v1.kv_cache_interface import MambaSpec
 from sonar.v1.worker.workspace import current_workspace_manager
 
@@ -290,7 +290,7 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
     def get_attn_backend(self) -> type[AttentionBackend]:
         if self.cache_config.use_kda_recoverssm:
             return _recoverssm_backend()
-        return super().get_attn_backend()
+        return PCPGDNAttentionBackend
 
     def __init__(
         self,
@@ -589,6 +589,16 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
         non_spec_query_start_loc = attn_metadata_narrowed.non_spec_query_start_loc
         non_spec_state_indices_tensor = attn_metadata_narrowed.non_spec_state_indices_tensor  # noqa: E501
         num_actual_tokens = attn_metadata_narrowed.num_actual_tokens
+        pcp = attn_metadata_narrowed.pcp_token_mapping
+        local_output = core_attn_out
+        if pcp is not None:
+            gathered = pcp.gather(torch.cat((qkv_proj_states, g1.squeeze(0).flatten(1), beta.squeeze(0)), dim=-1))
+            qkv_proj_states, global_g, global_beta = gathered.split(
+                (3 * self.local_projection_size, self.local_projection_size, self.local_num_heads), dim=-1
+            )
+            g1 = global_g.view(1, num_actual_tokens, self.local_num_heads, self.head_dim)
+            beta = global_beta.unsqueeze(0)
+            core_attn_out = local_output.new_empty((1, num_actual_tokens, self.local_num_heads, self.head_dim))
         # Spec-decode metadata (all None when speculative decoding is disabled).
         spec_query_start_loc = attn_metadata_narrowed.spec_query_start_loc
         spec_state_indices_tensor = attn_metadata_narrowed.spec_state_indices_tensor
@@ -850,3 +860,5 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
             assert core_attn_out_non_spec is not None
             if ns_out is None:
                 core_attn_out[0, :num_actual_tokens] = core_attn_out_non_spec[0, :num_actual_tokens]
+        if pcp is not None:
+            pcp.select(core_attn_out[0], local_output[0])

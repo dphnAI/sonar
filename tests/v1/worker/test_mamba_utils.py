@@ -692,6 +692,7 @@ def test_replayssm_precopy_moves_packed_state_and_trackers(
     model_state._mamba_src_off_gpu = torch.empty(2, dtype=torch.int32, device=device)
     model_state.num_accepted_tokens_gpu = accepted
     batch = SimpleNamespace(
+        pcp=None,
         num_reqs=1,
         idx_mapping=torch.tensor([1], dtype=torch.int32, device=device),
         query_start_loc=query_start,

@@ -106,9 +106,5 @@ def check_prefill_export_config(
         refusal = "speculative_config.disable_eagle_block_drop"
     elif sonar_config.parallel_config.use_ubatching:
         refusal = "no ubatching"
-    elif sonar_config.parallel_config.prefill_context_parallel_size != 1:
-        # DCP leaves recurrent queries and checkpoint positions global. PCP
-        # partitions those queries and needs distributed recurrent state.
-        refusal = "prefill context parallel size 1"
     if refusal is not None:
         raise ValueError(f"mamba_prefill_export needs {refusal}")

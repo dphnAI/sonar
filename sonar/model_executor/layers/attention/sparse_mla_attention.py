@@ -210,20 +210,21 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
         self.model_config = sonar_config.model_config
         self.mla_dims = get_mla_dims(self.model_config)
         self.topk_tokens: int = sonar_config.model_config.hf_text_config.index_topk
+        parallel_config = sonar_config.parallel_config
+        self.pcp_world_size = parallel_config.prefill_context_parallel_size
+        self.use_pcp = self.pcp_world_size > 1
         self.req_id_per_token_buffer = torch.empty(
             (sonar_config.scheduler_config.max_num_batched_tokens,),
             dtype=torch.int32,
             device=device,
         )
+        # PCP can split each prefill request into two query rows.
         self._context_lens_cpu = torch.empty(
-            sonar_config.scheduler_config.max_num_seqs,
+            sonar_config.scheduler_config.max_num_seqs * (2 if self.use_pcp else 1),
             dtype=torch.int32,
             device="cpu",
             pin_memory=PIN_MEMORY,
         )
-        parallel_config = sonar_config.parallel_config
-        self.pcp_world_size = parallel_config.prefill_context_parallel_size
-        self.use_pcp = self.pcp_world_size > 1
         try:
             self.dcp_world_size = get_dcp_group().world_size
         except AssertionError:

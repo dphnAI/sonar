@@ -51,6 +51,7 @@ from sonar.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
     split_decodes_and_prefills,
 )
+from sonar.v1.attention.ops.pcp import PCPTokenMapping
 from sonar.v1.attention.ops.shardq import build_shardq_split
 from sonar.v1.kv_cache_interface import (
     AttentionSpec,
@@ -247,6 +248,10 @@ class Glm5NextIndexerBackend(DeepseekV32IndexerBackend):
     def supported_kv_cache_layouts(cls) -> tuple[KVCacheLayout, ...]:
         # Tail state and pooled indexer pages share each manager block.
         return (KVCacheLayout.BLHNC,)
+
+    @staticmethod
+    def get_builder_cls() -> type["Glm5NextIndexerMetadataBuilder"]:
+        return Glm5NextIndexerMetadataBuilder
 
     @staticmethod
     def get_supported_kernel_block_sizes(kv_cache_spec=None) -> list[int | MultipleOf]:
@@ -711,6 +716,7 @@ class DeepseekV32IndexerMetadata:
     prefill: DeepseekV32IndexerPrefillMetadata | None = None
     positions: torch.Tensor | None = None
     block_table: torch.Tensor | None = None
+    pcp_token_mapping: PCPTokenMapping | None = None
 
 
 @triton.jit(do_not_specialize=["num_reqs", "num_actual_tokens", "num_tokens"])
@@ -1945,6 +1951,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
             prefill=prefill_metadata,
             decode=decode_metadata,
             block_table=common_attn_metadata.block_table_tensor,
+            positions=common_attn_metadata.positions,
         )
 
         return attn_metadata
@@ -2145,3 +2152,13 @@ def build_prefill_chunk_metadata(
 
 _PREPARE_UNIFORM_DECODE_KERNEL = PrepareUniformDecodeKernel()
 _BUILD_PREFILL_CHUNK_METADATA_KERNEL = BuildPrefillChunkMetadataKernel()
+
+
+class Glm5NextIndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
+    """The pooled indexer consumes complete request rows on every PCP rank."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.use_pcp = False
+        self.pcp_world_size = 1
+        self.pcp_rank = 0

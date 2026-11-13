@@ -12,6 +12,7 @@ from sonar.distributed.parallel_state import get_dcp_group, get_pcp_group
 from sonar.logger import init_logger
 from sonar.utils.torch_utils import async_tensor_h2d
 from sonar.v1.attention.backends.utils import PAD_SLOT_ID, get_dcp_local_seq_lens
+from sonar.v1.attention.ops.pcp import PCPTokenMapping
 from sonar.v1.worker.gpu.block_table import BlockTables
 from sonar.v1.worker.gpu.input_batch import (
     InputBatch,
@@ -37,6 +38,10 @@ class PCPBatchMetadata:
     global_seq_lens_cpu_upper_bound_np: np.ndarray
     # [num_reqs_after_padding], set only under PCP+DCP.
     dcp_local_seq_lens_cpu_upper_bound: torch.Tensor | None = None
+    global_batch: InputBatch | None = None
+    global_block_tables: tuple[torch.Tensor, ...] | None = None
+    global_slot_mappings: torch.Tensor | None = None
+    token_mapping: PCPTokenMapping | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,7 @@ class PCPManager:
         dcp_rank: int = 0,
         cp_interleave: int = 1,
         moe_gathers_tokens: bool = False,
+        recurrent_layers: bool = False,
     ) -> None:
         self.pcp_world_size = pcp_world_size
         self.pcp_rank = pcp_rank
@@ -80,6 +86,7 @@ class PCPManager:
         self.dcp_rank = dcp_rank
         self.cp_interleave = cp_interleave
         self.shard_decode_requests = shard_decode_requests
+        self.recurrent_layers = recurrent_layers
 
         self._global_batch: InputBatch | None = None
         self._local_batch: InputBatch | None = None
@@ -175,6 +182,8 @@ class PCPManager:
         ):
             raise NotImplementedError(reason)
         cudagraph_mode = sonar_config.compilation_config.cudagraph_mode
+        if model_config.is_hybrid and cudagraph_mode != CUDAGraphMode.NONE:
+            raise NotImplementedError("Hybrid PCP requires NONE CUDA graph mode. Set --enforce-eager.")
         is_sparse_mla = hasattr(model_config.hf_text_config, "index_topk")
         if parallel_config.decode_context_parallel_size > 1 and not is_sparse_mla:
             # Dense MLA prefill sizes its DCP KV gather from each rank's own
@@ -506,6 +515,7 @@ class PCPManager:
             )
         rank_token_start = self.pcp_rank * num_local_tokens_padded
         assert self._padded_gather_idx is not None
+        assert self._hidden_restore_idx is not None
         local_gather_idx = self._padded_gather_idx[rank_token_start : rank_token_start + num_local_tokens_padded]
         self._local_gather_idx = local_gather_idx
         torch.index_select(
@@ -614,6 +624,22 @@ class PCPManager:
                     local_to_global_batch_req_idx_np
                 ],
                 dcp_local_seq_lens_cpu_upper_bound=dcp_local_seq_lens_cpu_upper_bound,
+                global_batch=global_batch if self.recurrent_layers else None,
+                global_block_tables=(
+                    tuple(self._block_tables.input_block_tables)
+                    if self.recurrent_layers and self._block_tables is not None
+                    else None
+                ),
+                global_slot_mappings=(
+                    self._global_batch_slot_mappings[:, : global_batch.num_tokens]
+                    if self.recurrent_layers and self._global_batch_slot_mappings is not None
+                    else None
+                ),
+                token_mapping=(
+                    PCPTokenMapping(self._hidden_restore_idx, local_gather_idx)
+                    if self.recurrent_layers and (global_batch.has_prefill or self.shard_decode_requests)
+                    else None
+                ),
             ),
             num_computed_tokens_np=local_start_pos_np,
             prefill_len_np=local_prefill_len_np,
@@ -665,6 +691,12 @@ class PCPManager:
         assert self._block_tables is not None
         assert self._local_block_tables is not None
         assert self._local_block_table_ptrs is not None
+        if self.recurrent_layers:
+            global_batch = self.global_batch
+            self._block_tables.gather_block_tables(
+                global_batch.idx_mapping,
+                global_batch.num_reqs_after_padding,
+            )
         block_tables = self._block_tables.gather_block_tables(
             input_batch.idx_mapping,
             input_batch.num_reqs_after_padding,
@@ -824,4 +856,5 @@ def maybe_build_pcp_manager(
         cp_interleave=parallel_config.cp_kv_cache_interleave_size,
         # Without EP all2all kernels, MoERunner all-gathers PCP tokens to route.
         moe_gathers_tokens=not parallel_config.enable_expert_parallel,
+        recurrent_layers=sonar_config.model_config.is_hybrid,
     )

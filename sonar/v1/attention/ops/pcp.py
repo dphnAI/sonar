@@ -1,11 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+from dataclasses import dataclass
+
 import torch
 
 from sonar.distributed.parallel_state import (
     get_pcp_group,
     get_tp_group,
 )
+
+
+@dataclass(frozen=True)
+class PCPTokenMapping:
+    """Restore complete sequences for recurrent layers, then select local rows."""
+
+    global_indices: torch.Tensor
+    local_indices: torch.Tensor
+
+    def gather(self, value: torch.Tensor) -> torch.Tensor:
+        gathered = get_pcp_group().all_gather(value.contiguous(), dim=0)
+        return gathered.index_select(0, self.global_indices)
+
+    def select(self, value: torch.Tensor, out: torch.Tensor) -> None:
+        torch.index_select(value, 0, self.local_indices, out=out)
 
 
 def _gather_prefill_cache_inputs(
@@ -81,7 +98,7 @@ def maybe_gather_mla_latent_cache_inputs(
         num_decode_tokens,
         pcp_shard_decode_requests,
     )
-    cache_k_pe = cache_k_pe_flat.view(-1, *k_pe.shape[1:])
+    cache_k_pe = cache_k_pe_flat.view(cache_k_pe_flat.shape[0], *k_pe.shape[1:])
     return cache_kv_c, cache_k_pe, cache_slot_mapping
 
 

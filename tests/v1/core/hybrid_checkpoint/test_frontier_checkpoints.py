@@ -417,18 +417,6 @@ def test_dcp_eviction_tracks_partial_attention_dependency():
     assert checkpoints.graph.units[key].dead
 
 
-def test_prefill_context_parallel_requires_distributed_recurrence():
-    scheduler = make_scheduler(frontier=False)
-    scheduler.sonar_config.parallel_config.prefill_context_parallel_size = 2
-    with pytest.raises(ValueError, match="distributed state propagation"):
-        check_frontier_checkpoint_config(
-            scheduler.sonar_config,
-            block_size=BLOCK,
-            use_v2_model_runner=True,
-            enable_kv_cache_events=False,
-        )
-
-
 def test_dcp_evicting_boundary_keeps_page_shared_with_frontier():
     scheduler = make_scheduler(dcp_world_size=4, prefix_cache_eviction="gds", prefill_cost_coefficients=(1.0, 0.0))
     first = add_request(scheduler, "first", prompt(1, 150), max_tokens=60)
