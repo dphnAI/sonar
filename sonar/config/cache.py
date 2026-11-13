@@ -173,6 +173,8 @@ def is_known_kv_cache_dtype(name: str) -> bool:
 
 MambaDType = Literal["auto", "float32", "float16", "bfloat16"]
 MambaCacheMode = Literal["align", "none"]
+MambaSpecStateLayout = Literal["per_position", "compact"]
+PrefixCacheEviction = Literal["lru", "gds"]
 PrefixCachingHashAlgo = Literal["sha256", "sha256_cbor", "xxhash", "xxhash_cbor"]
 KVOffloadingBackend = Literal["native", "lmcache"]
 
@@ -319,6 +321,29 @@ class CacheConfig:
     prompt tail. Off by default; only takes effect with prefix caching enabled,
     EAGLE on the Mamba group, and a prefix match unit smaller than the Mamba
     block size."""
+    mamba_frontier_checkpoint: bool = False
+    """Retain finished requests' recurrent checkpoints at non-block-aligned
+    positions. Requires prefix caching and compatible recurrent cache groups.
+    Supports decode context parallelism with a compatible attention backend.
+    Prefill context parallelism requires distributed recurrent-state propagation
+    and is not supported on this path."""
+    mamba_prefill_export: bool = False
+    """Export recurrent checkpoints inside prefill chunks without splitting
+    the chunks at each checkpoint. Requires a supporting backend."""
+    prefix_cache_eviction: PrefixCacheEviction = "lru"
+    """Evict by recency ("lru") or by saved prefill cost per freed block ("gds").
+    GDS evicts whole resumable states and requires frontier checkpoints."""
+    prefill_cost_coefficients: tuple[float, float] | None = None
+    """GDS cost coefficients (d, e). Prefilling positions [a, b) costs
+    `d * (b - a) + e * (b**2 - a**2) / 200000` seconds.
+    Only e/d affects ordering."""
+    prefix_cache_leaf_last: bool = False
+    """With GDS, evict inner checkpoints before each session's newest leaf."""
+    prefix_cache_leaf_idle_seconds: float | None = Field(default=None, gt=0)
+    """Demote an unused, non-branching leaf after this many seconds."""
+    mamba_spec_state_layout: MambaSpecStateLayout = "per_position"
+    """Use per-draft-position state blocks or one compact state with accepted
+    updates applied after sampling. Compact mode requires a supporting KDA model."""
     replayssm_buffer_len: int = Field(default=16, gt=0)
     """ReplaySSM logical history length B for Mamba2. Triton standard decode
     uses B physical rows; FlashInfer and Triton speculative decoding use B+T,
@@ -332,7 +357,7 @@ class CacheConfig:
     supported. Flushes are most efficient when mamba_block_size is a
     multiple of replayssm_buffer_len, but this is not required."""
     use_kda_recoverssm: bool = field(default=False, init=False)
-    """Whether Kimi-K3 KDA uses RecoverSSM speculative decode."""
+    """Whether KDA layers use RecoverSSM speculative decode."""
 
     # Will be set after profiling.
     num_gpu_blocks: int | None = field(default=None, init=False)
@@ -435,6 +460,12 @@ class CacheConfig:
             # Prefix-caching implementation detail (doesn't affect compiled graph).
             "prefix_match_unit",
             "enable_mamba_shared_prefix_checkpoint",
+            "mamba_frontier_checkpoint",
+            "mamba_prefill_export",
+            "prefix_cache_eviction",
+            "prefill_cost_coefficients",
+            "prefix_cache_leaf_last",
+            "prefix_cache_leaf_idle_seconds",
             "mamba_page_size_padded",
             "skip_page_size_padded",
             "user_specified_block_size",
@@ -487,6 +518,25 @@ class CacheConfig:
             self.block_size = self.DEFAULT_BLOCK_SIZE
         else:
             self.user_specified_block_size = True
+        return self
+
+    @model_validator(mode="after")
+    def _validate_prefix_cache_eviction(self) -> "CacheConfig":
+        if self.prefix_cache_eviction == "gds":
+            if not self.mamba_frontier_checkpoint:
+                raise ValueError('prefix_cache_eviction="gds" requires mamba_frontier_checkpoint')
+            if self.prefill_cost_coefficients is None:
+                raise ValueError('prefix_cache_eviction="gds" requires prefill_cost_coefficients')
+        elif self.prefix_cache_leaf_last:
+            raise ValueError('prefix_cache_leaf_last requires prefix_cache_eviction="gds"')
+        if self.prefix_cache_leaf_idle_seconds is not None and not self.prefix_cache_leaf_last:
+            raise ValueError("prefix_cache_leaf_idle_seconds requires prefix_cache_leaf_last")
+        if self.prefill_cost_coefficients is not None:
+            per_token, per_token_per_100k = self.prefill_cost_coefficients
+            if not (per_token > 0 and per_token_per_100k >= 0):
+                raise ValueError(
+                    f"prefill_cost_coefficients (d, e) need d > 0 and e >= 0, got {self.prefill_cost_coefficients}"
+                )
         return self
 
     @property

@@ -780,6 +780,8 @@ class QSARawKeyCache(_QSAIndexerCache):
             head_size=self.head_size,
             head_size_v=0,
             dtype=self.dtype,
+            resume_catchup="prefill",
+            compression_ratio=self.compress_ratio,
         )
 
 

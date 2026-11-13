@@ -137,6 +137,9 @@ def _split(
     num_prefill_checkpoint_blocks: int = 0,
     max_num_scheduled_tokens: int = 16384,
     num_hash_lookahead_tokens: int = 0,
+    prefill_export: bool = False,
+    export_positions: dict[str, int] | None = None,
+    catchup_group_size: int | None = None,
 ) -> int:
     """Call the real `Scheduler._mamba_block_aligned_split` on a stub self."""
     if use_eagle_block_drop is None:
@@ -154,8 +157,80 @@ def _split(
         hash_block_size=ATTN_BLOCK_SIZE,
         mamba_has_prefill_checkpoint_blocks=(num_prefill_checkpoint_blocks > 0),
         mamba_prefill_checkpoint_alignment=(16 if num_prefill_checkpoint_blocks > 0 else None),
+        mamba_checkpoints=(
+            SimpleNamespace(catchup_pool_size=catchup_group_size) if catchup_group_size is not None else None
+        ),
+        mamba_prefill_export=prefill_export,
+        _prefill_export_positions=export_positions if export_positions is not None else {},
     )
     return Scheduler._mamba_block_aligned_split(stub, request, num_new_tokens)
+
+
+def test_prefill_export_crosses_shared_junction() -> None:
+    (request,) = create_requests(1, num_tokens=10000, block_size=ATTN_BLOCK_SIZE)
+    request.shared_prefix_boundary = MAMBA_BLOCK_SIZE
+    exports: dict[str, int] = {}
+    assert _split(request, 4800, use_eagle=False, num_prefill_checkpoint_blocks=1) == MAMBA_BLOCK_SIZE
+    assert (
+        _split(
+            request,
+            4800,
+            use_eagle=False,
+            num_prefill_checkpoint_blocks=1,
+            prefill_export=True,
+            export_positions=exports,
+        )
+        == 4800
+    )
+    assert exports == {request.request_id: MAMBA_BLOCK_SIZE}
+
+
+def test_prefill_export_unaligned_resume_stops_at_boundary() -> None:
+    (request,) = create_requests(1, num_tokens=10000, block_size=ATTN_BLOCK_SIZE)
+    request.num_computed_tokens = 8
+    exports: dict[str, int] = {}
+    assert (
+        _split(
+            request,
+            4792,
+            use_eagle=False,
+            num_prefill_checkpoint_blocks=1,
+            prefill_export=True,
+            export_positions=exports,
+        )
+        == MAMBA_BLOCK_SIZE - 8
+    )
+    assert not exports
+
+
+@pytest.mark.parametrize(("budget", "expected"), [(1000, 0), (1200, 1152)])
+def test_prefill_export_filler_requires_minimum_chunk(budget: int, expected: int) -> None:
+    (request,) = create_requests(1, num_tokens=10000, block_size=ATTN_BLOCK_SIZE)
+    assert (
+        _split(
+            request,
+            budget,
+            use_eagle=False,
+            num_prefill_checkpoint_blocks=1,
+            prefill_export=True,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(("start", "length", "kept"), [(0, 1600, False), (1600, 1600, False), (0, 3200, True)])
+def test_prefill_export_finalization_after_caps(start: int, length: int, kept: bool) -> None:
+    (request,) = create_requests(1, num_tokens=10000, block_size=ATTN_BLOCK_SIZE)
+    exports = {request.request_id: 1600}
+    Scheduler._finalize_prefill_export(SimpleNamespace(_prefill_export_positions=exports), request, start, length)
+    assert (request.request_id in exports) is kept
+
+
+@pytest.mark.parametrize(("start", "expected"), [(31, 1), (32, MAMBA_BLOCK_SIZE - 32)])
+def test_frontier_resume_catches_up_to_compression_group(start: int, expected: int) -> None:
+    (request,) = create_requests(1, num_tokens=10000, block_size=ATTN_BLOCK_SIZE)
+    request.num_computed_tokens = start
+    assert _split(request, 4800, use_eagle=False, catchup_group_size=32) == expected
 
 
 @pytest.mark.parametrize(

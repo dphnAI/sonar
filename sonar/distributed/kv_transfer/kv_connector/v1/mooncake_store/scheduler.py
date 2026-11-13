@@ -22,6 +22,10 @@ from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.data import ( 
     ReqMeta,
     RequestTracker,
 )
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.frontier import (
+    FrontierTransfer,
+    locator_key,
+)
 from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.worker import (  # noqa: E501
     LookupKeyClient,
 )
@@ -29,7 +33,9 @@ from sonar.logger import init_logger
 from sonar.utils.math_utils import cdiv
 from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 from sonar.v1.core.block_pool import BlockPool
-from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.hybrid_checkpoint.frontier import FrontierIndex
+from sonar.v1.core.hybrid_checkpoint.keys import frontier_key
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
 from sonar.v1.core.kv_cache_utils import (
     resolve_kv_cache_block_sizes,
 )
@@ -136,6 +142,10 @@ class MooncakeStoreScheduler:
         # Skips lookup CPU cost on instances that never load KV from the store.
         self.enable_lookup = kvc_extra_config.get("enable_lookup", True)
         self.save_decode_cache = kvc_extra_config.get("save_decode_cache", False)
+        self.frontier_write_through = kvc_extra_config.get("frontier_write_through", False)
+        self.kv_cache_manager: KVCacheManager | None = None
+        self._finished_frontiers: list[ReqMeta] = []
+        self._failed_frontier_loads: set[str] = set()
         kv_event_config = sonar_config.kv_events_config
         self.enable_kv_events = bool(kv_event_config and kv_event_config.enable_kv_cache_events)
         self.client = LookupKeyClient(sonar_config)
@@ -222,6 +232,14 @@ class MooncakeStoreScheduler:
         if not self.enable_lookup:
             return 0, False
 
+        if self.frontier_write_through:
+            if request.request_id in self._failed_frontier_loads:
+                return 0, False
+            hit = self._lookup_frontier(request, num_computed_tokens)
+            if hit is None:
+                return None, False
+            if hit:
+                return hit, True
         if request.num_tokens < self._lookup_align():
             return 0, False
 
@@ -271,6 +289,10 @@ class MooncakeStoreScheduler:
         # not reuse its hit.
         self.client.discard(request.request_id)
         local_block_ids: tuple[list[int], ...] = ()
+        spec = self.load_specs.get(request.request_id)
+        if spec is not None and spec.frontier is not None and num_external_tokens:
+            all_ids = blocks.get_block_ids()
+            spec.frontier.blocks = [(group, index, all_ids[group][index]) for group, index, _ in spec.frontier.blocks]
         if num_external_tokens > 0:
             local_block_ids = blocks.get_block_ids(
                 group_ids=self._store_group_ids,
@@ -306,6 +328,7 @@ class MooncakeStoreScheduler:
         can_process_cached = not is_consumer or self.save_decode_cache
 
         for finished_req_id in scheduler_output.finished_req_ids:
+            self._failed_frontier_loads.discard(finished_req_id)
             self.load_specs.pop(finished_req_id, None)
             self._request_trackers.pop(finished_req_id, None)
             self._unfinished_requests.pop(finished_req_id, None)
@@ -464,6 +487,9 @@ class MooncakeStoreScheduler:
         for req_meta in self._finished_lookahead_metas.values():
             meta.add_request(req_meta)
         self._finished_lookahead_metas.clear()
+        for req_meta in self._finished_frontiers:
+            meta.add_request(req_meta)
+        self._finished_frontiers.clear()
 
         if not self._capacity_only:
             self._reference_save_blocks(meta.requests)
@@ -535,6 +561,95 @@ class MooncakeStoreScheduler:
                 continue
             self._pinned_saves[store_job_id] = (block_ids, self._num_workers)
             pool.touch([pool.blocks[block_id] for block_id in block_ids])
+
+    def _frontier_blocks(self, index: FrontierIndex, length: int, local_tokens: int = 0) -> list[tuple[int, int, int]]:
+        positions: list[tuple[int, int, int]] = []
+        for group in index.pages:
+            span = index.managers[group].block_size
+            positions.extend((group, i, -1) for i in range(local_tokens // span, cdiv(length, span)))
+        for group in index.states:
+            span = index.managers[group].block_size
+            positions.append((group, cdiv(length, span) - 1, -1))
+        if length % index.pool_size:
+            positions.extend((group, 0, -1) for group in index.rings)
+        return positions
+
+    def _lookup_frontier(self, request: Request, local_tokens: int) -> int | None:
+        assert self.kv_cache_manager is not None
+        checkpoints = self.kv_cache_manager.checkpoints
+        assert checkpoints is not None
+        index = checkpoints.frontiers
+        limit = request.get_max_cache_hit_length()
+        unit = index.hash_block_size
+        locators = [
+            locator_key(index, request, h * unit + 1) for h in range((limit - 1) // unit, local_tokens // unit - 1, -1)
+        ]
+        lengths = self.client.lookup_frontier_lengths(request.request_id, locators)
+        if lengths is None:
+            return None
+        candidates = [
+            (length, frontier_key(index.hash_fn, request, length, unit).hex())
+            for length in lengths
+            if local_tokens < length <= limit
+        ]
+        matches = self.client.lookup_frontiers(request.request_id, candidates)
+        if matches is None:
+            return None
+        for length, key in matches:
+            transfer = FrontierTransfer(key, "", length, self._frontier_blocks(index, length, local_tokens))
+            self.load_specs[request.request_id] = LoadSpec(
+                sonar_cached_tokens=local_tokens,
+                kvpool_cached_tokens=length,
+                can_load=False,
+                frontier=transfer,
+            )
+            return length - local_tokens
+        return 0
+
+    def register_finished_frontier(self, request: Request) -> None:
+        if not self.frontier_write_through or request.resumable or request.status == RequestStatus.FINISHED_ABORTED:
+            return
+        assert self.kv_cache_manager is not None
+        checkpoints = self.kv_cache_manager.checkpoints
+        assert checkpoints is not None
+        index = checkpoints.frontiers
+        length = request.num_computed_tokens
+        if checkpoints.speculative is not None:
+            # A mirrored stop consumes the last sampled token in the in-flight
+            # step; otherwise that token is still uncomputed.
+            length = request.num_tokens if request.num_in_flight_tokens else request.num_tokens - 1
+        key = frontier_key(index.hash_fn, request, length, index.hash_block_size)
+        entry = index.entries.get(key)
+        if entry is None:
+            return
+        positions = []
+        for group, position, _ in self._frontier_blocks(index, length):
+            if group in index.pages:
+                block = index.managers[group].req_to_blocks[request.request_id][position]
+            else:
+                block = entry.blocks[group]
+            if block.is_null:
+                return
+            positions.append((group, position, block.block_id))
+        transfer = FrontierTransfer(key.hex(), locator_key(index, request, length), length, positions)
+        block_ids = list(dict.fromkeys(block for _, _, block in positions))
+        pool = self._gpu_block_pool
+        assert pool is not None
+        job_id = self._next_store_job_id
+        self._next_store_job_id += 1
+        pool.touch([pool.blocks[block] for block in block_ids])
+        self._pinned_saves[job_id] = (block_ids, self._num_workers)
+        self._finished_frontiers.append(
+            ReqMeta(
+                req_id=request.request_id,
+                token_len_chunk=0,
+                block_ids=(),
+                block_hashes=[],
+                can_save=True,
+                store_job_id=job_id,
+                frontier=transfer,
+            )
+        )
 
     def register_finished_lookahead_save(
         self,
@@ -693,6 +808,8 @@ class MooncakeStoreScheduler:
 
     def update_connector_output(self, connector_output: KVConnectorOutput) -> None:
         """Drop the block references of store jobs every rank has finished."""
+        if self.frontier_write_through and connector_output.failed_recving:
+            self._failed_frontier_loads.update(connector_output.failed_recving)
         meta = connector_output.kv_connector_worker_meta
         if not isinstance(meta, MooncakeStoreWorkerMetadata):
             return

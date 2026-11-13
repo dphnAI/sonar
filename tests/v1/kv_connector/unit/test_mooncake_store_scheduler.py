@@ -47,6 +47,9 @@ def _make_bare_scheduler(
     scheduler = object.__new__(MooncakeStoreScheduler)
     scheduler.kv_role = kv_role
     scheduler.save_decode_cache = save_decode_cache
+    scheduler.frontier_write_through = False
+    scheduler._finished_frontiers = []
+    scheduler._failed_frontier_loads = set()
     scheduler.enable_kv_events = False
     scheduler.lookup_async = False
     scheduler.client = _StubLookupClient(hit_tokens=0)

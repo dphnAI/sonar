@@ -286,6 +286,7 @@ pub struct SchedulerMetrics {
     // Prefix-cache counters, including the connector-backed external cache path.
     pub prefix_cache_queries: Family<EngineLabels, U64Counter>,
     pub prefix_cache_hits: Family<EngineLabels, U64Counter>,
+    pub prefix_cache_frontier_hits: Family<EngineLabels, U64Counter>,
     pub external_prefix_cache_queries: Family<EngineLabels, U64Counter>,
     pub external_prefix_cache_hits: Family<EngineLabels, U64Counter>,
     pub prompt_tokens_cached_by_source: Family<CacheHitSourceLabels, U64Counter>,
@@ -431,6 +432,13 @@ impl SchedulerMetrics {
             "sonar:prefix_cache_hits",
             "Prefix cache hits, in terms of number of cached tokens.",
             prefix_cache_hits.clone(),
+        );
+
+        let prefix_cache_frontier_hits = Family::default();
+        registry.register(
+            "sonar:prefix_cache_frontier_hits",
+            "Cached tokens served beyond the block-aligned hit by recurrent frontier checkpoints.",
+            prefix_cache_frontier_hits.clone(),
         );
 
         let external_prefix_cache_queries = Family::default();
@@ -776,6 +784,7 @@ impl SchedulerMetrics {
             cache_config_info,
             prefix_cache_queries,
             prefix_cache_hits,
+            prefix_cache_frontier_hits,
             external_prefix_cache_queries,
             external_prefix_cache_hits,
             prompt_tokens_cached_by_source,

@@ -14,6 +14,7 @@ from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointBuilder,
     MambaPrefillCheckpointMetadata,
 )
+from sonar.platforms import current_platform
 from sonar.utils.torch_utils import async_tensor_h2d
 from sonar.v1.attention.backend import (
     AttentionBackend,
@@ -28,6 +29,7 @@ from sonar.v1.attention.backends.utils import (
     mamba_get_block_table_tensor,
     split_decodes_and_prefills,
 )
+from sonar.v1.attention.ops.pcp import PCPTokenMapping
 from sonar.v1.kv_cache_interface import KVCacheSpec, MambaSpec
 
 # FlashInfer's GDN prefill emits states every N tokens, N a multiple of its
@@ -88,6 +90,12 @@ class GDNAttentionBackend(AttentionBackend):
         return True
 
 
+class PCPGDNAttentionBackend(GDNAttentionBackend):
+    @classmethod
+    def supports_pcp(cls) -> bool:
+        return current_platform.is_cuda()
+
+
 @dataclass
 class GDNAttentionMetadata:
     num_prefills: int
@@ -98,6 +106,7 @@ class GDNAttentionMetadata:
     num_spec_decode_tokens: int
     num_actual_tokens: int
 
+    pcp_token_mapping: PCPTokenMapping | None = None
     checkpoint: MambaPrefillCheckpointMetadata | None = None
     flashinfer_checkpoint_plan: GDNFlashInferCheckpointPlan | None = None
     has_initial_state: torch.Tensor | None = None

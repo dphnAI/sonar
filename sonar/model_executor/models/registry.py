@@ -49,6 +49,7 @@ from .interfaces import (
     is_attention_free,
     is_hybrid,
     requires_raw_input_tokens,
+    supports_compact_spec_state,
     supports_hc_sp,
     supports_kv_cache_grouping,
     supports_lora,
@@ -963,6 +964,7 @@ class _ModelInfo:
     is_hybrid: bool
     has_noops: bool
     supports_replayssm: bool
+    supports_compact_spec_state: bool
     supports_transcription: bool
     supports_transcription_only: bool
     supports_kv_cache_grouping: bool
@@ -994,6 +996,7 @@ class _ModelInfo:
             is_attention_free=is_attention_free(model),
             is_hybrid=is_hybrid(model),
             supports_replayssm=supports_replayssm(model),
+            supports_compact_spec_state=supports_compact_spec_state(model),
             supports_transcription=supports_transcription(model),
             supports_transcription_only=(supports_transcription(model) and model.supports_transcription_only),
             supports_kv_cache_grouping=supports_kv_cache_grouping(model),

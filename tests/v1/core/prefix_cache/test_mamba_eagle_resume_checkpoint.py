@@ -74,6 +74,8 @@ def _stub(manager, block_size, hash_block_size, *, block_drop=True):
         mamba_has_prefill_checkpoint_blocks=False,  # forced False under eagle
         mamba_partial_cache_hit=partial_hit,
         mamba_shared_prefix_checkpoint=(partial_hit and manager.mamba_shared_prefix_checkpoint),
+        mamba_checkpoints=None,
+        mamba_prefill_export=False,
     )
 
 

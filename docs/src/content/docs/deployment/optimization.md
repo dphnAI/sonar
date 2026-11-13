@@ -184,6 +184,43 @@ sonar serve MODEL --no-enable-prefix-caching
 Keep it enabled unless the target platform or a specific feature requires it to
 be disabled.
 
+### Hybrid-model checkpoints
+
+[FlashStates](https://github.com/FutureMLS-Lab/FlashStates) retains recurrent
+checkpoints at completed conversation turns, reducing repeated prefill. The
+checkpoints also consume GPU cache capacity.
+
+For Qwen3.5-4B on B300 or RTX 6000 Blackwell:
+
+```bash
+sonar serve Qwen/Qwen3.5-4B \
+  --max-num-seqs 32 \
+  --block-size 1024 --mamba-block-size 1024 \
+  --mamba-ssm-cache-dtype float32 \
+  --mamba-frontier-checkpoint --mamba-prefill-export
+```
+
+Prefill export requires a supporting backend. Enable DCP with
+`--decode-context-parallel-size N`. Attention groups must share a logical
+block size divisible by the recurrent block size. With GQA, TP must exceed
+the number of KV heads, such as TP 8 for four KV heads and DCP 2. For GLM's
+four-token indexer compression, use `--cp-kv-cache-interleave-size 4`.
+
+Qwen3.5-4B at TP 8 can produce different greedy tokens between cached and
+fresh continuation, including with DCP disabled. Validate continuation on
+the intended model and topology.
+
+CUDA GLM-5.3-Flash and Kimi-K3 support `--prefill-context-parallel-size N`.
+Use `--language-model-only` and `--enforce-eager`. PCP replicates recurrent
+computation and KV storage across its ranks.
+GLM's FlashInfer sparse attention backend supports PCP or DCP separately,
+not both together.
+
+For cost-aware eviction, add `--prefix-cache-eviction gds` and
+`--prefill-cost-coefficients D E`, fitted to prefill timings. `1 0` gives a
+linear token-count cost model. `--prefix-cache-leaf-last` prefers retaining
+each session's newest checkpoint.
+
 ## Quantize model weights
 
 Quantized weights reduce model memory. The saved memory can hold a larger KV

@@ -12,6 +12,7 @@ and MooncakeDistributedStore integration.
 
 import dataclasses
 import functools
+import json
 import math
 import os
 import queue
@@ -36,6 +37,7 @@ from sonar.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
+    get_tp_group,
 )
 from sonar.distributed.kv_events import BlockStored
 from sonar.distributed.kv_transfer.kv_connector.utils import CircuitBreaker
@@ -59,6 +61,10 @@ from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.data import ( 
     MooncakeStoreWorkerMetadata,
     ReqMeta,
     TailKeyBoundary,
+)
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.frontier import (
+    FRONTIER_LOOKUP_MSG,
+    FrontierStore,
 )
 from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.layout import (  # noqa: E501
     ATTENTION_STORE_LAYOUTS,
@@ -546,6 +552,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
             name="KVCacheStoreSendingThread",
             record_operation=record_operation,
         )
+        self.frontier_store: FrontierStore | None = None
         # Only ranks with identical group bytes may stripe PUTs (e.g., MLA).
         self.group_put_steps = group_put_steps
         self.coord = coord
@@ -850,6 +857,15 @@ class KVCacheStoreSendingThread(KVTransferThread):
         event_token_ids = req_meta.token_ids
         token_ids_start = req_meta.token_ids_start
         try:
+            if req_meta.frontier is not None:
+                assert req_meta.current_event is not None
+                req_meta.current_event.synchronize()
+                try:
+                    assert self.frontier_store is not None
+                    self.frontier_store.save(req_meta.frontier, self.replicate_config)
+                except Exception:
+                    logger.exception("Mooncake frontier save failed for %s", req_id)
+                return
             lcm_block_size = self.coord.lcm_block_size
             available_token_len = req_meta.token_len_chunk
             checkpoint_len = available_token_len // lcm_block_size * lcm_block_size
@@ -1167,6 +1183,7 @@ class KVCacheStoreRecvingThread(KVTransferThread):
             record_operation=record_operation,
             request_queue=request_queue,
         )
+        self.frontier_store: FrontierStore | None = None
         self.group_participates = (
             list(group_participates) if group_participates is not None else [True] * len(token_databases)
         )
@@ -1212,6 +1229,17 @@ class KVCacheStoreRecvingThread(KVTransferThread):
         return invalid_block_ids
 
     def _handle_request(self, req_meta: ReqMeta):
+        if req_meta.load_spec is not None and req_meta.load_spec.frontier is not None:
+            try:
+                assert self.frontier_store is not None
+                self.frontier_store.load(req_meta.load_spec.frontier)
+            except Exception:
+                self.set_failed_request(req_meta.req_id)
+                logger.exception("Mooncake frontier load failed for %s", req_meta.req_id)
+            finally:
+                self.set_finished_request(req_meta.req_id)
+                self.request_queue.task_done()
+            return
         token_len = req_meta.load_spec.token_len  # type: ignore[union-attr]
         req_id = req_meta.req_id
         mask_num = (
@@ -1520,6 +1548,11 @@ class MooncakeStoreWorker:
 
         self.store = MooncakeDistributedStore()
         setup_mooncake_store(self.store, store_config, local_hostname, engine=shared_engine)
+        self.frontier_store = (
+            FrontierStore(self.store, sonar_config, kv_cache_config, cache_prefix, self.hash_block_size)
+            if extra_config.get("frontier_write_through")
+            else None
+        )
 
         preferred_segment = rdma_utils.get_configured_preferred_segment(extra_config)
         self.preferred_segment = preferred_segment
@@ -1568,7 +1601,8 @@ class MooncakeStoreWorker:
 
         # Start lookup server on rank 0 for scheduler-side prefix queries
         self.lookup_server: LookupKeyServer | None = None
-        if sonar_config.parallel_config.rank == 0:
+        lookup_rank = self.frontier_store.rank if self.frontier_store is not None else parallel_config.rank
+        if lookup_rank == 0:
             self.lookup_server = LookupKeyServer(self, sonar_config)
 
         kv_event_config = sonar_config.kv_events_config
@@ -2071,6 +2105,26 @@ class MooncakeStoreWorker:
             num_device_segments,
         )
 
+        if self.frontier_store is not None:
+            borrowed_regions: set[int] = set()
+            if self._reuse_pd_transfer_engine:
+                # The PD connector owns registration of transfer groups.
+                # Frontier-only buffers (notably rings) remain Store-owned.
+                for group in self._kv_cache_config.transfer_groups:
+                    for name in group.layer_names:
+                        if (value := kv_caches.get(name)) is not None:
+                            borrowed_regions.update(
+                                tensor.untyped_storage().data_ptr() for tensor in _layer_views(value)
+                            )
+            self.frontier_store.register(kv_caches, self._device_regions, borrowed_regions)
+            rank_schemas = [(self.frontier_store.rank, self.frontier_store.schema)]
+            for parallel_group in (get_tp_group(), get_pcp_group(), get_pp_group()):
+                if parallel_group.world_size > 1:
+                    gathered: list[Any] = [None] * parallel_group.world_size
+                    torch.distributed.all_gather_object(gathered, rank_schemas, group=parallel_group.cpu_group)
+                    rank_schemas = [entry for entries in gathered for entry in entries]
+            self.frontier_store.set_layout_namespace([schema for _, schema in sorted(rank_schemas)])
+
         # Start transfer threads
         if self.can_put:
             ready_event_sending = threading.Event()
@@ -2090,6 +2144,7 @@ class MooncakeStoreWorker:
                 record_operation=self._record_kv_connector_operation,
                 group_participates=[group.kv_cache_spec.prefix_cacheable for group in self._kv_cache_groups],
             )
+            self.kv_send_thread.frontier_store = self.frontier_store
             self.kv_send_thread.start()
 
         self.kv_recv_threads = []
@@ -2109,6 +2164,7 @@ class MooncakeStoreWorker:
                 group_participates=[group.kv_cache_spec.prefix_cacheable for group in self._kv_cache_groups],
                 is_hma_required=self._is_hma_required,
             )
+            recv_thread.frontier_store = self.frontier_store
             recv_thread.name = f"KVCacheStoreRecvingThread-{i}"
             recv_thread.start()
             self.kv_recv_threads.append(recv_thread)
@@ -2553,6 +2609,21 @@ class LookupKeyServer:
                     result = self.store_worker.lookup(num_tokens, block_hashes)
                     self.socket.send(encode_lookup_response(result))
 
+                elif msg_type == FRONTIER_LOOKUP_MSG:
+                    try:
+                        frontier_store = self.store_worker.frontier_store
+                        query = json.loads(bytes(all_frames[1]))
+                        frontier_result: list[int] | list[tuple[int, str]] = []
+                        if frontier_store is not None:
+                            if "locators" in query:
+                                frontier_result = frontier_store.lookup_lengths(query["locators"])
+                            else:
+                                frontier_result = frontier_store.lookup(query["candidates"])
+                        self.socket.send(json.dumps(frontier_result).encode())
+                    except Exception:
+                        logger.exception("Mooncake frontier lookup failed")
+                        self.socket.send(b"[]")
+
                 elif msg_type == RESET_MSG:
                     try:
                         # Drain in-flight puts before wiping the master;
@@ -2598,13 +2669,13 @@ RESET_TIMEOUT_S = 60.0
 
 @dataclasses.dataclass
 class LookupState:
-    future: Future[MooncakeLookupResult]
+    future: Future[Any]
     signature: tuple[int, int, bytes]
     deadline: float
     # Freshness runs from when the RPC returned, not when it was queued.
     completed_at: float | None = None
     # Repeated reads of a cached outcome must not update the breaker again.
-    result: MooncakeLookupResult | None = None
+    result: Any = None
 
     def __post_init__(self) -> None:
         self.future.add_done_callback(self._mark_completed)
@@ -2660,7 +2731,7 @@ class LookupKeyClient:
         # Async lookup support
         # One shared ZMQ REQ socket requires serial send/receive operations.
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="MooncakeLookupClient")
-        self._lookups: dict[str, LookupState] = {}
+        self._lookups: dict[str | tuple[str, str], LookupState] = {}
         prefetch_limit = extra_config.get("lookup_prefetch_limit", 0)
         self._prefetch_slots = threading.BoundedSemaphore(prefetch_limit) if prefetch_limit > 0 else None
         self._lookup_ttl_s = extra_config.get("lookup_prefetch_ttl_s", 2.0)
@@ -2688,6 +2759,31 @@ class LookupKeyClient:
         )
         return decode_lookup_response(self._request(all_frames, deadline))
 
+    def lookup_frontier_lengths(self, req_id: str, locators: list[str]) -> list[int] | None:
+        return self._frontier_request(req_id, "locators", locators) if locators else []
+
+    def lookup_frontiers(
+        self,
+        req_id: str,
+        candidates: list[tuple[int, str]],
+    ) -> list[tuple[int, str]] | None:
+        return self._frontier_request(req_id, "candidates", candidates) if candidates else []
+
+    def _query_frontiers(self, payload: bytes, deadline: float) -> list:
+        if time.monotonic() >= deadline:
+            raise self._LookupExpired("Mooncake frontier lookup expired while queued")
+        return json.loads(self._request((FRONTIER_LOOKUP_MSG, payload), deadline))
+
+    def _frontier_request(self, req_id: str, phase: str, values: list) -> list | None:
+        payload = json.dumps({phase: values}).encode()
+        return self._cached_lookup(
+            (req_id, phase),
+            (0, 0, payload),
+            lambda deadline: self.executor.submit(self._query_frontiers, payload, deadline),
+            list,
+            non_block=True,
+        )
+
     def lookup(
         self,
         req_id: str,
@@ -2697,22 +2793,37 @@ class LookupKeyClient:
     ) -> MooncakeLookupResult | None:
         """If non_block is True, will return None until the result is ready,
         then cache it until expiry or discard()."""
+        return self._cached_lookup(
+            req_id,
+            _lookup_signature(num_tokens, block_hashes),
+            lambda deadline: self.executor.submit(self._lookup, num_tokens, list(block_hashes), deadline),
+            lambda: MooncakeLookupResult(0),
+            non_block,
+        )
+
+    def _cached_lookup(
+        self,
+        req_id: str | tuple[str, str],
+        signature: tuple[int, int, bytes],
+        submit: Callable[[float], Future[_T]],
+        empty: Callable[[], _T],
+        non_block: bool,
+    ) -> _T | None:
         now = time.monotonic()
-        signature = _lookup_signature(num_tokens, block_hashes)
         state = self._lookups.get(req_id)
         if state is not None and (
             state.signature != signature
             or (state.completed_at is not None and now - state.completed_at > self._lookup_ttl_s)
         ):
-            self.discard(req_id)
+            self._discard_lookup(req_id)
             state = None
         if state is None:
             # Only new lookups are gated; pending ones are bounded by deadline.
             if not self.circuit_breaker.allow():
-                return MooncakeLookupResult(0)
+                return empty()
             deadline = now + self._lookup_timeout_s
             state = LookupState(
-                future=self.executor.submit(self._lookup, num_tokens, list(block_hashes), deadline),
+                future=submit(deadline),
                 signature=signature,
                 deadline=deadline,
             )
@@ -2732,10 +2843,10 @@ class LookupKeyClient:
                 else:
                     self.circuit_breaker.record_failure()
                     logger.error("Mooncake lookup failed for %s: %s", req_id, e)
-                state.result = MooncakeLookupResult(0)
+                state.result = empty()
         result = state.result
         if not non_block:
-            self.discard(req_id)
+            self._discard_lookup(req_id)
         return result
 
     def prefetch(self, req_id: str, num_tokens: int, block_hashes: list[BlockHash]) -> bool:
@@ -2764,8 +2875,12 @@ class LookupKeyClient:
         return True
 
     def discard(self, req_id: str) -> None:
-        """Drop any cached/in-flight lookup for `req_id` (e.g. on abort)."""
-        state = self._lookups.pop(req_id, None)
+        """Drop all lookup phases for a request, including a queued prefetch."""
+        for key in (req_id, (req_id, "locators"), (req_id, "candidates")):
+            self._discard_lookup(key)
+
+    def _discard_lookup(self, key: str | tuple[str, str]) -> None:
+        state = self._lookups.pop(key, None)
         if state is not None:
             state.future.cancel()
 
@@ -2788,12 +2903,12 @@ class LookupKeyClient:
         success = self.executor.submit(self._reset).result()
         if success:
             for req_id in list(self._lookups):
-                self.discard(req_id)
+                self._discard_lookup(req_id)
         return success
 
     def close(self):
         for req_id in list(self._lookups):
-            self.discard(req_id)
+            self._discard_lookup(req_id)
         self.executor.shutdown(wait=False, cancel_futures=True)
         self.socket.close(linger=0)
 

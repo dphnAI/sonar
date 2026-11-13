@@ -49,6 +49,10 @@ class KVEventsConfig:
     this topic to receive events.
     """
 
+    recovery_unit_events: bool = False
+    """Publish hybrid recovery units and removal causes. Required when KV
+    events are enabled with non-block-aligned frontier checkpoints."""
+
     def __post_init__(self):
         if self.publisher is None:
             self.publisher = "zmq" if self.enable_kv_cache_events else "null"

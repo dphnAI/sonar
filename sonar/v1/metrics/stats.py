@@ -131,6 +131,8 @@ class PrefixCacheStats(BaseCacheStats):
     """The `hits` number for preempted requests."""
     hits_by_source: dict[CacheHitSource, int] = field(default_factory=dict)
     """`hits` split by the cache tier that supplied them (connector stats only)."""
+    frontier_hits: int = 0
+    """Cached tokens served beyond the ordinary block-aligned prefix hit."""
 
     def record(
         self,
@@ -138,6 +140,7 @@ class PrefixCacheStats(BaseCacheStats):
         num_hits: int,
         preempted: bool,
         hits_by_source: dict[CacheHitSource, int] | None = None,
+        frontier_hits: int = 0,
     ) -> None:
         """Aggregate request information into the stats."""
         if preempted:
@@ -150,6 +153,7 @@ class PrefixCacheStats(BaseCacheStats):
         self.requests += 1
         self.queries += num_tokens
         self.hits += num_hits
+        self.frontier_hits += frontier_hits
         if hits_by_source is None:
             return
         if sum(hits_by_source.values()) != num_hits:

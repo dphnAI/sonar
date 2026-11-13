@@ -12,17 +12,19 @@ from sonar.config.compilation import CUDAGraphMode
 from sonar.model_executor.layers.mamba.mamba_utils import MambaStateCopyFuncsByType
 from sonar.triton_utils import tl, triton
 from sonar.utils.torch_utils import async_tensor_h2d
-from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadataBuilder
+from sonar.v1.attention.backends.gdn_attn import GDNAttentionMetadata, GDNAttentionMetadataBuilder
 from sonar.v1.attention.backends.mamba2_attn import (
     Mamba2AttentionMetadata,
     Mamba2AttentionMetadataBuilder,
 )
+from sonar.v1.attention.backends.mla.indexer import DeepseekV32IndexerMetadata, Glm5NextIndexerBackend
 from sonar.v1.attention.backends.short_conv_attn import (
     PleShortConvAttentionMetadataBuilder,
     ShortConvAttentionMetadataBuilder,
 )
+from sonar.v1.core.kv_cache_utils import MambaStateGather
 from sonar.v1.core.sched.output import NewRequestData
-from sonar.v1.kv_cache_interface import KVCacheConfig, MambaSpec
+from sonar.v1.kv_cache_interface import CircularBufferSpec, KVCacheConfig, MambaSpec
 from sonar.v1.worker.gpu.attn_utils import build_attn_metadata
 from sonar.v1.worker.gpu.block_table import BlockTables
 from sonar.v1.worker.gpu.input_batch import InputBatch
@@ -46,9 +48,14 @@ class MambaHybridAttnMetadata(ModelSpecificAttnMetadata):
     is_prefilling: torch.Tensor
     num_accepted_tokens: torch.Tensor | None = None
     num_decode_draft_tokens_cpu: torch.Tensor | None = None
+    # Absolute checkpoint offsets in current batch-row order.
+    prefill_checkpoint_positions: list[int] | None = None
 
     def get_extra_common_attn_kwargs(self, kv_cache_group_id: int, num_reqs: int) -> dict[str, Any]:
-        return {"is_prefilling": self.is_prefilling[:num_reqs]}
+        kwargs: dict[str, Any] = {"is_prefilling": self.is_prefilling[:num_reqs]}
+        if self.prefill_checkpoint_positions is not None:
+            kwargs["prefill_checkpoint_positions"] = self.prefill_checkpoint_positions[:num_reqs]
+        return kwargs
 
     def get_extra_attn_kwargs(self, attn_metadata_builder: Any, num_reqs: int) -> dict[str, Any]:
         if not isinstance(
@@ -81,6 +88,7 @@ class MambaHybridModelState(DefaultModelState):
     ) -> None:
         super().__init__(sonar_config, model, encoder_cache, device)
         self.cache_config = sonar_config.cache_config
+        self._pcp_enabled = sonar_config.parallel_config.prefill_context_parallel_size > 1
         self.num_accepted_tokens_gpu = torch.ones(self.max_num_reqs, dtype=torch.int32, device=self.device)
         self._replayssm_query_start_loc: torch.Tensor | None = None
         # Pre-copy prefix-cache state (V2). The migration of each request's
@@ -167,6 +175,10 @@ class MambaHybridModelState(DefaultModelState):
             [block_tables.input_block_tables[gid] for gid in mamba_group_ids],
         )
 
+    def apply_mamba_state_gathers(self, gathers: list[MambaStateGather]) -> None:
+        assert self._align_mode and self._mamba_ctx is not None
+        self._mamba_ctx.run_state_gathers(gathers)
+
     def preprocess_state(
         self,
         input_batch: InputBatch,
@@ -181,6 +193,8 @@ class MambaHybridModelState(DefaultModelState):
         """
         if not self._align_mode:
             return
+        if input_batch.pcp is not None and input_batch.pcp.global_batch is not None:
+            input_batch = input_batch.pcp.global_batch
         num_reqs = input_batch.num_reqs
         if num_reqs == 0:
             return
@@ -236,6 +250,69 @@ class MambaHybridModelState(DefaultModelState):
     ) -> dict[str, Any]:
         assert ubatch_idx == 0, "DBO is not supported"
         assert model_specific_attn_metadata is None
+        pcp = input_batch.pcp
+        if self._pcp_enabled:
+            global_groups = [
+                [
+                    group
+                    for group in groups
+                    if isinstance(group.kv_cache_spec, (MambaSpec, CircularBufferSpec))
+                    or issubclass(group.backend, Glm5NextIndexerBackend)
+                ]
+                for groups in attn_groups
+            ]
+            global_group_ids = {id(group) for groups in global_groups for group in groups}
+            local_groups = [[group for group in groups if id(group) not in global_group_ids] for groups in attn_groups]
+            metadata = super().prepare_attn(
+                input_batch,
+                cudagraph_mode,
+                block_tables,
+                slot_mappings,
+                local_groups,
+                kv_cache_config,
+                for_capture=for_capture,
+            )
+            if pcp is None:
+                # Warmup attention gathers dummy KV, while recurrent layers keep
+                # the dummy's original request rows and token count.
+                global_batch = input_batch
+                global_block_tables = block_tables
+                global_slot_mappings = slot_mappings[:, : input_batch.num_tokens_after_padding]
+            else:
+                assert pcp.global_batch is not None
+                assert pcp.global_block_tables is not None and pcp.global_slot_mappings is not None
+                global_batch = pcp.global_batch
+                global_block_tables = pcp.global_block_tables
+                global_slot_mappings = pcp.global_slot_mappings
+            global_metadata = self._prepare_global_attn(
+                global_batch,
+                cudagraph_mode,
+                global_block_tables,
+                global_slot_mappings,
+                global_groups,
+                kv_cache_config,
+                for_capture,
+            )
+            if pcp is not None:
+                for layer_metadata in global_metadata.values():
+                    if isinstance(layer_metadata, (GDNAttentionMetadata, DeepseekV32IndexerMetadata)):
+                        layer_metadata.pcp_token_mapping = pcp.token_mapping
+            metadata.update(global_metadata)
+            return metadata
+        return self._prepare_global_attn(
+            input_batch, cudagraph_mode, block_tables, slot_mappings, attn_groups, kv_cache_config, for_capture
+        )
+
+    def _prepare_global_attn(
+        self,
+        input_batch: InputBatch,
+        cudagraph_mode: CUDAGraphMode,
+        block_tables: tuple[torch.Tensor, ...],
+        slot_mappings: torch.Tensor,
+        attn_groups: list[list[AttentionGroup]],
+        kv_cache_config: KVCacheConfig,
+        for_capture: bool,
+    ) -> dict[str, Any]:
         if cudagraph_mode == CUDAGraphMode.FULL:
             num_reqs = input_batch.num_reqs_after_padding
             num_tokens = input_batch.num_tokens_after_padding
@@ -304,10 +381,16 @@ class MambaHybridModelState(DefaultModelState):
                 for group_idx, builder in aligned_index_builders:
                     builder.mamba_aligned_state_indices = all_group_indices[group_idx]
 
+        exports = input_batch.prefill_checkpoint_positions
         mamba_attn_metadata = MambaHybridAttnMetadata(
             is_prefilling=is_prefilling,
             num_accepted_tokens=num_accepted_tokens,
             num_decode_draft_tokens_cpu=num_decode_draft_tokens_cpu,
+            prefill_checkpoint_positions=(
+                [exports.get(req_id, 0) for req_id in input_batch.req_ids[:num_reqs]]
+                if exports and not for_capture
+                else None
+            ),
         )
         attn_metadata = build_attn_metadata(
             attn_groups=attn_groups,

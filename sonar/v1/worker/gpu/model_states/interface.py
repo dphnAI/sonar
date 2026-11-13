@@ -14,6 +14,7 @@ from sonar.model_executor.models.interfaces import (
 )
 from sonar.tasks import GenerationTask
 from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.core.kv_cache_utils import MambaStateGather
 from sonar.v1.core.sched.output import NewRequestData
 from sonar.v1.kv_cache_interface import KVCacheConfig
 from sonar.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
@@ -164,6 +165,10 @@ class ModelState(ABC):
         num_computed_tokens: torch.Tensor | None = None,
     ) -> None:
         return None
+
+    def apply_mamba_state_gathers(self, gathers: list[MambaStateGather]) -> None:
+        """Normalize published speculative states before this step's readers."""
+        raise NotImplementedError
 
     @abstractmethod
     def prepare_inputs_embeds(

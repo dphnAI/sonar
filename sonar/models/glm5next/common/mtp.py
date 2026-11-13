@@ -14,6 +14,7 @@ from sonar.model_executor.layers.fused_moe import (
 )
 from sonar.model_executor.layers.layernorm import RMSNorm
 from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization import QuantizationConfig
 from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
@@ -34,6 +35,7 @@ from sonar.models.glm5next.nvidia.specialized_decode.runtime import (
 )
 from sonar.platforms import current_platform
 from sonar.sequence import IntermediateTensors
+from sonar.transformers_utils.repo_utils import get_hf_file_to_dict
 
 from .model import (
     Glm5NextDecoderLayer,
@@ -51,11 +53,32 @@ if typing.TYPE_CHECKING:
     from ..nvidia.specialized_decode.runtime.draft import SpecializedDraft
 
 
+_NVFP4_SCALE_SUFFIXES = ("weight_scale", "weight_scale_2", "input_scale")
+
+
+def checkpoint_stores_layer_unquantized(
+    quant_config: QuantizationConfig | None,
+    model: str,
+    revision: str | None,
+    layer_idx: int,
+) -> bool:
+    """Detect BF16 MTP layers omitted from a ModelOpt NVFP4 exclusion list."""
+    if quant_config is None or quant_config.get_name() != "modelopt_fp4":
+        return False
+    index = get_hf_file_to_dict("model.safetensors.index.json", model, revision)
+    if index is None:
+        return False
+    marker = f".layers.{layer_idx}."
+    names = [name for name in index.get("weight_map", {}) if marker in name]
+    return bool(names) and not any(name.endswith(_NVFP4_SCALE_SUFFIXES) for name in names)
+
+
 class Glm5NextMultiTokenPredictorLayer(nn.Module):
     def __init__(self, sonar_config: SonarConfig, prefix: str) -> None:
         super().__init__()
         assert sonar_config.speculative_config is not None
-        config = sonar_config.speculative_config.draft_model_config.hf_text_config
+        draft_model_config = sonar_config.speculative_config.draft_model_config
+        config = draft_model_config.hf_text_config
         self.config = config
 
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -77,6 +100,12 @@ class Glm5NextMultiTokenPredictorLayer(nn.Module):
         # from the prefix (e.g. "...layers.32") so the decoder builds an MLA
         # (DSA) layer rather than KDA for the MTP path.
         layer_idx = int(prefix.rsplit(".", 1)[-1])
+        quantized = sonar_config.quant_config is not None and not checkpoint_stores_layer_unquantized(
+            sonar_config.quant_config,
+            draft_model_config.model,
+            draft_model_config.revision,
+            layer_idx,
+        )
         self.mtp_block = Glm5NextDecoderLayer(
             sonar_config=sonar_config,
             config=config,
@@ -84,6 +113,7 @@ class Glm5NextMultiTokenPredictorLayer(nn.Module):
             prefix=prefix,
             topk_indices_buffer=topk_indices_buffer,
             is_mtp_layer=True,
+            quantized=quantized,
         )
 
     def forward(

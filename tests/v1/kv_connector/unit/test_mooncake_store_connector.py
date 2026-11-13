@@ -107,6 +107,49 @@ def _make_kv_cache_config() -> KVCacheConfig:
     )
 
 
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    "extra_config,message",
+    [
+        ({"frontier_write_through": True}, "requires mamba_frontier_checkpoint"),
+        ({"unit_policy_url": "http://localhost:9000"}, "custom Mooncake policy provider"),
+    ],
+)
+def test_rejects_invalid_flashstates_host_tier(extra_config, message):
+    config = create_sonar_config(
+        kv_connector="MooncakeStoreConnector",
+        kv_role="kv_both",
+        kv_connector_extra_config=extra_config,
+    )
+    with pytest.raises(ValueError, match=message):
+        mooncake_store_connector.MooncakeStoreConnector(config, KVConnectorRole.SCHEDULER, _make_kv_cache_config())
+
+
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    "extra_config,external_dp,message",
+    [
+        ({"load_async": False}, False, "requires load_async"),
+        ({"lookup_async": False}, False, "requires lookup_async"),
+        ({"save_decode_cache": True}, False, "replaces save_decode_cache"),
+        ({}, True, "does not support external_launcher with data parallelism"),
+    ],
+)
+def test_frontier_requires_async_engine_local_transfers(extra_config, external_dp, message):
+    config = create_sonar_config(
+        kv_connector="MooncakeStoreConnector",
+        kv_role="kv_both",
+        kv_connector_extra_config={"frontier_write_through": True, **extra_config},
+    )
+    config.cache_config.mamba_frontier_checkpoint = True
+    if external_dp:
+        config.parallel_config.distributed_executor_backend = "external_launcher"
+        config.parallel_config.data_parallel_size = 2
+        config.parallel_config.world_size *= 2
+    with pytest.raises(ValueError, match=message):
+        mooncake_store_connector.MooncakeStoreConnector(config, KVConnectorRole.SCHEDULER, _make_kv_cache_config())
+
+
 def _make_qsa_hybrid_kv_cache_config(mamba_mode: str):
     full_spec = FullAttentionSpec(block_size=800, num_kv_heads=8, head_size=64, dtype=None)
     qsa_spec = CircularBufferSpec(

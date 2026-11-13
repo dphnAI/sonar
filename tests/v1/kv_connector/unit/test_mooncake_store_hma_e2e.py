@@ -91,6 +91,7 @@ def _minimal_sonar_config(cache_block_size=16):
     cfg.parallel_config.world_size = 1
     cfg.parallel_config.rank = 0
     cfg.parallel_config.data_parallel_rank_local = 0
+    cfg.parallel_config.data_parallel_index = 0
     cfg.parallel_config.data_parallel_size_local = 1
     cfg.kv_transfer_config.kv_role = "kv_both"
     cfg.kv_transfer_config.kv_connector_extra_config = {}

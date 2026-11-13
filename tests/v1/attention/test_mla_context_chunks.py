@@ -8,6 +8,7 @@ chunk never covers a prefill without context (which is why the partial no
 longer needs an empty-span masking pass).
 """
 
+import warnings
 from types import SimpleNamespace
 
 import pytest
@@ -82,6 +83,50 @@ def test_sparse_context_lengths_do_not_force_gpu_sync(monkeypatch):
     assert metadata is not None
     assert metadata.context_lens.device.type == "cuda"
     assert metadata.context_lens.tolist() == [2048, 320]
+
+
+def test_sparse_context_lengths_cover_both_pcp_rows(monkeypatch):
+    from sonar.model_executor.layers.attention import sparse_mla_attention as sparse_mla
+
+    config = SimpleNamespace(
+        model_config=SimpleNamespace(
+            dtype=torch.float32,
+            max_model_len=256,
+            hf_text_config=SimpleNamespace(index_topk=8),
+            model_arch_config=SimpleNamespace(total_num_attention_heads=1),
+        ),
+        scheduler_config=SimpleNamespace(max_num_seqs=2, max_num_batched_tokens=32),
+        cache_config=SimpleNamespace(block_size=BLOCK_SIZE, cache_dtype="auto"),
+        parallel_config=SimpleNamespace(
+            prefill_context_parallel_size=2,
+            decode_context_parallel_size=1,
+            cp_kv_cache_interleave_size=1,
+        ),
+        compilation_config=SimpleNamespace(
+            static_forward_context={"layer": SimpleNamespace(prefill_backend=None, use_shardq=False)}
+        ),
+    )
+    monkeypatch.setattr(sparse_mla, "PIN_MEMORY", False)
+    monkeypatch.setattr(sparse_mla, "get_dcp_group", lambda: SimpleNamespace(world_size=1))
+    monkeypatch.setattr(
+        sparse_mla,
+        "get_mla_dims",
+        lambda _: SimpleNamespace(kv_lora_rank=8, qk_nope_head_dim=8, qk_rope_head_dim=0, v_head_dim=8),
+    )
+    builder: SparseMLACommonMetadataBuilder = SparseMLACommonMetadataBuilder(
+        SimpleNamespace(block_size=BLOCK_SIZE), ["layer"], config, torch.device("cpu")
+    )
+    common = SimpleNamespace(
+        seq_lens_cpu_upper_bound=torch.tensor([34, 51, 68, 85], dtype=torch.int32),
+        query_start_loc_cpu=torch.tensor([0, 2, 5, 9, 14], dtype=torch.int32),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        metadata = builder._build_chunked_context_fields(
+            common, num_decodes=0, num_prefills=4, prefill_query_lens_cpu=torch.tensor([2, 3, 4, 5])
+        )
+    assert metadata is not None
+    assert metadata.context_lens.tolist() == [32, 48, 64, 80]
 
 
 @pytest.mark.parametrize(

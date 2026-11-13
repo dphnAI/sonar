@@ -1963,6 +1963,10 @@ class ModelConfig:
         return self._model_info.supports_replayssm
 
     @property
+    def supports_compact_spec_state(self) -> bool:
+        return self._model_info.supports_compact_spec_state
+
+    @property
     def use_mla(self) -> bool:
         if envs.SONAR_MLA_DISABLE:
             return False

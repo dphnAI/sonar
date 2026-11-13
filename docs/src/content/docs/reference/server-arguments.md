@@ -2365,6 +2365,71 @@ block size.
 
 Default: `False`.
 
+### `--mamba-frontier-checkpoint`
+
+`--mamba-frontier-checkpoint, --no-mamba-frontier-checkpoint`
+
+Retain finished requests' recurrent checkpoints at non-block-aligned
+positions. Requires prefix caching and compatible recurrent cache groups.
+Supports decode context parallelism with a compatible attention backend.
+Prefill context parallelism requires distributed recurrent-state propagation
+and is not supported on this path.
+
+Default: `False`.
+
+### `--mamba-prefill-export`
+
+`--mamba-prefill-export, --no-mamba-prefill-export`
+
+Export recurrent checkpoints inside prefill chunks without splitting
+the chunks at each checkpoint. Requires a supporting backend.
+
+Default: `False`.
+
+### `--prefix-cache-eviction`
+
+`--prefix-cache-eviction PREFIX_CACHE_EVICTION`
+
+Evict by recency ("lru") or by saved prefill cost per freed block ("gds").
+GDS evicts whole resumable states and requires frontier checkpoints.
+
+Choices: `gds`, `lru`.
+
+Default: `lru`.
+
+### `--prefill-cost-coefficients`
+
+`--prefill-cost-coefficients PREFILL_COST_COEFFICIENTS`
+
+GDS cost coefficients (d, e). Prefilling positions [a, b) costs
+`d * (b - a) + e * (b**2 - a**2) / 200000` seconds.
+Only e/d affects ordering.
+
+### `--prefix-cache-leaf-last`
+
+`--prefix-cache-leaf-last, --no-prefix-cache-leaf-last`
+
+With GDS, evict inner checkpoints before each session's newest leaf.
+
+Default: `False`.
+
+### `--prefix-cache-leaf-idle-seconds`
+
+`--prefix-cache-leaf-idle-seconds PREFIX_CACHE_LEAF_IDLE_SECONDS`
+
+Demote an unused, non-branching leaf after this many seconds.
+
+### `--mamba-spec-state-layout`
+
+`--mamba-spec-state-layout MAMBA_SPEC_STATE_LAYOUT`
+
+Use per-draft-position state blocks or one compact state with accepted
+updates applied after sampling. Compact mode requires a supporting KDA model.
+
+Choices: `compact`, `per_position`.
+
+Default: `per_position`.
+
 ### `--replayssm-buffer-len`
 
 `--replayssm-buffer-len REPLAYSSM_BUFFER_LEN`

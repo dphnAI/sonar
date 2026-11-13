@@ -4420,6 +4420,7 @@ def _make_bare_worker(
     worker.cache_config = MagicMock()
     worker.cache_config.num_gpu_blocks = num_gpu_blocks
     worker.store = MagicMock()
+    worker.frontier_store = None
     worker.store.register_buffer.return_value = 0
     worker.kv_role = kv_role
     worker.can_put = kv_role in ("kv_producer", "kv_both") or save_decode_cache

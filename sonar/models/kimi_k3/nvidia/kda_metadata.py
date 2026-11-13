@@ -23,9 +23,9 @@ from sonar.triton_utils import tl, triton
 from sonar.utils.torch_utils import async_tensor_h2d
 from sonar.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
 from sonar.v1.attention.backends.gdn_attn import (
-    GDNAttentionBackend,
     GDNAttentionMetadata,
     GDNAttentionMetadataBuilder,
+    PCPGDNAttentionBackend,
 )
 from sonar.v1.attention.backends.recoverssm_metadata import (
     RecoverSSMMetadata,
@@ -594,7 +594,7 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
         )
 
 
-class KimiK3KDAAttentionBackend(GDNAttentionBackend):
+class KimiK3KDAAttentionBackend(PCPGDNAttentionBackend):
     @staticmethod
     def get_name() -> str:
         return "KIMI_K3_KDA"

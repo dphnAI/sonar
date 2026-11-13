@@ -23,13 +23,14 @@ if TYPE_CHECKING:
     from sonar.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
     from sonar.pooling_params import PoolingParams
     from sonar.sampling_params import SamplingParams
-    from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+    from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy, MambaStateGather
     from sonar.v1.request import Request
 else:
     AuxOutputConnectorMetadata = object
     ECConnectorMetadata = object
     KVConnectorMetadata = object
     KVCacheBlockCopy = object
+    MambaStateGather = object
     LoRARequest = object
     MultiModalFeatureSpec = object
     PoolingParams = object
@@ -294,6 +295,13 @@ class SchedulerOutput:
 
     # CoW copies to apply after zeroing new blocks and before forward.
     kv_cache_block_copies: list[KVCacheBlockCopy] | None = None
+
+    # Resolve accepted speculative states before zeroing or CoW copies.
+    mamba_state_gathers: list[MambaStateGather] | None = None
+
+    # Absolute token positions exported by non-final prefill chunks.
+    # None keeps the existing prompt-checkpoint rule.
+    prefill_checkpoint_positions: dict[str, int] | None = None
 
     # Scheduler-local; always None by the time this reaches a worker.
     kv_connector_block_state: KVConnectorBlockState | None = None

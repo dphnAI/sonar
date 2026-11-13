@@ -15,6 +15,7 @@ from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
     KVConnectorWorkerMetadata,
 )
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.frontier import FrontierTransfer
 from sonar.distributed.kv_transfer.kv_connector.v1.mooncake_store.layout import (
     KeyMetadata,
     RankLocalStoreLayout,
@@ -220,6 +221,7 @@ class LoadSpec:
     can_load: bool
     token_len: int = 0
     tail_key_boundaries: tuple[TailKeyBoundary, ...] = ()
+    frontier: FrontierTransfer | None = None
 
 
 @dataclass
@@ -300,6 +302,7 @@ class ReqMeta:
     # Set on the save that first covers the whole prompt, so the scheduler
     # publishes the prompt's partial tail once rather than on every save.
     publish_partial_tail: bool = False
+    frontier: FrontierTransfer | None = None
 
     @staticmethod
     def from_request_tracker(

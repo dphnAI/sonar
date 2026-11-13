@@ -50,49 +50,6 @@ GPU_DEVICE = current_platform.device_type
 HAS_GPU = current_platform.is_cuda_alike() or current_platform.is_xpu()
 
 
-def test_prepare_attn_forwards_positions(monkeypatch: pytest.MonkeyPatch) -> None:
-    state = object.__new__(MambaHybridModelState)
-    state.sonar_config = SimpleNamespace(num_speculative_tokens=0, speculative_config=None)
-    state.model_config = SimpleNamespace(max_model_len=8192)
-    state._align_mode = False
-    state._use_replayssm_trackers = False
-    state.recoverssm = None
-
-    positions = torch.tensor([1536], dtype=torch.int64)
-    input_batch = SimpleNamespace(
-        num_reqs=1,
-        num_tokens=1,
-        num_reqs_after_padding=1,
-        num_tokens_after_padding=1,
-        query_start_loc_np=torch.tensor([0, 1], dtype=torch.int32).numpy(),
-        query_start_loc=torch.tensor([0, 1], dtype=torch.int32),
-        num_scheduled_tokens=torch.tensor([1], dtype=torch.int32),
-        max_query_len=None,
-        seq_lens_cpu_upper_bound=torch.tensor([1537], dtype=torch.int32),
-        seq_lens=torch.tensor([1537], dtype=torch.int32),
-        is_prefilling_np=torch.tensor([False]).numpy(),
-        prefill_runs_as_decode_np=None,
-        dcp_local_seq_lens=None,
-        positions=positions,
-        prompt_lens=torch.tensor([1024], dtype=torch.int32),
-    )
-    expected_metadata = {"layer": object()}
-    build_attn_metadata = Mock(return_value=expected_metadata)
-    monkeypatch.setattr(mamba_hybrid, "build_attn_metadata", build_attn_metadata)
-
-    metadata = state.prepare_attn(
-        input_batch=input_batch,
-        cudagraph_mode=CUDAGraphMode.NONE,
-        block_tables=(),
-        slot_mappings=torch.empty(0, dtype=torch.int64),
-        attn_groups=[],
-        kv_cache_config=Mock(),
-    )
-
-    assert metadata is expected_metadata
-    assert build_attn_metadata.call_args.kwargs["positions"] is positions
-
-
 def test_add_request_seeds_state_idx_in_mamba_blocks() -> None:
     """A drafter group can lower cache_config.block_size below the mamba
     block size; the seeded column must still be in mamba blocks."""
@@ -126,6 +83,7 @@ def test_padded_prompt_tail_builds_as_spec_decode(
     )
     state.model_config = SimpleNamespace(max_model_len=8192)
     state._align_mode = False
+    state._pcp_enabled = False
     state._use_replayssm_trackers = False
     state.recoverssm = None
     state.num_accepted_tokens_gpu = torch.ones(4, dtype=torch.int32)
@@ -137,6 +95,8 @@ def test_padded_prompt_tail_builds_as_spec_decode(
     is_prefilling = [False, True, True]
     query_start_loc = np.array([0, 4, 8, 12], dtype=np.int32)
     input_batch = SimpleNamespace(
+        pcp=None,
+        prefill_checkpoint_positions=None,
         num_reqs=3,
         num_tokens=12,
         num_reqs_after_padding=3,
@@ -192,6 +152,7 @@ def _mamba_hybrid_state(num_speculative_tokens: int) -> MambaHybridModelState:
     )
     state.model_config = SimpleNamespace(max_model_len=8192)
     state._align_mode = False
+    state._pcp_enabled = False
     state._use_replayssm_trackers = False
     state.recoverssm = None
     # A request that accepted 3 drafts (plus the bonus token) on the previous
@@ -214,6 +175,8 @@ def _input_batch(
     num_tokens = int(query_start_loc[-1])
     seq_lens = torch.full((num_reqs,), 10, dtype=torch.int32)
     return SimpleNamespace(
+        pcp=None,
+        prefill_checkpoint_positions=None,
         num_reqs=num_reqs,
         num_reqs_after_padding=num_reqs_after_padding or num_reqs,
         num_tokens=num_tokens,

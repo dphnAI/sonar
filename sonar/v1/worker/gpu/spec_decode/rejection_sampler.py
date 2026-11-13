@@ -25,6 +25,7 @@ from sonar.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     rejection_sample,
     rejection_sample_vocab_parallel,
 )
+from sonar.v1.worker.gpu.spec_decode.stop_conditions import StopConditions
 
 # Cap on the FP32 target-logits buffer materialized by apply_sampling_params.
 # TODO(mgoin): Chunking is a workaround. The rejection kernels already upcast
@@ -157,9 +158,11 @@ class RejectionSampler:
         device: torch.device,
         *,
         watermark_key: int | None = None,
+        stop_conditions: StopConditions | None = None,
     ):
         self.sampler = sampler
         self.watermark_key = watermark_key
+        self.stop_conditions = stop_conditions
         if watermark_key is not None:
             assert isinstance(sampler, GPUWatermarkSampler)
         self.num_speculative_steps = spec_config.num_speculative_tokens
@@ -445,6 +448,10 @@ class RejectionSampler:
             input_batch.cu_num_logits,
             input_batch.idx_mapping,
             self.sampler.req_states.prefill_len.gpu,
+            stop_conditions=self.stop_conditions,
+            sampled=sampled,
+            last_sampled_tokens=self.sampler.req_states.last_sampled_tokens,
+            prompt_len=self.sampler.req_states.prompt_len.gpu,
         )
 
         return SamplerOutput(
@@ -535,6 +542,10 @@ class RejectionSampler:
             input_batch.cu_num_logits,
             input_batch.idx_mapping,
             self.sampler.req_states.prefill_len.gpu,
+            stop_conditions=self.stop_conditions,
+            sampled=sampled,
+            last_sampled_tokens=self.sampler.req_states.last_sampled_tokens,
+            prompt_len=self.sampler.req_states.prompt_len.gpu,
         )
         return SamplerOutput(
             sampled_token_ids=sampled,

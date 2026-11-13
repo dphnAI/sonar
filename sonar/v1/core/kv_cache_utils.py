@@ -247,6 +247,16 @@ class KVCacheBlockCopy(NamedTuple):
     dst_block_id: int
 
 
+class MambaStateGather(NamedTuple):
+    """Copy a draft recurrent column into the destination state and shift
+    its convolution window `column` tokens left before other block operations."""
+
+    column: int
+    group_ids: tuple[int, ...]
+    dst_block_ids: tuple[int, ...]
+    src_block_ids: tuple[int, ...]
+
+
 class FreeKVCacheBlockQueue:
     """This class organizes a list of KVCacheBlock objects to a doubly linked
     list of free blocks. We implement this class instead of using Python

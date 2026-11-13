@@ -4,7 +4,7 @@
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 from sonar.distributed.kv_events import BlockStored, KVCacheEventType
 from sonar.logger import init_logger
@@ -27,6 +27,9 @@ from sonar.v1.kv_cache_interface import (
 )
 from sonar.v1.metrics.stats import PrefixCacheStats
 from sonar.v1.request import Request, RequestStatus
+
+if TYPE_CHECKING:
+    from sonar.v1.core.hybrid_checkpoint.manager import HybridCheckpointManager
 
 logger = init_logger(__name__)
 
@@ -188,6 +191,7 @@ class KVCacheManager:
             manager.kv_cache_group_id for manager in self.coordinator.single_type_managers if manager.retains_longer_hit
         )
         self.kv_cache_config = kv_cache_config
+        self.checkpoints: HybridCheckpointManager | None = None
 
         # Watermark: minimum number of KV cache blocks to keep free when
         # admitting waiting/preempted requests, to avoid frequent preemptions.
@@ -251,10 +255,12 @@ class KVCacheManager:
         """
         if not self.prefix_cache_lookup_enabled(request):
             return 0
-        # Mirrors `get_computed_blocks`: the last token is always recomputed.
-        _, num_computed_tokens, _ = self.coordinator.find_longest_cache_hit(
-            request.block_hashes, request.num_tokens - 1
-        )
+        max_length = request.get_max_cache_hit_length()
+        blocks, num_computed_tokens, _ = self.coordinator.find_longest_cache_hit(request.block_hashes, max_length)
+        if self.checkpoints is not None:
+            _, num_computed_tokens = self.checkpoints.frontiers.peek_blocks(
+                request, blocks, num_computed_tokens, max_length
+            )
         return num_computed_tokens
 
     def record_prefix_cache_stats(self, request: Request, num_hits: int) -> None:
@@ -266,6 +272,9 @@ class KVCacheManager:
             num_tokens=request.num_tokens,
             num_hits=num_hits,
             preempted=request.num_preemptions > 0,
+            frontier_hits=(
+                self.checkpoints.frontier_hit_tokens(request, num_hits) if self.checkpoints is not None else 0
+            ),
         )
 
     def get_computed_blocks(
@@ -308,6 +317,11 @@ class KVCacheManager:
         computed_blocks, num_new_computed_tokens, num_uncached = self.coordinator.find_longest_cache_hit(
             request.block_hashes, max_cache_hit_length
         )
+        aligned_hit = num_new_computed_tokens
+        if self.checkpoints is not None:
+            computed_blocks, num_new_computed_tokens = self.checkpoints.extend_hit(
+                request, computed_blocks, num_new_computed_tokens, max_cache_hit_length
+            )
 
         if (
             num_new_computed_tokens > 0
@@ -316,9 +330,9 @@ class KVCacheManager:
         ):
             self.coordinator.emit_cached_block_events(request, computed_blocks)
 
-        # Pin the deepest per-group hit for cross-request sparse-cache reuse.
-
-        shared_prefix_boundary = num_new_computed_tokens + num_uncached if num_uncached else 0
+        # Keep the original aligned junction only when the frontier is before it.
+        junction = aligned_hit + num_uncached
+        shared_prefix_boundary = junction if num_uncached and junction > num_new_computed_tokens else 0
         return (
             self.create_kv_cache_blocks(computed_blocks),
             num_new_computed_tokens,
@@ -680,7 +694,7 @@ class KVCacheManager:
         for event in events:
             if not isinstance(event, BlockStored):
                 continue
-            if event.group_idx is None:
+            if event.group_idx is None or event.kv_cache_spec_kind is not None:
                 continue
             if event.group_idx < 0 or event.group_idx >= len(self.kv_cache_event_metadata):
                 logger.warning("Group index `%s` not in KV cache metadata", event.group_idx)
@@ -776,11 +790,9 @@ class KVCacheManager:
             strict=True,
         ):
             if not group.kv_cache_spec.prefix_cacheable:
-                # Scratch groups (e.g. the CSA compressor ring) hold a fixed
-                # block covering no token range, so a lookup result never
-                # carries computed blocks for them and their block size does
-                # not divide the endpoint.
-                assert not group_blocks
+                # A frontier can carry an open ring, but an aligned connector
+                # view starts with a fresh ring rather than truncating scratch.
+                assert not group_blocks or self.checkpoints is not None
                 truncated.append([])
                 continue
             assert num_computed_tokens % manager.block_size == 0
@@ -878,3 +890,5 @@ class KVCacheManager:
     def new_step_starts(self) -> None:
         """Notify the coordinator that a new step is starting."""
         self.coordinator.new_step_starts()
+        if self.checkpoints is not None:
+            self.checkpoints.begin_step()

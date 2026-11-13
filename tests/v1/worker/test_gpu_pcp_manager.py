@@ -40,6 +40,7 @@ def _make_config(cudagraph_mode: CUDAGraphMode):
         model_config=SimpleNamespace(
             use_mla=True,
             is_encoder_decoder=False,
+            is_hybrid=False,
             hf_text_config=SimpleNamespace(),
         ),
         lora_config=None,
@@ -78,6 +79,17 @@ def test_validate_config_accepts_decode_only_full_graphs(cudagraph_mode):
 def test_validate_config_rejects_full_graph_for_prefills():
     with pytest.raises(NotImplementedError, match="decode-only routines"):
         PCPManager.validate_config(_make_config(CUDAGraphMode.FULL), supports_mm_inputs=False)
+
+
+@pytest.mark.parametrize("mode", [CUDAGraphMode.PIECEWISE, CUDAGraphMode.FULL_DECODE_ONLY])
+@pytest.mark.parametrize("dcp_size", [1, 2])
+def test_hybrid_pcp_rejects_cuda_graphs(mode, dcp_size):
+    config = _make_config(mode)
+    config.model_config.is_hybrid = True
+    config.model_config.hf_text_config.index_topk = 1
+    config.parallel_config.decode_context_parallel_size = dcp_size
+    with pytest.raises(NotImplementedError):
+        PCPManager.validate_config(config, supports_mm_inputs=False)
 
 
 @pytest.mark.parametrize("draft_uses_mla", [False, True])
