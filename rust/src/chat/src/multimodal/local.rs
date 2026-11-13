@@ -66,7 +66,7 @@ fn is_file_url(url: &str) -> bool {
 }
 
 fn invalid(message: String) -> Error {
-    Error::InvalidLocalMedia(message)
+    Error::InvalidMedia(message)
 }
 
 /// Replace a `file://` URL part with a `data:` URL part read from the file,
