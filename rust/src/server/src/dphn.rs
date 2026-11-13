@@ -154,9 +154,6 @@ fn decode<T: serde::de::DeserializeOwned + Normalizable + Validate>(
     Ok(request)
 }
 
-/// Python's `SamplingParams` treats temperatures below this as greedy.
-const SAMPLING_EPS: f32 = 1e-5;
-
 /// Reject greedy sampling with several choices, as Python's `SamplingParams`
 /// does, before each choice is expanded into its own `n=1` request.
 fn reject_greedy_choices(
@@ -166,8 +163,8 @@ fn reject_greedy_choices(
 ) -> Result<(), ApiError> {
     // Same fallback as lowering: request value, then model default, then 1.0.
     let temperature = temperature.or(default_temperature).unwrap_or(1.0);
-    // Negative values are left to the regular temperature validation.
-    if n > 1 && (0.0..SAMPLING_EPS).contains(&temperature) {
+    // Positive temperatures are raised to 0.01 by shared lowering.
+    if n > 1 && temperature == 0.0 {
         return Err(invalid_request!(
             "n must be 1 when using greedy sampling, got {n}."
         ));
@@ -175,20 +172,12 @@ fn reject_greedy_choices(
     Ok(())
 }
 
-/// Python's `SONAR_MAX_N_SEQUENCES` limit on choices per prompt.
-fn max_n_sequences() -> u64 {
-    std::env::var("SONAR_MAX_N_SEQUENCES")
-        .ok()
-        .and_then(|value| value.trim().parse().ok())
-        .unwrap_or(16384)
-}
-
 /// Expand only the opt-in routes; legacy handlers and their output remain untouched.
-fn expand(mut body: Value, chat: bool) -> Result<Vec<Value>, ApiError> {
+fn expand(mut body: Value, chat: bool, max_n: i64) -> Result<Vec<Value>, ApiError> {
     let object = body
         .as_object_mut()
         .ok_or_else(|| invalid_request!("request must be an object"))?;
-    let max_n = max_n_sequences();
+    let max_n = u64::try_from(max_n).unwrap_or(0);
     let n = match object.get("n") {
         None | Some(Value::Null) => 1,
         Some(value) => value
@@ -352,7 +341,7 @@ async fn respond(
     let request_context =
         resolve_request_context(&headers, body.get("request_id").and_then(Value::as_str));
     let n = body.get("n").and_then(Value::as_u64).unwrap_or(1) as usize;
-    let requests = expand(body, is_chat)?;
+    let requests = expand(body, is_chat, state.api_server_options.max_n_sequences)?;
     let default_temperature = state
         .chat
         .text()
@@ -384,10 +373,11 @@ async fn respond(
             validate_max_output_tokens(
                 "max_completion_tokens",
                 prepared.chat_request.sampling_params.max_tokens,
-                state.chat.engine_core_client().max_model_len(),
+                state.llm().info().max_model_len,
             )?;
             prepared.chat_request.request_id = format!("{}/choice/{index}", prepared.request_id);
-            include_usage = prepared.options.include_usage;
+            include_usage =
+                prepared.options.include_usage || state.api_server_options.force_include_usage;
             // Aggregate usage once across choices rather than emitting per-choice totals.
             prepared.options.include_usage = false;
             choices.push(PreparedChoice::Chat(prepared));
@@ -397,12 +387,11 @@ async fn respond(
             let model = state
                 .resolve_model_with_loras(request.model.as_deref().filter(|v| !v.is_empty()))
                 .await;
-            let tokenizer = state.chat.text().tokenizer();
             let mut prepared = text::convert::prepare_completion_request(
                 request,
                 &model,
                 request_context.clone(),
-                tokenizer.as_ref(),
+                state.chat.text().request_processor(),
             )?;
             reject_greedy_choices(
                 n,
@@ -412,10 +401,11 @@ async fn respond(
             validate_max_output_tokens(
                 "max_tokens",
                 prepared.text_request.sampling_params.max_tokens,
-                state.chat.engine_core_client().max_model_len(),
+                state.llm().info().max_model_len,
             )?;
             prepared.text_request.request_id = format!("{}/choice/{index}", prepared.request_id);
-            include_usage = prepared.options.include_usage;
+            include_usage =
+                prepared.options.include_usage || state.api_server_options.force_include_usage;
             prepared.options.include_usage = false;
             choices.push(PreparedChoice::Text(prepared));
         }
@@ -478,6 +468,7 @@ async fn collect_choice(
                 request_id,
                 response_model,
                 created,
+                state.system_fingerprint.clone(),
                 state.api_server_options,
                 state.chat.reasoning_parser_name().is_some(),
                 options,
@@ -506,6 +497,7 @@ async fn collect_choice(
                 request_id,
                 response_model,
                 created,
+                state.system_fingerprint.clone(),
                 state.api_server_options,
                 options,
             )?;
@@ -606,6 +598,7 @@ async fn stream_choice(
                 request_id.clone(),
                 response_model,
                 created,
+                state.system_fingerprint.clone(),
                 state.api_server_options,
                 state.chat.reasoning_parser_name().is_some(),
                 options,
@@ -638,6 +631,7 @@ async fn stream_choice(
                 request_id.clone(),
                 response_model,
                 created,
+                state.system_fingerprint.clone(),
                 state.api_server_options,
                 options,
             )
@@ -795,20 +789,23 @@ mod tests {
 
     #[test]
     fn expansion_preserves_token_prompts_and_choice_order() {
-        let expanded = expand(json!({"prompt": [[1, 2], [3]], "n": 2}), false).unwrap();
+        let expanded = expand(json!({"prompt": [[1, 2], [3]], "n": 2}), false, 16384).unwrap();
         assert_eq!(expanded.len(), 4);
         assert_eq!(expanded[0]["prompt"], json!([1, 2]));
         assert_eq!(expanded[1]["prompt"], json!([1, 2]));
         assert_eq!(expanded[2]["prompt"], json!([3]));
-        assert_eq!(expand(json!({"prompt": [1, 2]}), false).unwrap().len(), 1);
-        assert!(expand(json!({"prompt": "a", "n": 0}), false).is_err());
+        assert_eq!(
+            expand(json!({"prompt": [1, 2]}), false, 16384).unwrap().len(),
+            1
+        );
+        assert!(expand(json!({"prompt": "a", "n": 0}), false, 16384).is_err());
     }
 
     #[test]
     fn expansion_enforces_python_choice_limit_before_allocating() {
         // Python accepts 1..=SONAR_MAX_N_SEQUENCES (default 16384) for both APIs.
         assert_eq!(
-            expand(json!({"messages": [], "n": 11}), true).unwrap().len(),
+            expand(json!({"messages": [], "n": 11}), true, 16384).unwrap().len(),
             11
         );
         for chat in [false, true] {
@@ -820,20 +817,25 @@ mod tests {
                 json!(1.5),
             ] {
                 let body = json!({"prompt": "a", "messages": [], "n": n});
-                let error = expand(body, chat).expect_err("oversized n must be rejected");
+                let error = expand(body, chat, 16384).expect_err("oversized n must be rejected");
                 assert_eq!(error.into_response().status(), StatusCode::BAD_REQUEST);
             }
         }
         assert_eq!(
-            expand(json!({"prompt": "a", "n": 16384}), false).unwrap().len(),
+            expand(json!({"prompt": "a", "n": 16384}), false, 16384).unwrap().len(),
             16384
         );
+        assert!(expand(json!({"prompt": "a", "n": 3}), false, 2).is_err());
     }
 
     #[test]
     fn expansion_offsets_explicit_seed_per_choice_like_python() {
         let seeds = |body: Value| -> Vec<Value> {
-            expand(body, false).unwrap().into_iter().map(|r| r["seed"].clone()).collect()
+            expand(body, false, 16384)
+                .unwrap()
+                .into_iter()
+                .map(|r| r["seed"].clone())
+                .collect()
         };
         // Child seed = parent seed + index within each prompt's n choices.
         assert_eq!(
@@ -858,7 +860,14 @@ mod tests {
             [json!(i64::MAX)]
         );
         // A child seed past int64 cannot be sampled by the engine; reject up front.
-        assert!(expand(json!({"prompt": "a", "n": 2, "seed": i64::MAX}), false).is_err());
+        assert!(
+            expand(
+                json!({"prompt": "a", "n": 2, "seed": i64::MAX}),
+                false,
+                16384
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -869,7 +878,7 @@ mod tests {
         assert!(reject_greedy_choices(2, Some(0.7), Some(0.0)).is_ok());
         assert!(reject_greedy_choices(2, None, None).is_ok());
         assert!(reject_greedy_choices(1, Some(0.0), None).is_ok());
-        assert!(reject_greedy_choices(2, Some(SAMPLING_EPS), None).is_ok());
+        assert!(reject_greedy_choices(2, Some(0.000001), None).is_ok());
     }
 
     #[test]

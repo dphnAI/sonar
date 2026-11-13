@@ -102,7 +102,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ## Deployment Configurations
@@ -110,14 +110,14 @@ guide: |
   ### Quick Start (Single GPU, BF16)
   Enable the reasoning parser so the chain-of-thought is returned in `reasoning`:
   ```bash
-  sonar serve LiquidAI/LFM2.5-1.2B-Thinking \
+  sonar run LiquidAI/LFM2.5-1.2B-Thinking \
     --reasoning-parser qwen3
   ```
 
   ### Full-Featured Server Launch
   Reasoning **and** tool calling:
   ```bash
-  sonar serve LiquidAI/LFM2.5-1.2B-Thinking \
+  sonar run LiquidAI/LFM2.5-1.2B-Thinking \
     --reasoning-parser qwen3 \
     --enable-auto-tool-choice \
     --tool-call-parser lfm2 \
@@ -170,8 +170,7 @@ guide: |
   ## Configuration Tips
   - Give reasoning room: leave `max_tokens` unset so the `<think>` block and answer aren't truncated.
   - Set `--max-model-len` to match your workload (up to 32K).
-  - `--gpu-memory-utilization 0.90–0.95` maximizes KV cache capacity.
-  - Sampling presets are per-request client defaults — don't bake them into `sonar serve`.
+  - Sampling presets are per-request client defaults — don't bake them into `sonar run`.
 
   ## References
   - [Model card](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Thinking)

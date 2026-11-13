@@ -221,7 +221,7 @@ def benchmark_config(A, B, As, Bs, block_size, config, out_dtype=torch.float16, 
     end_event = torch.cuda.Event(enable_timing=True)
 
     latencies: list[float] = []
-    for i in range(num_iters):
+    for _ in range(num_iters):
         torch.cuda.synchronize()
         start_event.record()
         run()

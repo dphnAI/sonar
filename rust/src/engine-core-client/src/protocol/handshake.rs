@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::dtype::ModelDtype;
@@ -135,6 +137,17 @@ pub struct EngineCoreReadyResponse {
     /// Whether this engine requires weight-only receipt HTTP finalization.
     #[serde(default)]
     pub dphn_network_enabled: bool,
+    /// `CacheConfig.metrics_info()` after initialization: the labels of
+    /// `sonar:cache_config_info`.
+    #[serde(default)]
+    pub cache_config_info: Option<BTreeMap<String, String>>,
+    /// `hash_config()` of the engine's initialized `SonarConfig`, the last part
+    /// of `system_fingerprint`; `None` if hashing failed.
+    #[serde(default)]
+    pub config_hash: Option<String>,
+    /// Whether expert parallelism is enabled.
+    #[serde(default)]
+    pub enable_expert_parallel: bool,
 }
 
 /// Frontend-owned ZMQ addresses that are sent to the engine during startup

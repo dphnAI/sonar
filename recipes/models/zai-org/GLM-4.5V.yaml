@@ -120,7 +120,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### Install Sonar (AMD ROCm)
@@ -137,7 +137,7 @@ guide: |
   ### Tensor Parallel + Expert Parallel (FP8 on 4 GPUs)
 
   ```bash
-  sonar serve zai-org/GLM-4.5V-FP8 \
+  sonar run zai-org/GLM-4.5V-FP8 \
        --tensor-parallel-size 4 \
        --tool-call-parser glm45 \
        --reasoning-parser glm45 \
@@ -153,7 +153,7 @@ guide: |
   ```bash
   export SONAR_ROCM_USE_AITER=1
 
-  sonar serve zai-org/GLM-4.5V-FP8 \
+  sonar run zai-org/GLM-4.5V-FP8 \
        --tensor-parallel-size 4 \
        --tool-call-parser glm45 \
        --reasoning-parser glm45 \
@@ -168,7 +168,6 @@ guide: |
 
   - `--max-model-len=65536` is near the model's max context (64K).
   - `--max-num-batched-tokens=32768` for prompt-heavy workloads.
-  - `--gpu-memory-utilization=0.95` maximizes KV cache.
   - Use `uv pip install "transformers>=5.0.0"` before serving GLM-V checkpoints.
   - `--mm-encoder-tp-mode data` runs the vision encoder data-parallel — preferable to TP
     since the encoder is small and TP adds communication overhead.
@@ -197,7 +196,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --backend openai-chat \
     --endpoint /v1/chat/completions \
     --model zai-org/GLM-4.5V-FP8 \

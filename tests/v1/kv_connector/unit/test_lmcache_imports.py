@@ -5,6 +5,7 @@
 import importlib.util
 import py_compile
 import sys
+from typing import Any
 
 import pytest
 
@@ -74,3 +75,128 @@ def test_lmcache_config_aliases_use_native_context(tmp_path):
     config = SonarConfig()
     with set_current_sonar_config(config):
         assert module.get_config() is config
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "lmcache.integration.vllm.vllm_v1_adapter",
+        "lmcache.inprocess.integration.vllm.vllm_v1_adapter",
+    ],
+)
+def test_lmcache_scheduler_contract_uses_v2_prefill(tmp_path, module_name):
+    from types import SimpleNamespace
+
+    source = tmp_path / "adapter.py"
+    source.write_text(
+        "def from_new_request(new_request, num_tokens_to_compute):\n"
+        "    return new_request.prompt_token_ids[:num_tokens_to_compute].copy()\n"
+        "def build_connector_meta(cached_reqs, req_id):\n"
+        "    if hasattr(cached_reqs, 'resumed_req_ids'):\n"
+        "        preempted = req_id in cached_reqs.resumed_req_ids\n"
+        "    elif hasattr(cached_reqs, 'resumed_from_preemption'):\n"
+        "        preempted = cached_reqs.resumed_from_preemption[0]\n"
+        "    else:\n"
+        "        raise AttributeError('unsupported scheduler')\n"
+        "    return preempted\n"
+    )
+    original = source.read_bytes()
+    bytecode_path = py_compile.compile(str(source), doraise=True)
+    with open(bytecode_path, "rb") as stream:
+        bytecode = stream.read()
+    namespace: dict[str, Any] = {}
+    exec(_LMCacheLoader(module_name, str(source)).get_code(module_name), namespace)
+    request = SimpleNamespace(prompt_token_ids=[1, 2], prefill_token_ids=[1, 2, 3, 4])
+    assert namespace["from_new_request"](request, 4) == [1, 2, 3, 4]
+    assert namespace["build_connector_meta"](SimpleNamespace(), "r") is False
+    assert source.read_bytes() == original
+    with open(bytecode_path, "rb") as stream:
+        assert stream.read() == bytecode
+
+
+def test_lmcache_mp_appends_all_cached_blocks(tmp_path):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    module_name = "lmcache.integration.vllm.lmcache_mp_connector"
+    source = tmp_path / "mp.py"
+    source.write_text(
+        "def _process_cached_requests(cached_reqs, request_id, request_tracker, new_block_ids):\n"
+        "    if request_id not in cached_reqs.resumed_req_ids:\n"
+        "        request_tracker.append_block_ids(new_block_ids, 2)\n"
+    )
+    namespace: dict[str, Any] = {}
+    exec(_LMCacheLoader(module_name, str(source)).get_code(module_name), namespace)
+    tracker = Mock()
+    namespace["_process_cached_requests"](SimpleNamespace(), "r", tracker, ([3, 4],))
+    tracker.append_block_ids.assert_called_once_with(([3, 4],), 2)
+
+
+@pytest.mark.parametrize(
+    "source_text",
+    [
+        "value = cached_reqs.resumed_req_ids\n",
+        "if request_id not in cached_reqs.resumed_req_ids:\n    unrelated_operation()\n",
+        "if hasattr(cached_reqs, 'resumed_req_ids'):\n    unrelated_operation()\n",
+    ],
+)
+def test_lmcache_unknown_scheduler_contract_fails_clearly(tmp_path, source_text):
+    source = tmp_path / "unknown.py"
+    source.write_text(source_text)
+    module_name = "lmcache.integration.vllm.lmcache_mp_connector"
+    with pytest.raises(RuntimeError, match="Unsupported"):
+        _LMCacheLoader(module_name, str(source)).get_code(module_name)
+
+
+def test_lmcache_scheduler_rewrite_is_scoped(tmp_path):
+    source = tmp_path / "other.py"
+    source.write_text("value = cached_reqs.resumed_req_ids\n")
+    namespace = {"cached_reqs": type("Cached", (), {"resumed_req_ids": {"r"}})()}
+    module_name = "lmcache.other"
+    exec(_LMCacheLoader(module_name, str(source)).get_code(module_name), namespace)
+    assert namespace["value"] == {"r"}
+
+
+@pytest.mark.parametrize("has_inprocess", [False, True])
+def test_lmcache_adapter_selects_installed_layout(monkeypatch, has_inprocess):
+    from unittest.mock import Mock
+
+    from sonar.distributed.kv_transfer.kv_connector.v1 import lmcache_integration
+
+    importer = Mock()
+    monkeypatch.setattr(lmcache_integration, "import_lmcache", importer)
+    monkeypatch.setattr(
+        lmcache_integration.importlib.util, "find_spec", lambda name: object() if has_inprocess else None
+    )
+    assert lmcache_integration.get_lmcache_adapter() is importer.return_value
+    prefix = "lmcache.inprocess" if has_inprocess else "lmcache"
+    assert importer.call_args.args == (f"{prefix}.integration.vllm.vllm_v1_adapter",)
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "lmcache.integration.vllm.vllm_v1_adapter",
+        "lmcache.inprocess.integration.vllm.vllm_v1_adapter",
+        "lmcache.integration.vllm.lmcache_mp_metadata",
+    ],
+)
+def test_lmcache_token_tensors_use_native_buffer_conversion(tmp_path, module_name):
+    from types import SimpleNamespace
+
+    import torch
+
+    source = tmp_path / "tokens.py"
+    source.write_text(
+        '"""Installed adapter."""\n'
+        "from __future__ import annotations\n"
+        "import torch\n"
+        "def convert(request):\n"
+        "    return torch.tensor(request.prompt_token_ids)\n"
+    )
+    namespace: dict[str, Any] = {}
+    exec(_LMCacheLoader(module_name, str(source)).get_code(module_name), namespace)
+    converted = namespace["convert"](SimpleNamespace(prompt_token_ids=[2**33, 7]))
+    assert converted.dtype == torch.int64
+    assert converted.tolist() == [2**33, 7]
+    assert namespace["convert"](SimpleNamespace(prompt_token_ids=None)).numel() == 0

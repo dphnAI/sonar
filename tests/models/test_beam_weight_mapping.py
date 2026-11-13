@@ -17,10 +17,12 @@ import pytest
 import torch
 from torch import nn
 
-from sonar.models.beam.nvidia import model as beam
-from sonar.models.beam.nvidia.model import BeamModel
+from sonar.models.beam import attention
+from sonar.models.beam import model as beam
+from sonar.platforms import current_platform
 from sonar.transformers_utils.configs.beam import BeamConfig
 
+BeamModel = beam.BeamModel
 MAPPER = BeamModel.hf_to_sonar_mapper
 
 
@@ -90,7 +92,7 @@ def test_attention_output_gate_is_renamed_not_fused():
     )
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="CUDA required")
 @torch.inference_mode()
 def test_checkpoint_norm_names_match_sublayer_order(default_sonar_config, monkeypatch):
     """Load reference names directly and use each weight on its intended branch."""
@@ -136,12 +138,11 @@ def test_checkpoint_norm_names_match_sublayer_order(default_sonar_config, monkey
     torch.testing.assert_close(actual, expected)
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="CUDA required")
 @pytest.mark.parametrize("tp_size", [4, 8])
 @torch.inference_mode()
 def test_checkpoint_loads_into_merged_qkv_gate(default_sonar_config, monkeypatch, tp_size):
     """All four checkpoint projections load directly into the allocated TP shard."""
-    from sonar.models.beam.nvidia import attention
     from sonar.models.beam.nvidia.projection import packed_projection
 
     for module in (
@@ -152,7 +153,11 @@ def test_checkpoint_loads_into_merged_qkv_gate(default_sonar_config, monkeypatch
         monkeypatch.setattr(f"{module}.get_tensor_model_parallel_world_size", lambda: tp_size)
     monkeypatch.setattr(attention, "get_tensor_model_parallel_world_size", lambda: tp_size)
     attention_stub = nn.Identity()
-    attention_stub.attn_backend = SimpleNamespace(get_name=lambda: "TEST")
+    attention_stub.attn_backend = SimpleNamespace(
+        get_name=lambda: "TEST",
+        forward_includes_kv_cache_update=True,
+        supports_kv_cache_update_bypass=False,
+    )
     monkeypatch.setattr(attention, "Attention", lambda *args, **kwargs: attention_stub)
     config = BeamConfig(hidden_size=64, num_attention_heads=48, num_key_value_heads=8, head_dim=8)
     attn = attention.BeamAttention(config, None, None, prefix="layers.0.self_attn").bfloat16().cuda()

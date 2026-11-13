@@ -339,7 +339,7 @@ def host_cluster(monkeypatch, tmp_path):
 
 def test_host_cold_setup_shares_payload_and_retires_without_ipc(host_cluster):
     comms, native, directory = host_cluster
-    assert _run(comms, lambda comm: comm.initialize(_config(), use_v2_model_runner=True)) == [None] * 4
+    assert _run(comms, lambda comm: comm.initialize(_config())) == [None] * 4
     mappings = [comm._host_mapping for comm in comms]
     descriptors = [comm._host_fd for comm in comms]
     slab_bytes = native.buffer_size(64 * 5120, 1, 3)
@@ -362,7 +362,7 @@ def test_host_cold_setup_shares_payload_and_retires_without_ipc(host_cluster):
 def test_host_native_initialization_failure_rolls_back_collectively(host_cluster):
     comms, native, directory = host_cluster
     native.fail_init_rank = 1
-    errors = _run(comms, lambda comm: comm.initialize(_config(), use_v2_model_runner=True))
+    errors = _run(comms, lambda comm: comm.initialize(_config()))
     assert all(isinstance(error, RuntimeError) and "native initialization rejected" in str(error) for error in errors)
     assert all(not comm.initialized and comm._host_fd is None for comm in comms)
     assert not native.registrations and not native.contexts
@@ -372,7 +372,7 @@ def test_host_native_initialization_failure_rolls_back_collectively(host_cluster
 @pytest.mark.parametrize("unsafe", ["graph", "drain"])
 def test_host_unsafe_retirement_keeps_registered_mappings(host_cluster, unsafe):
     comms, native, _ = host_cluster
-    assert _run(comms, lambda comm: comm.initialize(_config(), use_v2_model_runner=True)) == [None] * 4
+    assert _run(comms, lambda comm: comm.initialize(_config())) == [None] * 4
     if unsafe == "graph":
         lease = pcie._GraphLease(comms[1])
         comms[1]._graph_leases.add(lease)
@@ -406,7 +406,7 @@ def test_host_preserves_non_transport_eligibility_requirements(host_cluster, mon
     else:
         monkeypatch.delattr(_ColdNative, "register_host_buffer")
         message = "register_host_buffer is unavailable"
-    errors = _run(comms, lambda comm: comm.initialize(config, use_v2_model_runner=True))
+    errors = _run(comms, lambda comm: comm.initialize(config))
     assert all(isinstance(error, (ValueError, RuntimeError)) and message in str(error) for error in errors)
     assert all(not comm.initialized and comm._host_fd is None for comm in comms)
     assert not native.registrations and not native.contexts
@@ -424,7 +424,7 @@ def test_host_rejects_a_different_shared_file_namespace_collectively(host_cluste
         return stat
 
     monkeypatch.setattr(pcie.os, "fstat", different_inode)
-    errors = _run(comms, lambda comm: comm.initialize(_config(), use_v2_model_runner=True))
+    errors = _run(comms, lambda comm: comm.initialize(_config()))
     assert all(isinstance(error, RuntimeError) and "shared file namespace" in str(error) for error in errors)
     assert all(not comm.initialized and comm._host_fd is None for comm in comms)
     assert not native.registrations and not native.contexts
@@ -436,7 +436,7 @@ def test_host_retained_registration_error_retries_or_keeps_mappings(host_cluster
     comms, native, directory = host_cluster
     native.fail_registration_retained = True
     native.fail_unregister = retry_fails
-    errors = _run(comms, lambda comm: comm.initialize(_config(), use_v2_model_runner=True))
+    errors = _run(comms, lambda comm: comm.initialize(_config()))
     assert all(isinstance(error, RuntimeError) and "PCIE_HOST_REGISTRATION_RETAINED" in str(error) for error in errors)
     if retry_fails:
         assert all(comm._pinned and comm._host_registered and not comm._host_mapping.closed for comm in comms)

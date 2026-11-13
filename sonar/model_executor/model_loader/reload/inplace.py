@@ -10,6 +10,8 @@ import torch.nn as nn
 from sonar.config import SonarConfig
 from sonar.logger import init_logger
 from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader.weight_utils import finalize_model_weights
+from sonar.model_executor.utils import weights_already_processed
 
 from .lifecycle import finish_reload, start_reload
 
@@ -103,6 +105,9 @@ def reload_weights(
             param = get_parameter_for_reload(model, name)  # TODO: buffers?
             param.copy_(loaded_weight)
             loaded_weights.add(name)
+        # kernel-format weights: hooks rebuild derived state, transform nothing
+        with weights_already_processed():
+            finalize_model_weights(model)
 
     # logging and validation
     counter_after_reloading = time.perf_counter()

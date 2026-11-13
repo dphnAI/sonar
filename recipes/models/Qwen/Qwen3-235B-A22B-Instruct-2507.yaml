@@ -100,7 +100,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### AMD ROCm (pip)
@@ -120,15 +120,14 @@ guide: |
   SONAR_ROCM_USE_AITER=1 \
   SONAR_ROCM_USE_AITER_MHA=0 \
   SAFETENSORS_FAST_GPU=1 \
-  sonar serve Qwen/Qwen3-235B-A22B \
+  sonar run Qwen/Qwen3-235B-A22B \
     --trust-remote-code \
     -tp 4 \
     --swap-space 32 \
     --distributed-executor-backend mp \
     --max-num-batched-tokens 32768 \
     --max-model-len 32768 \
-    --no-enable-prefix-caching \
-    --gpu-memory-utilization 0.8
+    --no-enable-prefix-caching
   ```
 
   ### FP8 on MI300X/MI325X/MI355X (4 GPUs)
@@ -138,15 +137,14 @@ guide: |
   SONAR_ROCM_USE_AITER=1 \
   SONAR_ROCM_USE_AITER_MHA=0 \
   SAFETENSORS_FAST_GPU=1 \
-  sonar serve Qwen/Qwen3-235B-A22B-FP8 \
+  sonar run Qwen/Qwen3-235B-A22B-FP8 \
     --trust-remote-code \
     -tp 4 \
     --swap-space 16 \
     --distributed-executor-backend mp \
     --max-num-batched-tokens 32768 \
     --max-model-len 32768 \
-    --no-enable-prefix-caching \
-    --gpu-memory-utilization 0.8
+    --no-enable-prefix-caching
   ```
 
   ### TPU Deployment
@@ -157,7 +155,7 @@ guide: |
   ## Client Usage
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model "Qwen/Qwen3-235B-A22B-FP8" \
     --dataset-name random \
     --random-input-len 8192 \
@@ -171,7 +169,7 @@ guide: |
   ## Troubleshooting
 
   - Use `--max-num-batched-tokens` and `--max-model-len` to fit memory constraints on smaller nodes.
-  - If OOM at startup, lower `--gpu-memory-utilization` (e.g. 0.8) and disable prefix caching.
+  - If OOM at startup, lower `--max-num-batched-tokens` or `--max-model-len` and disable prefix caching. With extensible KV caching, Sonar sizes the cache from memory measured after warmup, so leave `--gpu-memory-utilization` unset unless the GPU is shared ([details](https://docs.vllm.ai/en/latest/configuration/optimization/#gpu-memory-utilization)).
   - AMD builds require `SONAR_ROCM_USE_AITER=1` for best performance.
 
   ## References

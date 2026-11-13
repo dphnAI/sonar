@@ -1266,8 +1266,15 @@ if has_stage concurrency; then
   "${{SCRIPT_DIR}}/recommend_concurrency.py" "${{RECOMMEND_SLA_ARGS[@]}}"
 fi
 if has_stage scheduler; then
-  "${{SCRIPT_DIR}}/run_scheduler_sweep.sh" "${{RUN_ARGS[@]}}"
-  "${{SCRIPT_DIR}}/recommend.py" "${{RECOMMEND_SLA_ARGS[@]}}"
+  if "${{SCRIPT_DIR}}/run_scheduler_sweep.sh" "${{RUN_ARGS[@]}}" &&
+     "${{SCRIPT_DIR}}/recommend.py" "${{RECOMMEND_SLA_ARGS[@]}}"; then
+    :
+  else
+    # A failed scheduler search must not discard a measured SLA-feasible
+    # concurrency result. Preserve its Sonar-default scheduler settings.
+    python3 "${{SCRIPT_DIR}}/scheduler_fallback.py" \
+      --sweep-dir "${{SCRIPT_DIR}}"
+  fi
 fi
 
 if ! "${{SCRIPT_DIR}}/report.py" "${{RECOMMEND_SLA_ARGS[@]}}"; then
@@ -1275,6 +1282,12 @@ if ! "${{SCRIPT_DIR}}/report.py" "${{RECOMMEND_SLA_ARGS[@]}}"; then
 fi
 """
     path.write_text(script, encoding="utf-8")
+    path.chmod(path.stat().st_mode | 0o111)
+
+
+def _write_scheduler_fallback_script(path: Path) -> None:
+    template = Path(__file__).with_name("scheduler_fallback.py")
+    path.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
     path.chmod(path.stat().st_mode | 0o111)
 
 
@@ -1413,6 +1426,7 @@ def write_full_sweep_files(
     recommend_scheduler = directory / "recommend.py"
     run_scheduler = directory / "run_scheduler_sweep.sh"
     run_full = directory / "run_full_sweep.sh"
+    fallback_script = directory / "scheduler_fallback.py"
     guide = directory / "SWEEP.md"
 
     env_rel = _relative_to(directory, env_path)
@@ -1452,6 +1466,7 @@ def write_full_sweep_files(
     initial_config = directory / "initial-config.yml"
     initial_config.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     _write_full_run_script(run_full, workload=workload)
+    _write_scheduler_fallback_script(fallback_script)
     _write_full_guide(guide, workload)
 
     return [
@@ -1465,5 +1480,6 @@ def write_full_sweep_files(
         recommend_scheduler,
         run_scheduler,
         run_full,
+        fallback_script,
         initial_config,
     ]

@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-import contextlib
 import json
 from collections.abc import Sequence
 from typing import Any
@@ -25,6 +24,10 @@ from sonar.tokenizers import TokenizerLike
 from sonar.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
+)
+from sonar.tool_parsers.utils import (
+    coerce_to_schema_type,
+    extract_types_from_schema,
 )
 from sonar.utils import random_uuid
 
@@ -90,21 +93,12 @@ class Step3ToolParser(ToolParser):
                 for key, value in params.items():
                     if not isinstance(value, str):
                         continue
-                    prop = properties.get(key, {})
-                    typ = prop.get("type")
-                    if typ == "string":
-                        params[key] = value.strip()
-                    elif typ == "integer":
-                        with contextlib.suppress(ValueError):
-                            params[key] = int(value)
-                    elif typ == "number":
-                        with contextlib.suppress(ValueError):
-                            params[key] = float(value)
-                    elif typ == "boolean":
-                        lower_val = value.lower()
-                        params[key] = lower_val == "true" if lower_val in ("true", "false") else value
-                    elif typ == "null":
-                        params[key] = None if value.lower() == "null" else value
+                    # Resolve `type` lists and anyOf/oneOf/allOf, so nullable
+                    # params such as Optional[int] are coerced like plain ones.
+                    params[key] = coerce_to_schema_type(
+                        value.strip(),
+                        extract_types_from_schema(properties.get(key)),
+                    )
                 break
         return params
 

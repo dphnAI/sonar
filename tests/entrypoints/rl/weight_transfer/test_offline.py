@@ -26,7 +26,7 @@ from sonar.distributed.weight_transfer.base import (
 from tests.utils import create_new_process_for_each_test
 
 # Use a tiny model for fast testing
-MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
+MODEL_NAME = "vllm-project/tiny-random-LlamaForCausalLM"
 
 
 # --- Mock Weight Transfer Engine ---

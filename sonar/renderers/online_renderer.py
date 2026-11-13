@@ -70,6 +70,7 @@ from sonar.renderers.inputs.preprocess import (
     parse_model_prompt,
     prompt_to_seq,
 )
+from sonar.renderers.metrics import observe_request_render_duration
 from sonar.utils.mistral import is_mistral_tokenizer, is_mistral_tool_parser
 from sonar.utils.mistral import mt as _mt
 
@@ -113,11 +114,10 @@ def _reused_prompt_token_ids(
     """Pop prompt token ids forwarded for decode-side reuse, if any.
 
     Disaggregated serving carries the prefill stage's ids in
-    ``kv_transfer_params`` so the decode stage can skip re-tokenizing. Removing
+    `kv_transfer_params` so the decode stage can skip re-tokenizing. Removing
     the key keeps the id list out of the engine's sampling metadata.
 
-    Returns None without checking the ids when ``echo`` is set or ``messages``
-    has non-text content, since both need ``messages`` to be rendered.
+    Returns None when the request needs rendered prompt text or includes media.
     Otherwise raises SonarValidationError if the ids are malformed or out of
     vocabulary.
     """
@@ -129,6 +129,12 @@ def _reused_prompt_token_ids(
         return None
     if getattr(request, "echo", False):
         logger.debug("Ignoring kv_transfer_params['prompt_token_ids']: echo is set, so messages are rendered instead.")
+        return None
+    if getattr(request, "return_prompt_text", False):
+        logger.debug(
+            "Ignoring kv_transfer_params['prompt_token_ids']: "
+            "return_prompt_text is set, so messages are rendered instead."
+        )
         return None
     if has_non_text_content(messages):
         logger.debug(
@@ -225,12 +231,13 @@ class OnlineRenderer:
         Called directly by render_chat_request and delegated to by
         OpenAIServingChat.render_chat_request after its engine-aware checks.
 
-        Decode-side token reuse (ids forwarded in ``kv_transfer_params``) is
-        handled deeper, in ``preprocess_chat`` / ``_make_request_with_harmony``,
+        Decode-side token reuse (ids forwarded in `kv_transfer_params`) is
+        handled deeper, in `preprocess_chat` / `_make_request_with_harmony`,
         so it skips only templating and tokenization while tool-choice
-        validation and ``adjust_request`` still run and the output is
+        validation and `adjust_request` still run and the output is
         detokenized (text-out).
         """
+        render_start = time.perf_counter()
         tokenizer = self.renderer.tokenizer
 
         tool_parser = self.parser.tool_parser_cls if self.parser is not None else None
@@ -297,6 +304,11 @@ class OnlineRenderer:
             should_include_tools = tool_dicts is not None
             conversation, engine_inputs = self._make_request_with_harmony(request, should_include_tools)
 
+        observe_request_render_duration(
+            cast(str, self.model_config.served_model_name),
+            "chat",
+            time.perf_counter() - render_start,
+        )
         return conversation, engine_inputs
 
     async def render_responses(
@@ -486,10 +498,10 @@ class OnlineRenderer:
         )
 
     def adjust_harmony_request(self, request: ChatCompletionRequest | ResponsesRequest) -> None:
-        """Apply the Harmony parser's ``adjust_request`` to ``request`` in place.
+        """Apply the Harmony parser's `adjust_request` to `request` in place.
 
         Every Harmony render path must call this before sampling params are
-        built from ``request``.
+        built from `request`.
         """
         if self.parser is None:
             return
@@ -565,6 +577,7 @@ class OnlineRenderer:
         Called directly by render_completion_request and delegated to by
         OpenAIServingCompletion.render_completion_request after its engine-aware checks.
         """
+        render_start = time.perf_counter()
         prompt_input = request.prompt
         if request.suffix is not None:
             if request.echo:
@@ -623,6 +636,11 @@ class OnlineRenderer:
             skip_mm_cache=skip_mm_cache,
         )
 
+        observe_request_render_duration(
+            cast(str, self.model_config.served_model_name),
+            "completion",
+            time.perf_counter() - render_start,
+        )
         return engine_inputs
 
     def create_error_response(

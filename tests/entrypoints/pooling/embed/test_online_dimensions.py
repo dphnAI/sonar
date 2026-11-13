@@ -15,7 +15,7 @@ from tests.models.utils import EmbedModelInfo
 from tests.utils import ROCM_EXTRA_ARGS, RemoteOpenAIServer
 
 MODELS = [
-    EmbedModelInfo("intfloat/multilingual-e5-small", is_matryoshka=False),
+    EmbedModelInfo("vllm-project/multilingual-e5-small", is_matryoshka=False),
     EmbedModelInfo(
         "Snowflake/snowflake-arctic-embed-m-v1.5",
         is_matryoshka=True,

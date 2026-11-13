@@ -46,7 +46,7 @@ class Decision:
 
 
 class PendingText:
-    """Token-aligned output journal. Only ``ready`` tokens may leave the engine."""
+    """Token-aligned output journal. Only `ready` tokens may leave the engine."""
 
     def __init__(self, phrases: tuple[str, ...], case_sensitive: bool = False):
         self.pattern = compile_phrases(phrases, case_sensitive)

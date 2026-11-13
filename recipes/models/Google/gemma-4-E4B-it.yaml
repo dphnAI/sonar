@@ -34,7 +34,7 @@ model:
 
 dependencies:
   - note: "Audio extras — needed to serve the audio modality"
-    command: 'uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130'
+    command: 'uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132'
     optional: true
 
 features:
@@ -127,9 +127,9 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --torch-backend cu130 --pre \
+  uv pip install -U sonar --torch-backend cu132 --pre \
     --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
-    --extra-index-url https://download.pytorch.org/whl/cu129 \
+    --extra-index-url https://download.pytorch.org/whl/cu132 \
     --index-strategy first-index
   ```
 
@@ -157,13 +157,13 @@ guide: |
 
   ### Quick Start (Single GPU)
   ```bash
-  sonar serve google/gemma-4-E4B-it \
+  sonar run google/gemma-4-E4B-it \
     --max-model-len 32768
   ```
 
   ### With Audio Support
   ```bash
-  sonar serve google/gemma-4-E4B-it \
+  sonar run google/gemma-4-E4B-it \
     --max-model-len 8192 \
     --limit-mm-per-prompt '{"image": 4, "audio": 1}'
   ```
@@ -171,9 +171,8 @@ guide: |
   ### Full-Featured Server Launch
   Enables text, image, audio, thinking, and tool calling:
   ```bash
-  sonar serve google/gemma-4-E4B-it \
+  sonar run google/gemma-4-E4B-it \
     --max-model-len 16384 \
-    --gpu-memory-utilization 0.90 \
     --enable-auto-tool-choice \
     --reasoning-parser gemma4 \
     --tool-call-parser gemma4 \
@@ -284,7 +283,7 @@ guide: |
 
   ### Thinking Mode
   ```bash
-  sonar serve google/gemma-4-E4B-it \
+  sonar run google/gemma-4-E4B-it \
     --max-model-len 16384 \
     --reasoning-parser gemma4 \
     --tool-call-parser gemma4 \
@@ -303,13 +302,13 @@ guide: |
 
   ## Quantized Variant
 
-  [`RedHatAI/gemma-4-E4B-it-FP8-dynamic`](https://huggingface.co/RedHatAI/gemma-4-E4B-it-FP8-dynamic) is a pre-quantized FP8 (E4M3) checkpoint — linear weights with dynamic per-token activation quantization, vision/audio encoders kept in BF16. Runs on Hopper and Blackwell. Pick the **fp8** variant above, or pass the repo id directly to `sonar serve`.
+  [`RedHatAI/gemma-4-E4B-it-FP8-dynamic`](https://huggingface.co/RedHatAI/gemma-4-E4B-it-FP8-dynamic) is a pre-quantized FP8 (E4M3) checkpoint — linear weights with dynamic per-token activation quantization, vision/audio encoders kept in BF16. Runs on Hopper and Blackwell. Pick the **fp8** variant above, or pass the repo id directly to `sonar run`.
 
   ## Speculative Decoding (MTP)
 
   Enable the **Spec Decoding** feature toggle (above) or add `--speculative-config` manually to use MTP drafting with the [assistant model](https://huggingface.co/google/gemma-4-E4B-it-assistant). Recommended `num_speculative_tokens`: 4 for this model. The E4B assistant uses centroids masking for efficient sparse logit computation. See the [Gemma 4 usage guide](../../Google/Gemma4) for details and benchmarks.
 
-  > **Note:** MTP speculative decoding for Gemma 4 is only available on the Sonar nightly build — it has not yet landed in a stable release. Install via the nightly wheel (`uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple …`) or use the `vllm/vllm-openai:gemma4-0505-cu129` / `vllm/vllm-openai:gemma4-0505-cu130` images above; the standard `:latest` stable tag does not include this feature.
+  > **Note:** MTP speculative decoding for Gemma 4 is only available on the Sonar nightly build — it has not yet landed in a stable release. Install via the nightly wheel (`uv pip install -U sonar --index-strategy first-index --torch-backend cu132 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple …`) or use the `vllm/vllm-openai:gemma4-0505-cu129` / `vllm/vllm-openai:gemma4-0505-cu130` images above; the standard `:latest` stable tag does not include this feature.
 
   ## References
 

@@ -367,7 +367,7 @@ def _replayssm_output_only_kernel(
             st_f = tl.load(state_ptrs, mask=state_mask, other=0.0)
             state_new = st_f.to(tl.float32) * total_decay_dot + delta_state.to(tl.float32)
             if USE_RS_ROUNDING:
-                # Stochastic-round fp32->fp16 (Blackwell cvt.rs), mirroring the
+                # Stochastic-round fp32->fp16 (cvt.rs / v_cvt_sr), mirroring the
                 # baseline. Only the flush step stores state, so this runs at 1/L
                 # the baseline's per-step rate. Absolute per-element offsets seed
                 # the RNG so each state element draws independently.

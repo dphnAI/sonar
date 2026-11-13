@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from dataclasses import dataclass, fields, replace
+from dataclasses import replace
 
 from sonar.logger import init_logger
 from sonar.sampling_params import SamplingParams
 from sonar.tokenizers.registry import cached_tokenizer_from_config
 from sonar.v1.core.sched.async_scheduler import AsyncScheduler
-from sonar.v1.core.sched.output import SchedulerOutput
 from sonar.v1.core.sched.utils import check_stop
 from sonar.v1.engine.detokenizer import FastIncrementalDetokenizer, IncrementalDetokenizer
 from sonar.v1.kv_cache_interface import (
@@ -24,11 +23,6 @@ from sonar.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
 from sonar.v1.request import RequestStatus
 
 logger = init_logger(__name__)
-
-
-@dataclass
-class PhraseSchedulerOutput(SchedulerOutput):
-    phrase_rewinds: dict[str, tuple[list[int], SamplingParams]] | None = None
 
 
 class RequestGuard:
@@ -97,11 +91,6 @@ class PhraseScheduler(AsyncScheduler):
         params = request.sampling_params
         if params and "banned_strings" in (params.extra_args or {}):
             PhraseRetryProcessor.validate_params(params)
-            processors = self.sonar_config.model_config.logits_processors or []
-            if not self.use_v2_model_runner and not any(
-                p is PhraseRetryProcessor or str(p).endswith("PhraseRetryProcessor") for p in processors
-            ):
-                raise ValueError("banned_strings requires the PhraseRetryProcessor logits processor")
             if (
                 self.return_sampling_mask
                 or self.aux_output_connector is not None
@@ -141,14 +130,9 @@ class PhraseScheduler(AsyncScheduler):
             else None
         )
         if rewinds:
-            if self.use_v2_model_runner:
-                for new_req in output.scheduled_new_reqs:
-                    if new_req.req_id in rewinds:
-                        new_req.sampling_params = rewinds[new_req.req_id][1]
-            else:
-                output = PhraseSchedulerOutput(
-                    **{f.name: getattr(output, f.name) for f in fields(SchedulerOutput)}, phrase_rewinds=rewinds
-                )
+            for new_req in output.scheduled_new_reqs:
+                if new_req.req_id in rewinds:
+                    new_req.sampling_params = rewinds[new_req.req_id][1]
         return output
 
     def _update_request_with_output(self, request, new_token_ids, is_stale=False):
@@ -244,15 +228,13 @@ class PhraseScheduler(AsyncScheduler):
         num_hashed_tokens = max(0, request.num_tokens - self.num_hash_lookahead_tokens)
         del request.block_hashes[num_hashed_tokens // self.hash_block_size :]
         params = request.sampling_params.clone()
-        if self.use_v2_model_runner:
-            # Original prompt probabilities are already buffered or published.
-            params.prompt_logprobs = None
-            params.prompt_logprob_token_ids = None
+        # Original prompt probabilities are already buffered or published.
+        params.prompt_logprobs = None
+        params.prompt_logprob_token_ids = None
         params.extra_args = dict(params.extra_args or {})
         params.extra_args[RETRY_KEY] = (position, guard.blocked.copy())
-        if self.use_v2_model_runner:
-            # Preserve the retry if memory pressure preempts replay again.
-            request.sampling_params = params
+        # Preserve the retry if memory pressure preempts replay again.
+        request.sampling_params = params
         self.rewinds[request.request_id] = (list(request.output_token_ids), params)
         guard.reset_decoder()
         logger.debug("Phrase rewind: request=%s position=%d retries=%d", request.request_id, position, guard.retries)
@@ -263,11 +245,13 @@ class PhraseScheduler(AsyncScheduler):
         guards = {rid: self.guards[rid] for rid in model_runner_output.req_ids if rid in self.logprob_guards}
         prompt_logprobs = dict(model_runner_output.prompt_logprobs_dict)
         prompt_token_id_logprobs = dict(model_runner_output.prompt_token_id_logprobs_dict)
-        for rid, guard in guards.items():
+        for index, rid in enumerate(model_runner_output.req_ids):
+            guard = guards.get(rid)
+            if guard is None:
+                continue
             guard.step_logprobs = None
             guard.output_logprobs = None
             if guard.logprobs is not None and model_runner_output.logprobs is not None:
-                index = model_runner_output.req_id_to_index[rid]
                 guard.step_logprobs = model_runner_output.logprobs.slice_request(
                     index, len(model_runner_output.sampled_token_ids[index])
                 )

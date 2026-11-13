@@ -18,6 +18,7 @@ from sonar.model_executor.layers.fused_moe.experts.trtllm_mxfp4_moe import (
 from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
 from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
 from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
 from sonar.model_executor.warmup.cutedsl_warmup import cutedsl_warmup
 from sonar.models.kimi_k3.nvidia import latent_moe_runner
 from sonar.models.kimi_k3.nvidia.ops.latent_moe_tail import KimiK3LatentMoETailOp
@@ -34,24 +35,28 @@ EPS = 0.1
 TOP_K = 8
 
 
-def test_deferred_finalize_enabled_before_moe_kernel_setup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FakeMoEConfig:
-        tp_size = 8
-        dp_size = 1
-        ep_size = 1
-        pcp_size = 1
-        is_sequence_parallel = False
-        hidden_dim = LATENT_SIZE
-        hidden_dim_unpadded = LATENT_SIZE
-        experts_per_token = 16
-        _defer_moe_finalize = False
-        defer_moe_finalize_max_num_tokens = -1
-        defer_moe_finalize = FusedMoEConfig.defer_moe_finalize
-        limit_deferred_moe_finalize = FusedMoEConfig.limit_deferred_moe_finalize
-        use_deferred_moe_finalize = FusedMoEConfig.use_deferred_moe_finalize
+class FakeMoEConfig:
+    tp_size = 8
+    dp_size = 1
+    ep_size = 1
+    pcp_size = 1
+    is_sequence_parallel = False
+    hidden_dim = LATENT_SIZE
+    hidden_dim_unpadded = LATENT_SIZE
+    experts_per_token = 16
+    _defer_moe_finalize = False
+    defer_moe_finalize_max_num_tokens = -1
+    defer_moe_finalize = FusedMoEConfig.defer_moe_finalize
+    limit_deferred_moe_finalize = FusedMoEConfig.limit_deferred_moe_finalize
+    use_deferred_moe_finalize = FusedMoEConfig.use_deferred_moe_finalize
 
+
+def build_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    nf12: bool = False,
+    sleep: bool = False,
+) -> tuple[latent_moe_runner.LatentMoERunner, FakeMoEConfig, dict[str, object]]:
     moe_config = FakeMoEConfig()
     quant_method = SimpleNamespace(
         experts_cls=TrtLlmMxfp4ExpertsMonolithic,
@@ -62,7 +67,9 @@ def test_deferred_finalize_enabled_before_moe_kernel_setup(
         norm=SimpleNamespace(weight=norm_weight, variance_epsilon=EPS),
         up_proj=SimpleNamespace(
             weight=SimpleNamespace(shape=(HIDDEN_SIZE, LATENT_SIZE)),
-            quant_method=UnquantizedLinearMethod(),
+            quant_method=object.__new__(Nf12OnlineLinearMethod) if nf12 else UnquantizedLinearMethod(),
+            output_size=HIDDEN_SIZE,
+            input_size=LATENT_SIZE,
         ),
     )
 
@@ -95,17 +102,29 @@ def test_deferred_finalize_enabled_before_moe_kernel_setup(
         "get_current_sonar_config",
         lambda: SimpleNamespace(
             parallel_config=SimpleNamespace(use_ubatching=False),
-            model_config=SimpleNamespace(enable_sleep_mode=False),
+            model_config=SimpleNamespace(enable_sleep_mode=sleep),
         ),
     )
     monkeypatch.setattr(KimiK3LatentMoETailOp, "initialize", fake_tail_initialize)
 
-    latent_moe_runner.LatentMoERunner()
+    return latent_moe_runner.LatentMoERunner(), moe_config, initialized_with
+
+
+def test_deferred_finalize_enabled_before_moe_kernel_setup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, moe_config, initialized_with = build_runner(monkeypatch)
 
     # The stand-in deliberately borrows the real config's property.
     assert moe_config.use_deferred_moe_finalize  # type: ignore[misc]
     assert moe_config.defer_moe_finalize_max_num_tokens == 128
     assert initialized_with["experts_per_token"] == 16
+
+
+def test_nf12_tail_rejects_sleep_without_disabling_bf16_sleep(monkeypatch):
+    build_runner(monkeypatch, sleep=True)
+    with pytest.raises(ValueError, match="NF12.*sleep mode"):
+        build_runner(monkeypatch, nf12=True, sleep=True)
 
 
 def _make_deferred_routed_output(

@@ -174,9 +174,7 @@ class DeepseekOCRProcessor(ProcessorMixin):
         self.image_transform = ImageTransform(mean=image_mean, std=image_std, normalize=normalize)
 
         self.tokenizer = tokenizer
-        self.tokenizer.padding_side = (
-            "left"  # must set this，padding side with make a difference in batch inference # noqa: E501
-        )
+        self.tokenizer.padding_side = "left"  # must set this，padding side with make a difference in batch inference # noqa: E501
 
         # add the pad_token as special token to use 'tokenizer.pad_token'
         # and 'tokenizer.pad_token_id'
@@ -290,6 +288,15 @@ class DeepseekOCRProcessor(ProcessorMixin):
 
         return prepare
 
+    def _prepare_global_view(self, image: Image.Image, cropping: bool) -> Image.Image:
+        if not cropping:
+            image = image.resize((self.image_size, self.image_size))
+        return ImageOps.pad(
+            image,
+            (self.base_size, self.base_size),
+            color=tuple(int(x * 255) for x in self.image_transform.mean),
+        )
+
     def tokenize_with_images(
         self,
         conversation: str,
@@ -333,14 +340,7 @@ class DeepseekOCRProcessor(ProcessorMixin):
             else:
                 crop_ratio = [1, 1]
 
-            if not cropping:
-                image = image.resize((self.image_size, self.image_size))
-
-            global_view = ImageOps.pad(
-                image,
-                (self.base_size, self.base_size),
-                color=tuple(int(x * 255) for x in self.image_transform.mean),
-            )
+            global_view = self._prepare_global_view(image, cropping)
             images_list.append(self.image_transform(global_view))
 
             num_width_tiles, num_height_tiles = crop_ratio

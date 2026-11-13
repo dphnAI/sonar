@@ -527,7 +527,7 @@ fn positions_to_proto(
 /// expecting ints (e.g. `image_grid_thw`) don't see `16.0`.
 const MAX_SAFE_INTEGER_F64: f64 = ((1u64 << 53) - 1) as f64;
 
-fn proto_struct_to_json(s: &prost_types::Struct) -> serde_json::Value {
+pub(super) fn proto_struct_to_json(s: &prost_types::Struct) -> serde_json::Value {
     serde_json::Value::Object(
         s.fields.iter().map(|(k, v)| (k.clone(), proto_value_to_json(v))).collect(),
     )
@@ -735,6 +735,22 @@ mod tests {
         let decoded = pb::GenerateRequest::decode(request.encode_to_vec().as_slice()).unwrap();
         let converted = to_text_request(decoded, false, &served()).unwrap();
         assert_eq!(converted.sampling_params.sonar_sampling, expected);
+    }
+
+    #[test]
+    fn grpc_sampler_and_media_extensions_keep_distinct_wire_fields() {
+        use prost::Message as _;
+
+        let request = pb::GenerateRequest {
+            sonar_sampling: Some(Default::default()),
+            media_io_kwargs: Some(Default::default()),
+            ..Default::default()
+        };
+        let bytes = request.encode_to_vec();
+        // Sonar's existing sampler field 19 must not become media field 20.
+        assert_eq!(bytes, [0x9a, 0x01, 0x00, 0xa2, 0x01, 0x00]);
+        let decoded = pb::GenerateRequest::decode(bytes.as_slice()).unwrap();
+        assert_eq!(decoded, request);
     }
 
     #[test]
@@ -1084,6 +1100,7 @@ mod tests {
             sampling_mask: None,
             spec_decode_metrics: None,
             weight_versions: None,
+            routed_experts: None,
             timestamps: Default::default(),
         }
     }

@@ -44,7 +44,7 @@ def pad_mxfp8_columns(
     """Round K up within its existing F8_128x4 scale tile without requantizing.
 
     Locally quantized scales already have zero tails. For prequantized input,
-    ``sanitize_scales`` clears newly consumed columns in a copy: an arbitrary
+    `sanitize_scales` clears newly consumed columns in a copy: an arbitrary
     E8M0 tail can contain NaNs even though the padded payload is zero.
     """
     k = data.shape[1]

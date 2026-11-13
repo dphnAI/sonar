@@ -141,6 +141,7 @@ def test_broadcast_projection_refit_preserves_captured_buffer():
     layer.hc_attn_fn_broadcast = None
     layer.finalize_mhc_broadcast_weights()
     buffer = layer.hc_attn_fn_broadcast
+    assert buffer is not None
     expected = layer.hc_attn_fn.view(24, 4, 8).sum(dim=1)
     torch.testing.assert_close(buffer, expected, rtol=0, atol=0)
 

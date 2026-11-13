@@ -62,7 +62,7 @@ def test_watermarking_candidate_golden(candidate, goldens: dict[str, dict]):
 
     assert not differences, "\n".join(
         [
-            f"{candidate.id}: golden drift (tolerance {GOLDEN_FLOAT_RTOL:g} on score and p_value)",
+            (f"{candidate.id}: golden drift (tolerance {GOLDEN_FLOAT_RTOL:g} on score and p_value)"),
             *differences,
         ]
     )

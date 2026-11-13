@@ -50,7 +50,6 @@ def test_v2_sampler_warmup_rocm(monkeypatch, tmp_path):
     A fresh cache and child process prevent previous model executions from
     hiding a missing warmup specialization.
     """
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     monkeypatch.setenv("SONAR_ROCM_USE_AITER", "0")
     monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
     monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")

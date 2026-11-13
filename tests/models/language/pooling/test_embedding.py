@@ -104,10 +104,10 @@ def test_lfm2_bidirectional_embeddings_are_batch_independent(sonar_runner, enfor
             marks=[pytest.mark.core_model, pytest.mark.slow_test],
         ),
         pytest.param(
-            "intfloat/e5-mistral-7b-instruct",
+            "vllm-project/e5-mistral-7b-instruct",
             marks=[pytest.mark.core_model, pytest.mark.cpu_model],
         ),
-        pytest.param("ssmits/Qwen2-7B-Instruct-embed-base", marks=[pytest.mark.cpu_model]),
+        pytest.param("vllm-project/Qwen2-7B-Instruct-embed-base", marks=[pytest.mark.cpu_model]),
         # [Encoder-only]
         pytest.param(
             "BAAI/bge-base-en-v1.5",
@@ -118,7 +118,7 @@ def test_lfm2_bidirectional_embeddings_are_batch_independent(sonar_runner, enfor
             ],
         ),
         pytest.param("sentence-transformers/all-MiniLM-L12-v2"),
-        pytest.param("intfloat/multilingual-e5-small"),
+        pytest.param("vllm-project/multilingual-e5-small"),
         # [Cross-Encoder]
         pytest.param(
             "sentence-transformers/stsb-roberta-base-v2",
@@ -133,7 +133,7 @@ def test_models(
     model,
 ) -> None:
     sonar_extra_kwargs = {}
-    if model == "ssmits/Qwen2-7B-Instruct-embed-base":
+    if model == "vllm-project/Qwen2-7B-Instruct-embed-base":
         sonar_extra_kwargs["pooler_config"] = PoolerConfig(seq_pooling_type="MEAN", use_activation=False)
 
     max_model_len: int | None = 512
@@ -152,7 +152,7 @@ def test_models(
     example_prompts = [str(s).strip() for s in example_prompts]
 
     with hf_runner(model, is_sentence_transformer=True) as hf_model:
-        if model == "ssmits/Qwen2-7B-Instruct-embed-base":
+        if model == "vllm-project/Qwen2-7B-Instruct-embed-base":
             # This checkpoint has no sentence-transformers config. Since
             # sentence-transformers 5.6, a causal LM then gets its chat
             # template applied and last-token pooling. Keep the plain text and
@@ -181,14 +181,13 @@ def test_models(
     "model",
     [
         "BAAI/bge-base-en-v1.5",
-        "intfloat/multilingual-e5-small",
+        "vllm-project/multilingual-e5-small",
     ],
 )
 @torch.inference_mode()
 def test_encoder_only_model_runner_v2_attention(
     hf_runner,
     sonar_runner,
-    monkeypatch,
     model: str,
 ) -> None:
     prompts = [
@@ -204,7 +203,6 @@ def test_encoder_only_model_runner_v2_attention(
             embedding = torch.nn.functional.normalize(output.last_hidden_state[0, -1].float(), dim=0)
             hf_outputs.append(embedding.cpu().tolist())
 
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     with sonar_runner(
         model,
         runner="pooling",
@@ -214,7 +212,6 @@ def test_encoder_only_model_runner_v2_attention(
         gpu_memory_utilization=0.25,
         pooler_config=PoolerConfig(task="embed", seq_pooling_type="LAST", use_activation=True),
     ) as sonar_model:
-        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
         sonar_outputs = sonar_model.embed(prompts)
 
     check_embeddings_close(
@@ -227,7 +224,7 @@ def test_encoder_only_model_runner_v2_attention(
 
 
 @pytest.mark.core_model
-def test_encoder_model_runner_v2(hf_runner, sonar_runner, monkeypatch) -> None:
+def test_encoder_model_runner_v2(hf_runner, sonar_runner) -> None:
     model = "sentence-transformers/all-MiniLM-L6-v2"
     prompt_batches = [
         ["short input"],
@@ -240,13 +237,11 @@ def test_encoder_model_runner_v2(hf_runner, sonar_runner, monkeypatch) -> None:
     with hf_runner(model, is_sentence_transformer=True) as hf_model:
         hf_outputs = [hf_model.encode(prompts) for prompts in prompt_batches]
 
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     with sonar_runner(
         model,
         runner="pooling",
         max_model_len=64,
     ) as sonar_model:
-        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
         sonar_outputs = [sonar_model.embed(prompts) for prompts in prompt_batches]
 
     for hf_batch, sonar_batch in zip(hf_outputs, sonar_outputs):
@@ -260,7 +255,7 @@ def test_encoder_model_runner_v2(hf_runner, sonar_runner, monkeypatch) -> None:
 
 
 @pytest.mark.core_model
-def test_matryoshka_dimensions_model_runner_v2(hf_runner, sonar_runner, monkeypatch) -> None:
+def test_matryoshka_dimensions_model_runner_v2(hf_runner, sonar_runner) -> None:
     model = "Snowflake/snowflake-arctic-embed-m-v1.5"
     prompts = ["short input", "a longer input for a different output width"]
     dimensions = [None, 256]
@@ -268,14 +263,12 @@ def test_matryoshka_dimensions_model_runner_v2(hf_runner, sonar_runner, monkeypa
     with hf_runner(model, is_sentence_transformer=True) as hf_model:
         hf_outputs = hf_model.encode(prompts)
 
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     with sonar_runner(
         model,
         runner="pooling",
         max_model_len=64,
         gpu_memory_utilization=0.25,
     ) as sonar_model:
-        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
         sonar_outputs = sonar_model.embed(
             prompts,
             pooling_params=[PoolingParams(dimensions=d) for d in dimensions],

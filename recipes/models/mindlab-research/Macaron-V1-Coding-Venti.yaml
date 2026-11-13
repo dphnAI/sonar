@@ -179,7 +179,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install "sonar==0.25.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install "sonar==0.25.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   uv pip install "transformers>=5.9.0"
   ```
 
@@ -198,7 +198,7 @@ guide: |
 
   ```bash
   # Node 0 (head)
-  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar run mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 16 \
     --tool-call-parser glm47 \
@@ -207,7 +207,7 @@ guide: |
     --served-model-name macaron-v1-coding-venti
 
   # Node 1
-  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar run mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 16 \
     --tool-call-parser glm47 \
@@ -228,7 +228,7 @@ guide: |
   runs at load; the accuracy / KV-cache trade-off is small (see the B300 numbers below).
 
   ```bash
-  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar run mindlab-research/Macaron-V1-Coding-Venti \
     --quantization fp8 \
     --tensor-parallel-size 8 \
     --kv-cache-dtype fp8 \
@@ -240,7 +240,6 @@ guide: |
 
   - **`--max-model-len`** — raise toward the 1M window when KV-cache headroom allows; lower on OOM.
   - **`--max-num-seqs 32`** — the main knob for fitting long context under concurrency.
-  - **`--gpu-memory-utilization 0.80`** — leaves ROCm runtime headroom for MTP graph capture.
 
   On a **B300** node, on-the-fly FP8 trades a negligible accuracy drop for a large KV-cache
   headroom gain:
@@ -261,7 +260,7 @@ guide: |
   **spec_decoding → MTP** in the builder:
 
   ```bash
-  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar run mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 16 \
     --speculative-config '{"method":"mtp","num_speculative_tokens":5}' \
@@ -281,7 +280,7 @@ guide: |
   ```bash
   SONAR_ROCM_USE_AITER=1 \
   SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar run mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
     --quantization fp8_per_channel \
@@ -296,7 +295,7 @@ guide: |
   ```bash
   SONAR_ROCM_USE_AITER=1 \
   SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  sonar serve mindlab-research/Macaron-V1-Coding-Venti \
+  sonar run mindlab-research/Macaron-V1-Coding-Venti \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
     --max-model-len 262144 \
@@ -354,7 +353,7 @@ guide: |
   Add `--no-enable-prefix-caching` to the server command for a clean measurement.
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model mindlab-research/Macaron-V1-Coding-Venti \
     --dataset-name random \
     --random-input 8000 \

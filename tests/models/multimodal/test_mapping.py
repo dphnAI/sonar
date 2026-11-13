@@ -56,7 +56,6 @@ def test_cosmos3_new_checkpoint_weights_mapper():
                 "layers.0.self_attn.to_add_out.weight",
                 "layers.0.self_attn.norm_added_q.weight",
                 "layers.0.self_attn.norm_added_k.weight",
-                "layers.0.self_attn.k_norm_und_for_gen.weight",
                 "layers.0.self_attn.q_proj_moe_gen.weight",
                 "layers.0.mlp_moe_gen.gate_up_proj.weight",
                 "norm_moe_gen.weight",
@@ -166,6 +165,7 @@ def test_cosmos3_edge_checkpoint_weights_mapper():
                 "layers.0.self_attn.to_add_out.weight",
                 "layers.0.self_attn.norm_added_q.weight",
                 "layers.0.self_attn.norm_added_k.weight",
+                "layers.0.self_attn.k_norm_und_for_gen.weight",
                 "layers.0.self_attn.q_proj_moe_gen.weight",
                 "layers.0.mlp_moe_gen.up_proj.weight",
                 "norm_moe_gen.weight",
@@ -181,8 +181,8 @@ def test_cosmos3_edge_checkpoint_weights_mapper():
 
 def test_cosmos3_edge_modelopt_quantizer_weights_mapper():
     """ModelOpt/Diffusers FP8 checkpoints ship native fake-quant buffers
-    (``*_quantizer._amax`` / ``._scale``) alongside the Sonar-consumable
-    ``weight_scale`` / ``input_scale`` sidecars. Sonar must drop the former
+    (`*_quantizer._amax` / `._scale`) alongside the Sonar-consumable
+    `weight_scale` / `input_scale` sidecars. Sonar must drop the former
     (it has no parameter for them) while keeping the latter."""
     from sonar.model_executor.models.cosmos3_edge import (
         Cosmos3EdgeForConditionalGeneration,

@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Inference-only NVIDIA Canary (FastConformer encoder + Transformer decoder).
 
-Targets the native Transformers checkpoint layout (e.g. ``nvidia/canary-1b-v2``)
-whose ``config.json`` has ``model_type == "canary"``.
+Targets the native Transformers checkpoint layout (e.g. `nvidia/canary-1b-v2`)
+whose `config.json` has `model_type == "canary"`.
 """
 
 import math
@@ -21,7 +21,6 @@ from sonar.config import ModelConfig, SonarConfig, SpeechToTextConfig
 from sonar.config.multimodal import MultiModalDummyOptions
 from sonar.config.speech_to_text import SpeechToTextParams
 from sonar.inputs import MultiModalDataDict, PromptType, TokensPrompt
-from sonar.logger import init_logger
 from sonar.model_executor.layers.logits_processor import LogitsProcessor
 from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
@@ -57,8 +56,6 @@ from .interfaces import (
 )
 from .utils import WeightsMapper, make_layers, maybe_prefix
 
-logger = init_logger(__name__)
-
 # See https://huggingface.co/nvidia/canary-1b-v2
 CANARY_SUPPORTED_LANGS = {
     "bg": "Bulgarian",
@@ -91,8 +88,8 @@ CANARY_SUPPORTED_LANGS = {
 
 # ----- Decoder -----
 class CanaryPositionalEmbedding(nn.Module):
-    """Fixed sinusoidal table laid out as ``[sin | cos]`` and scaled by
-    ``1 / sqrt(hidden_size)``; matches ``CanaryPositionalEmbedding`` in
+    """Fixed sinusoidal table laid out as `[sin | cos]` and scaled by
+    `1 / sqrt(hidden_size)`; matches `CanaryPositionalEmbedding` in
     Transformers."""
 
     def __init__(self, max_positions: int, hidden_size: int) -> None:
@@ -239,7 +236,7 @@ class CanaryModel(nn.Module):
 
 # ----- Multi-modal processing -----
 def _subsampled_length(num_frames: int, encoder_config) -> int:
-    """Mirror of ``ParakeetEncoder._get_subsampling_output_length``."""
+    """Mirror of `ParakeetEncoder._get_subsampling_output_length`."""
     kernel_size = encoder_config.subsampling_conv_kernel_size
     stride = encoder_config.subsampling_conv_stride
     add_pad = (kernel_size - 1) // 2 * 2 - kernel_size
@@ -425,13 +422,12 @@ class CanaryForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
 
     @classmethod
     def validate_language(cls, language: str | None) -> str | None:
+        # Unlike models that default to "en", fail: Canary would return
+        # English text for non-English audio.
         if language is None:
-            logger.warning(
-                "Defaulting to language='en'. If you wish to transcribe audio in "
-                "a different language, pass the `language` field in the "
-                "TranscriptionRequest."
+            raise ValueError(
+                f"Canary cannot detect the audio's language; pass `language` (one of {list(cls.supported_languages)})."
             )
-            language = "en"
         # The decoder prompt needs one of the trained language tokens, so
         # unlike the base class, do not fall back for other languages.
         if language not in cls.supported_languages:
@@ -442,7 +438,7 @@ class CanaryForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
     def get_decoder_prompt_tokens(
         cls, source_language: str, target_language: str, punctuation: bool = True
     ) -> list[str]:
-        """Same token sequence as the checkpoint's ``chat_template.jinja``."""
+        """Same token sequence as the checkpoint's `chat_template.jinja`."""
         return [
             "<|startofcontext|>",
             "<|startoftranscript|>",
@@ -467,9 +463,6 @@ class CanaryForConditionalGeneration(nn.Module, SupportsTranscription, SupportsM
                 raise ValueError(
                     f"Unsupported target language {target_language!r}; expected one of {list(cls.supported_languages)}."
                 )
-            # Canary cannot detect the audio's language, and `validate_language`
-            # defaults a missing one to "en", so a translation without
-            # `language` would silently become English transcription.
             if source_language == target_language:
                 raise ValueError(
                     "Canary translation needs `language` (the audio's language) "

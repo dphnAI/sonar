@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Prepare b12x plans held by the loaded model at two lifecycle points.
 
-The ``weights`` stage selects, compiles and primes weight-owned plans before
-memory profiling. The ``state`` stage binds plans to the final KV/state pools
+The `weights` stage selects, compiles and primes weight-owned plans before
+memory profiling. The `state` stage binds plans to the final KV/state pools
 before warmup or graph capture. Disposable profiling pools prepare defaults
 and release only their own plans after their graphs have been destroyed.
 Both stages collect one unit per
-layer from ``layer.b12x_preparation_provider.get_b12x_preparation_units`` and
-hand the units' requests to one ``PreparationSession`` per worker.
+layer from `layer.b12x_preparation_provider.get_b12x_preparation_units` and
+hand the units' requests to one `PreparationSession` per worker.
 """
 
 from __future__ import annotations
@@ -34,7 +34,6 @@ from sonar.utils.b12x import (
 if TYPE_CHECKING:
     from b12x.preparation import PreparationRequest
 
-    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
     from sonar.v1.worker.gpu_worker import Worker
 
 
@@ -43,19 +42,11 @@ def b12x_native_supported(worker: Worker) -> bool:
     return bool(getattr(worker.get_model(), "supports_b12x_native_preparation", False))
 
 
-def _native_runner(worker: Worker) -> GPUModelRunnerV2:
-    # Worker.model_runner is annotated with the V1 runner, but native
-    # preparation only runs on the V2 runner (see _validate_native_worker).
-    return cast("GPUModelRunnerV2", worker.model_runner)
-
-
 def _validate_native_worker(worker: Worker) -> None:
     if not has_b12x():
         raise RuntimeError("Native SM120 preparation requires FlashInfer's bundled B12x provider")
     if not current_platform.is_cuda() or not current_platform.is_device_capability_family(120):
         raise RuntimeError("Native B12x preparation requires CUDA device family 120")
-    if not worker.use_v2_model_runner:
-        raise RuntimeError("Native B12x preparation requires the V2 model runner")
     parallel = worker.sonar_config.parallel_config
     if parallel.decode_context_parallel_size != 1 or parallel.prefill_context_parallel_size != 1 or parallel.enable_dbo:
         raise NotImplementedError("Native SM120 preparation does not support DCP, PCP or DBO")
@@ -119,7 +110,7 @@ def b12x_workload(worker: Worker, *, stage: str, lane: int = 0) -> B12xWorkload:
     )
     # Sonar's scheduler warmup can cap its request count by available blocks.
     # Declare every reachable prefill row count before either cache pool exists.
-    prompt_len = int(_native_runner(worker).decode_query_len) + 1
+    prompt_len = int(worker.model_runner.decode_query_len) + 1
     warmup_reqs = min(int(worker.scheduler_config.max_num_seqs), max_tokens // prompt_len)
     token_counts = tuple(
         sorted(
@@ -443,7 +434,7 @@ def prepare_b12x_state(worker: Worker, kv_cache_config) -> None:
     finally:
         try:
             # Graphs and model cache aliases must die before their plans.
-            _teardown_profiling_state(_native_runner(worker))
+            _teardown_profiling_state(worker.model_runner)
         finally:
             if batch is not None:
                 batch.release()

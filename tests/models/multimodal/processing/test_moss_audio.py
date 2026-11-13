@@ -192,7 +192,7 @@ def _assert_mm_inputs_equal(left, right):
             [*[ord(char) for char in "before "], MOSS_AUDIO_BOS_TOKEN_ID],
         ),
         (
-            f"before {MOSS_AUDIO_BOS_TOKEN}{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_EOS_TOKEN} after",
+            (f"before {MOSS_AUDIO_BOS_TOKEN}{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_EOS_TOKEN} after"),
             [*[ord(char) for char in "before "], MOSS_AUDIO_BOS_TOKEN_ID],
         ),
         ("Describe this audio.", [MOSS_AUDIO_BOS_TOKEN_ID]),
@@ -532,13 +532,11 @@ def test_moss_qwen3_deepstack_keys_for_pp(monkeypatch):
     assert output["deepstack_input_embeds_3"] is deepstack["deepstack_input_embeds_3"]
 
     inner_model = make_model(0, range(2))
-    inner_model.make_empty_intermediate_tensors = lambda batch, dtype, device: (
-        IntermediateTensors(
-            {
-                "hidden_states": torch.zeros(batch, 4, dtype=dtype, device=device),
-                "residual": torch.zeros(batch, 4, dtype=dtype, device=device),
-            }
-        )
+    inner_model.make_empty_intermediate_tensors = lambda batch, dtype, device: IntermediateTensors(
+        {
+            "hidden_states": torch.zeros(batch, 4, dtype=dtype, device=device),
+            "residual": torch.zeros(batch, 4, dtype=dtype, device=device),
+        }
     )
     language_model = object.__new__(MossQwen3ForCausalLM)
     torch.nn.Module.__init__(language_model)

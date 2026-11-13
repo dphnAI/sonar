@@ -29,7 +29,7 @@ export UV_OVERRIDE=/tmp/nccl-override.txt
 uv pip install sonar \
   --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple \
   --index-strategy first-index \
-  --torch-backend cu130
+  --torch-backend cu132
 ```
 
 Keep `UV_OVERRIDE` set for later installs into the same environment. Without

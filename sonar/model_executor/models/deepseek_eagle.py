@@ -191,7 +191,7 @@ class EagleDeepseekV3ForCausalLM(DeepseekV3ForCausalLM):
         assert sonar_config.speculative_config is not None
         self.config = sonar_config.speculative_config.draft_model_config.hf_config
         quant_config = sonar_config.quant_config
-        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
         self.model = DeepseekV2Model(
             sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),

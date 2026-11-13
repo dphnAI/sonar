@@ -75,7 +75,7 @@ class _SonarCompletionsAPI(LocalCompletionsAPI):
 def evaluate_sonar(model_args: dict[str, Any], **evaluation_kwargs):
     """Evaluate a real Sonar server using the harness's supported completions API.
 
-    ``model_args`` uses the existing offline evaluation convention: ``pretrained``
+    `model_args` uses the existing offline evaluation convention: `pretrained`
     identifies the model, engine options configure Sonar, and tokenizer/chat
     options configure the harness rather than being forwarded to the engine.
     """

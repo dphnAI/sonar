@@ -11,7 +11,7 @@ from sonar.logger import init_logger
 from sonar.outputs import ClassificationOutput
 
 from ..base.serving import PoolingServing
-from ..typing import PoolingServeContext
+from ..types import PoolingServeContext
 from .io_processor import ClassifyIOProcessor
 from .protocol import (
     ClassificationData,

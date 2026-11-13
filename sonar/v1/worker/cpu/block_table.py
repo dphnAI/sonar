@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 from sonar.v1.attention.backends.utils import PAD_SLOT_ID
 
 

@@ -18,7 +18,7 @@ from sonar.pooling_params import LateChunkingParams, LateInteractionParams
 from tests.models.utils import EmbedModelInfo
 
 EMBEDDING_MODELS = [
-    EmbedModelInfo("intfloat/multilingual-e5-small", is_matryoshka=False),
+    EmbedModelInfo("vllm-project/multilingual-e5-small", is_matryoshka=False),
     EmbedModelInfo(
         "Snowflake/snowflake-arctic-embed-m-v1.5",
         is_matryoshka=True,

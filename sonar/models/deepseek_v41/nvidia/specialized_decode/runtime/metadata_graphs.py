@@ -5,7 +5,7 @@
 A FULL CUDA graph replays the forward only: before every replay the runner
 still builds the attention metadata on the host, which refreshes the persistent
 buffers the graph reads. For small decode batches that build costs about as
-much as the replay. ``AttnMetadataCudaGraphs`` records, during CUDA graph
+much as the replay. `AttnMetadataCudaGraphs` records, during CUDA graph
 capture, the build of every uniform decode batch shape that a FULL decode graph
 serves, and replays it on the steps of that shape, returning the metadata
 objects captured with it. A step of a shape without a recording builds its
@@ -19,6 +19,10 @@ import torch
 
 from sonar.compilation.cudagraph_pool import capture_pool
 from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.config.compilation import (
+    decode_cudagraph_capture_max_tokens,
+    decode_cudagraph_capture_shapes,
+)
 from sonar.logger import init_logger
 from sonar.models.deepseek_v41.compressor import CompressorMetadataBuilder
 from sonar.models.deepseek_v41.nvidia.flashinfer_sparse import (
@@ -26,7 +30,6 @@ from sonar.models.deepseek_v41.nvidia.flashinfer_sparse import (
     DeepseekV4FlashInferSparseMLAMetadataBuilder,
 )
 from sonar.platforms import current_platform
-from sonar.utils.math_utils import round_up
 from sonar.utils.torch_utils import current_stream
 from sonar.v1.attention.backends.mla.sparse_indexer import (
     DeepseekV41SparseIndexerMetadataBuilder,
@@ -48,7 +51,13 @@ _RECORDABLE_BUILDERS = frozenset(
     }
 )
 
+# Recordable builders that only read their block table: on a table that other
+# builders clamp in place, they build on branches of their own once those have.
+_BLOCK_TABLE_READERS = frozenset({DeepseekV41SparseIndexerMetadataBuilder})
+
 GraphKey = tuple[int, int, int, int]
+# A metadata build branch: (KV-cache group index, attention group) pairs.
+Branch = list[tuple[int, AttentionGroup]]
 # Builds the metadata of the attention groups it is given.
 BuildFn = Callable[[list[list[AttentionGroup]]], dict[str, Any]]
 
@@ -75,7 +84,7 @@ class AttnMetadataCudaGraphs:
         """The graph key of a step whose metadata build can be recorded, or None.
 
         Only FULL steps of uniform decodes qualify; their key fixes every host
-        value the build reads. Under adaptive verification (``max_query_len``
+        value the build reads. Under adaptive verification (`max_query_len`
         set) the device splits the drafts, so the host query lengths are only
         bounds.
         """
@@ -95,23 +104,22 @@ class AttnMetadataCudaGraphs:
         """The keys of the decode steps the FULL decode graphs serve, largest
         first.
 
-        As in ``CudaGraphManager``, each capture size rounds up to whole
-        requests of the decode query length, and a step runs the smallest graph
-        that holds its requests.
+        The graphs are the ones `CudaGraphManager` captures, and a step runs
+        the smallest graph that holds its requests. Under dynamic speculative
+        decoding only the widest query length is recorded; steps of the
+        narrower tiers build their metadata eagerly.
         """
         config = self._sonar_config.compilation_config
         query_len = self._decode_query_len
-        max_tokens = min(
-            self._sonar_config.scheduler_config.max_num_seqs * query_len,
-            config.max_cudagraph_capture_size,
-        )
-        graph_reqs = sorted(
-            {
-                round_up(size, query_len) // query_len
-                for size in config.cudagraph_capture_sizes or ()
-                if round_up(size, query_len) <= max_tokens
-            }
-        )
+        max_reqs = self._sonar_config.get_decode_cudagraph_query_lens(query_len).get(query_len, 0)
+        graph_reqs = [
+            n
+            for n, _ in decode_cudagraph_capture_shapes(
+                config.decode_cudagraph_capture_request_sizes or (),
+                {query_len: max_reqs},
+                decode_cudagraph_capture_max_tokens(config),
+            )
+        ]
         keys: list[GraphKey] = []
         num_reqs = 1
         for padded in graph_reqs:
@@ -120,7 +128,7 @@ class AttnMetadataCudaGraphs:
         return keys[::-1]
 
     def can_record(self, attn_groups: list[list[AttentionGroup]]) -> bool:
-        """Whether every metadata builder of ``attn_groups`` is recordable."""
+        """Whether every metadata builder of `attn_groups` is recordable."""
         if self._recordable is None:
             self._recordable = all(
                 type(group.get_metadata_builder()) in _RECORDABLE_BUILDERS for groups in attn_groups for group in groups
@@ -134,7 +142,7 @@ class AttnMetadataCudaGraphs:
         block_tables: Sequence[torch.Tensor],
         build_fn: BuildFn,
     ) -> dict[str, Any]:
-        """Record the build of ``key`` in the global CUDA graph pool, which the
+        """Record the build of `key` in the global CUDA graph pool, which the
         FULL forward graphs and memory profiling use; returns its metadata."""
         self._forked_build(attn_groups, block_tables, build_fn)
         graph = torch.cuda.CUDAGraph()
@@ -147,7 +155,7 @@ class AttnMetadataCudaGraphs:
         return attn_metadata
 
     def replay(self, key: GraphKey) -> dict[str, Any] | None:
-        """Replay the build of ``key`` and return its metadata, or None if the
+        """Replay the build of `key` and return its metadata, or None if the
         key was not recorded."""
         entry = self._graphs.get(key)
         if entry is None:
@@ -166,21 +174,34 @@ class AttnMetadataCudaGraphs:
         block_tables: Sequence[torch.Tensor],
         build_fn: BuildFn,
     ) -> dict[str, Any]:
-        """Build the KV-cache groups as concurrent branches on side streams.
+        """Build the attention groups as concurrent branches on side streams.
 
         The groups share only read-only inputs, with two exceptions. The sparse
-        MLA builder clamps its block table in place, so groups whose block
-        tables share storage stay on one branch, in serial order. And the first
-        group that needs the token-to-request map builds it into its own buffer,
-        which later groups reuse. Each branch builds its own map; the serial
-        build's producer is also the first of its branch to need one, so it
-        fills the buffer that the FULL forward graphs read.
+        MLA and compressor builders clamp their block table in place, so the
+        groups of one block table storage build on one branch, in serial order;
+        the groups that only read the table (`_BLOCK_TABLE_READERS`) then
+        build on branches of their own, each started after that branch. And
+        the first group that needs the token-to-request map builds it into its
+        own buffer, which later groups reuse. Each branch builds its own map;
+        the serial build's producer is also the first of its branch to need
+        one, so it fills the buffer that the FULL forward graphs read.
         """
-        branches: dict[int, list[int]] = {}
+        tables: dict[int, tuple[Branch, Branch]] = {}
         for i, groups in enumerate(attn_groups):
             if groups:
                 storage = block_tables[i].untyped_storage().data_ptr()
-                branches.setdefault(storage, []).append(i)
+                writers, readers = tables.setdefault(storage, ([], []))
+                for group in groups:
+                    reads = type(group.get_metadata_builder()) in _BLOCK_TABLE_READERS
+                    (readers if reads else writers).append((i, group))
+        # Each branch with the index of the branch it starts after, if any.
+        branches: list[tuple[Branch, int | None]] = []
+        for writers, readers in tables.values():
+            after = None
+            if writers:
+                after = len(branches)
+                branches.append((writers, None))
+            branches += [([reader], after) for reader in readers]
         if len(branches) < 2:
             return build_fn(attn_groups)
         # Reused, so a warm-up creates per-stream state (e.g. DeepGEMM's) on the
@@ -189,10 +210,10 @@ class AttnMetadataCudaGraphs:
             self._side_streams.append(torch.cuda.Stream())
         main_stream = current_stream()
         built: dict[str, Any] = {}
-        for stream, branch in zip(self._side_streams, branches.values()):
-            stream.wait_stream(main_stream)
+        for stream, (branch, after) in zip(self._side_streams, branches):
+            stream.wait_stream(main_stream if after is None else self._side_streams[after])
             with torch.cuda.stream(stream):
-                built.update(build_fn([g if i in branch else [] for i, g in enumerate(attn_groups)]))
+                built.update(build_fn([[group for j, group in branch if j == i] for i in range(len(attn_groups))]))
         for stream in self._side_streams[: len(branches)]:
             main_stream.wait_stream(stream)
         # The serial build's layer order.

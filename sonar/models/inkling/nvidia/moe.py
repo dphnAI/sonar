@@ -6,14 +6,14 @@ Overfit to the served checkpoint: sigmoid gate (+ selection bias) top-k over
 the routed experts, log-sigmoid renormalization over the k routed + S shared
 "sink" logits, scaled by route_scale * global_scale. The routed top-k goes
 through Sonar's FusedMoEFactory, which handles TP and EP. The sink experts run in
-:class:`InklingSinkExperts`. They are replicated across EP ranks (every token
+`InklingSinkExperts`. They are replicated across EP ranks (every token
 activates every sink) and always bf16 (the checkpoint excludes every
-``shared_experts`` from quantization).
+`shared_experts` from quantization).
 
 NVFP4 routed experts reuse Sonar's fused-MoE methods. Excluded (bf16) layers
 fall back to the unquantized method. Checkpoint fused stacked tensors are
 translated to the standard per-expert loads in
-:meth:`InklingMoE.load_expert_weight`.
+`InklingMoE.load_expert_weight`.
 """
 
 from __future__ import annotations
@@ -271,7 +271,7 @@ class InklingSinkExperts(nn.Module):
     EP-sharding them would hotspot the owning rank) and TP-sharded on the
     intermediate dim so the output remains a TP-partial sum like the routed
     output. The sinks are always bf16 (the checkpoint excludes every
-    ``shared_experts`` from quantization): the experts concatenate into two
+    `shared_experts` from quantization): the experts concatenate into two
     plain dense GEMMs with the fused sink epilogue between them.
     """
 
@@ -310,7 +310,7 @@ class InklingSinkExperts(nn.Module):
         return [key]
 
     def forward(self, x: torch.Tensor, gammas: torch.Tensor) -> torch.Tensor:
-        """``sum_e gammas[:, e] * MLP_e(x)`` (TP-partial along d_mlp)."""
+        """`sum_e gammas[:, e] * MLP_e(x)` (TP-partial along d_mlp)."""
         from .ops import sink_silu_mul_epilogue
 
         # One GEMM over the experts' stacked w13 (a view), fused epilogue,
@@ -465,7 +465,7 @@ class InklingMoE(nn.Module):
         topk: int,
         renormalize: bool,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """FusedMoEFactory ``custom_routing_function``: the routed top-k slice of the
+        """FusedMoEFactory `custom_routing_function`: the routed top-k slice of the
         full (routed + sink) selection.
 
         forward() stashes its selection (keyed by logits identity) so the
@@ -524,8 +524,8 @@ class InklingMoE(nn.Module):
     def load_expert_weight(self, name: str, weight: torch.Tensor) -> list[str]:
         """Load one checkpoint expert tensor.
 
-        ``name`` is relative to the mlp module: ``experts.<t>`` (routed
-        stack) or ``shared_experts.shared_<t>`` (sink experts). Returns the
+        `name` is relative to the mlp module: `experts.<t>` (routed
+        stack) or `shared_experts.shared_<t>` (sink experts). Returns the
         loaded param names (relative to this module).
         """
         if name.startswith("shared_experts."):

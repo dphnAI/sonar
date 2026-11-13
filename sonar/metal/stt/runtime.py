@@ -35,7 +35,7 @@ class STTRuntimeAdapter(ABC):
 
     @staticmethod
     def _to_mx_float16(value: STTAudioInput) -> mx.array:
-        """Convert common multimodal payload types into ``mx.float16``."""
+        """Convert common multimodal payload types into `mx.float16`."""
         if isinstance(value, torch.Tensor):
             from sonar.metal.pytorch_backend.tensor_bridge import torch_to_mlx
 

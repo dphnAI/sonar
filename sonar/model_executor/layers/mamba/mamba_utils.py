@@ -4,7 +4,7 @@
 import functools
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 
 import torch
 
@@ -20,9 +20,17 @@ from sonar.utils.torch_utils import (
 )
 from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
 
+if TYPE_CHECKING:
+    from sonar.config import SonarConfig
+
 logger = init_logger(__name__)
 
 ConvStateLayoutType = Literal["SD", "DS"]
+
+
+def mamba_state_alignment(sonar_config: "SonarConfig") -> int:
+    # FlashInfer loads state and ring caches with 16-byte cp.async instructions.
+    return 16 if sonar_config.use_flashinfer_replayssm else 1
 
 
 @functools.lru_cache
@@ -51,15 +59,6 @@ def is_conv_state_dim_first() -> bool:
 
 class MambaStateDtypeCalculator:
     @classmethod
-    def append_replayssm_ring(
-        cls,
-        base_dtypes: tuple[torch.dtype, ...],
-        model_dtype: ModelDType | torch.dtype,
-    ) -> tuple[torch.dtype, ...]:
-        activation_dtype = get_kv_cache_torch_dtype("auto", model_dtype)
-        return (*base_dtypes, activation_dtype, torch.float32, activation_dtype)
-
-    @classmethod
     def linear_attention_state_dtype(
         cls,
         model_dtype: ModelDType | torch.dtype,
@@ -85,6 +84,18 @@ class MambaStateDtypeCalculator:
         mamba_ssm_cache_dtype: MambaDType,
     ) -> tuple[torch.dtype, ...]:
         return cls._mamba_state_dtype(model_dtype, mamba_cache_dtype, mamba_ssm_cache_dtype)
+
+    @classmethod
+    def append_replayssm_ring(
+        cls,
+        base_dtypes: tuple[torch.dtype, ...],
+        model_dtype: ModelDType | torch.dtype,
+    ) -> tuple[torch.dtype, ...]:
+        """Append the ReplaySSM ring dtypes to a base `(conv, ssm)` tuple:
+        `(x_cache, dt_cache, B_cache)` = `(activation, fp32, activation)`.
+        """
+        activation_dtype = get_kv_cache_torch_dtype("auto", model_dtype)
+        return (*base_dtypes, activation_dtype, torch.float32, activation_dtype)
 
     @classmethod
     def _mamba_state_dtype(
@@ -215,12 +226,12 @@ class MambaStateShapeCalculator:
     ]:
         """Append the physical ReplaySSM ring shapes.
 
-        ``base_shapes[1]`` is ``(nheads // tp, head_dim, state_size)``;
-        B_cache extends ``n_groups`` for head shards as in ``mamba2_state_shape``.
+        `base_shapes[1]` is `(nheads // tp, head_dim, state_size)`;
+        B_cache extends `n_groups` for head shards as in `mamba2_state_shape`.
         """
         ring_buffer_len = logical_window
-        if backend == MambaBackendEnum.FLASHINFER:
-            # FlashInfer keeps the live window and current verify window together.
+        if backend == MambaBackendEnum.FLASHINFER or num_speculative_tokens > 0:
+            # The tracker contract keeps the live and current verify windows.
             ring_buffer_len += 1 + num_speculative_tokens
         local_nheads, head_dim, state_size = base_shapes[1]
         n_groups = n_groups + cls.extra_groups_for_head_shards(n_groups, tp_world_size)
@@ -341,8 +352,8 @@ def get_conv_copy_spec(
 ) -> MambaCopySpec:
     """Return a MambaCopySpec for copying a convolutional state slice.
 
-    Works for both SD layout ``(num_blocks, state_len, dim)`` and
-    DS layout ``(num_blocks, dim, state_len)``.
+    Works for both SD layout `(num_blocks, state_len, dim)` and
+    DS layout `(num_blocks, dim, state_len)`.
     """
     src_block_id = block_ids[cur_block_idx]
     offset = num_accepted_tokens - 1

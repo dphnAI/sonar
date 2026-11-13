@@ -4,7 +4,7 @@
 
 EXL3 transforms outputs in 128-column Hadamard blocks. A tensor-parallel shard
 boundary inside a block (e.g. Qwen3's 151936-entry lm_head split over two ranks)
-used to fail at both prefill and decode. Layers are built as rank ``r`` of a
+used to fail at both prefill and decode. Layers are built as rank `r` of a
 simulated TP group by patching the TP rank/size lookups, so one process checks
 every rank against the unsharded layer.
 """
@@ -100,7 +100,7 @@ def _full_output(x: torch.Tensor, tensors: dict[str, torch.Tensor]) -> torch.Ten
 
 
 def _build_rank_layer(monkeypatch, kind: str, rank: int, tp_size: int, dims: dict[str, int], full):
-    """Build and load a real EXL3 merged layer as ``rank`` of ``tp_size``."""
+    """Build and load a real EXL3 merged layer as `rank` of `tp_size`."""
     for module in (linear_module, exl3_module, parameter_module):
         monkeypatch.setattr(module, "get_tensor_model_parallel_rank", lambda: rank)
         monkeypatch.setattr(module, "get_tensor_model_parallel_world_size", lambda: tp_size)

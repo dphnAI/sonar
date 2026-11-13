@@ -36,8 +36,6 @@ def test_mtp_sharded_sampling_equivalence(monkeypatch: pytest.MonkeyPatch):
     test_prompts = get_test_prompts(mm_enabled=False, num_prompts=20)
 
     with monkeypatch.context() as m:
-        # Batch-sharded sampling only exists in the V2 model runner.
-        m.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
         # Required for the collective_rpc mode check below.
         m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
         # Queue every request before the first step, so both boots schedule
@@ -118,9 +116,9 @@ def test_dspark_sharded_sampling_equivalence(monkeypatch: pytest.MonkeyPatch):
     test_prompts = get_test_prompts(mm_enabled=False, num_prompts=32)
 
     with monkeypatch.context() as m:
-        m.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
         m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
         m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+        m.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "1")
 
         def run(disable_sharding: bool):
             llm = LLM(

@@ -373,7 +373,7 @@ class SonarEngineServicer(vllm_engine_pb2_grpc.VllmEngineServicer):
         Bypasses HF processor entirely — pixel values and model-specific
         tensors were already computed by the Rust router.  Field layouts
         (batched / flat / shared) are also determined by the router via
-        ``batched_keys`` and ``flat_keys`` proto fields.
+        `batched_keys` and `flat_keys` proto fields.
         """
         prompt_token_ids = list(tokenized.input_ids)
         num_images = len(mm_proto.mm_placeholders)

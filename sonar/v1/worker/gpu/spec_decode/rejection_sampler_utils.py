@@ -3,7 +3,6 @@
 import torch
 
 from sonar.triton_utils import tl, tldevice, triton
-from sonar.v1.spec_decode.fly import compute_fly_entropy
 from sonar.v1.worker.gpu.sample.gumbel import (
     gumbel_block_argmax,
     spec_step_seed,
@@ -15,6 +14,7 @@ from sonar.v1.worker.gpu.spec_decode.draft_logits import (
     DraftLogitsCache,
     draft_logits_row,
 )
+from sonar.v1.worker.gpu.spec_decode.fly import compute_fly_entropy
 
 
 @triton.jit
@@ -909,6 +909,7 @@ def _resample_kernel(
     CONTEXT_WIDTH: tl.constexpr,
     WATERMARK: tl.constexpr,
     DEDUPLICATE_CONTEXTS: tl.constexpr,
+    SKIP_MASKED_BLOCKS: tl.constexpr,
 ):
     req_idx = tl.program_id(0)
     resample_idx = tl.load(rejected_step_ptr + req_idx)
@@ -942,6 +943,19 @@ def _resample_kernel(
         mask=mask,
         other=float("-inf"),
     ).to(tl.float32)
+
+    if SKIP_MASKED_BLOCKS and tl.max(target_logits, axis=0) == float("-inf"):
+        # No target token survives in this block (e.g. top-k/top-p masked it),
+        # so neither does the residual: skip the draft load and the Gumbel draw.
+        tl.store(
+            resampled_local_argmax_ptr + req_idx * resampled_local_argmax_stride + block_idx,
+            block_idx * BLOCK_SIZE,
+        )
+        tl.store(
+            resampled_local_max_ptr + req_idx * resampled_local_max_stride + block_idx,
+            float("-inf"),
+        )
+        return
 
     # Compute the residual logits to resample the rejected token from.
     is_watermarked = False
@@ -1400,6 +1414,7 @@ def _launch_resample(
     watermarking_skip_mask_bytes: torch.Tensor | None = None,
     watermark_key_0: int = 0,
     watermark_key_1: int = 0,
+    skip_masked_vocab_blocks: bool = False,
 ) -> None:
     num_reqs, num_blocks = resampled_local_max.shape
     draft_logits_stride_0, draft_logits_stride_1 = _draft_logits_strides(draft_logits)
@@ -1439,6 +1454,7 @@ def _launch_resample(
         CONTEXT_WIDTH=contexts.shape[-1] if contexts is not None else 1,
         WATERMARK=contexts is not None,
         DEDUPLICATE_CONTEXTS=watermarking_skip_mask_bytes is not None,
+        SKIP_MASKED_BLOCKS=skip_masked_vocab_blocks,
     )
 
 
@@ -1466,6 +1482,8 @@ def _launch_insert_resampled(
         expanded_idx_mapping,
         temperature,
         PADDED_RESAMPLE_NUM_BLOCKS=triton.next_power_of_2(resample_num_blocks),
+        # num_sampled is read and updated in place; keep its load warp-local.
+        num_warps=1,
     )
 
 
@@ -1501,6 +1519,7 @@ def rejection_sample(
     fly_window_size: int = 0,
     fly_entropy_threshold: float = 0.3,
     fly_entropy_top_k: int = 3,
+    skip_masked_vocab_blocks: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     assert target_logits.ndim == 2 and target_logits.stride(-1) == 1
     draft_logits = None
@@ -1691,6 +1710,7 @@ def rejection_sample(
         watermarking_skip_mask_bytes=watermarking_skip_mask_bytes,
         watermark_key_0=watermark_key_0,
         watermark_key_1=watermark_key_1,
+        skip_masked_vocab_blocks=skip_masked_vocab_blocks,
     )
 
     # Insert the resampled tokens into the output sampled.
@@ -1717,8 +1737,8 @@ _INT_VIEW_DTYPES = {torch.float32: torch.int32, torch.float64: torch.int64}
 def combine_vocab_blocks(gathered: torch.Tensor) -> torch.Tensor:
     """Lay all-gathered per-rank block partials out in ascending vocab order.
 
-    ``[world_size, fields, rows, blocks] -> [fields, rows, world_size * blocks]``.
-    Rank ``r``'s block ``b`` becomes global block ``r * blocks + b``, so a
+    `[world_size, fields, rows, blocks] -> [fields, rows, world_size * blocks]`.
+    Rank `r`'s block `b` becomes global block `r * blocks + b`, so a
     first-max reduction over the blocks still resolves ties to the lowest
     token id. The copy runs on an integer view, so integer fields packed into
     the float tensor survive bit for bit.
@@ -1736,8 +1756,8 @@ def combine_logits_stats(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Combine the all-gathered logits stats packets of every vocab shard.
 
-    Returns the per-block stats ``[5, num_logits, world_size * num_blocks]``
-    (see ``_NUM_LOGITS_STATS``) and the ``[num_logits, 2]`` target and draft
+    Returns the per-block stats `[5, num_logits, world_size * num_blocks]`
+    (see `_NUM_LOGITS_STATS`) and the `[num_logits, 2]` target and draft
     logits of each row's next draft token.
     """
     world_size = gathered.shape[0]
@@ -1751,18 +1771,18 @@ def combine_logits_stats(
 class VocabParallelRejection:
     """Rejection sampling over one rank's vocab shard.
 
-    The phases run in this order. Each ``*_packet`` result is all-gathered
+    The phases run in this order. Each `*_packet` result is all-gathered
     across the shard's ranks (rank order == ascending vocab order) and the
-    stacked ``[world_size, *packet.shape]`` tensor is passed to the next step:
+    stacked `[world_size, *packet.shape]` tensor is passed to the next step:
 
-    1. ``stats_packet`` -> ``apply_stats``
-    2. ``residual_mass_packet`` -> ``apply_residual_mass``, if ``needs_residual_mass``
-    3. ``reject``
-    4. ``resample_packet`` -> ``finish``, or ``finish(None)`` if not ``needs_resample``
+    1. `stats_packet` -> `apply_stats`
+    2. `residual_mass_packet` -> `apply_residual_mass`, if `needs_residual_mass`
+    3. `reject`
+    4. `resample_packet` -> `finish`, or `finish(None)` if not `needs_resample`
 
     Everything computed from gathered data runs identically on every rank, so
-    all ranks return the same tokens. ``rejection_sample_vocab_parallel`` wires
-    the phases with ``VocabShard.all_gather``.
+    all ranks return the same tokens. `rejection_sample_vocab_parallel` wires
+    the phases with `VocabShard.all_gather`.
     """
 
     def __init__(
@@ -1860,7 +1880,7 @@ class VocabParallelRejection:
             )
 
     def residual_mass_packet(self) -> torch.Tensor:
-        """This shard's per-block residual mass partials, ``[1, num_logits, num_blocks]``."""
+        """This shard's per-block residual mass partials, `[1, num_logits, num_blocks]`."""
         assert self.needs_residual_mass and self.draft_logits is not None and self.cumulative_log_p is not None
         packet = self.target_logits.new_empty(1, self.num_logits, self.num_blocks, dtype=torch.float32)
         _launch_local_residual_mass(
@@ -1913,7 +1933,7 @@ class VocabParallelRejection:
         )
 
     def resample_packet(self) -> torch.Tensor:
-        """This shard's per-block resample winners, ``[2, num_reqs, num_blocks]``.
+        """This shard's per-block resample winners, `[2, num_reqs, num_blocks]`.
 
         Field 0 holds the global token id as integer bits, field 1 its
         Gumbel-perturbed value.
@@ -1995,18 +2015,18 @@ def rejection_sample_vocab_parallel(
     use_block_verification: bool = False,
     all_greedy: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """``rejection_sample`` over vocab-parallel logits, without gathering them.
+    """`rejection_sample` over vocab-parallel logits, without gathering them.
 
     Takes the same inputs restricted to this rank's vocab shard and returns
-    the same ``(sampled, num_sampled)`` on every rank. Synthetic acceptance
-    rates and watermarking are unsupported. ``all_greedy`` must be set only
+    the same `(sampled, num_sampled)` on every rank. Synthetic acceptance
+    rates and watermarking are unsupported. `all_greedy` must be set only
     when every request has temperature 0; it skips the exchanges that only
     sampled rows need.
 
     Exchanges at most three small packets: logits stats, residual mass
     partials (block verification with draft logits), and the per-block
     resample winners (not for all-greedy batches). Greedy tokens and every
-    random draw match ``rejection_sample`` exactly; logsumexp and residual
+    random draw match `rejection_sample` exactly; logsumexp and residual
     mass partials are summed in shard-sized groups, so sampled rows may differ
     only at floating-point near-ties.
     """

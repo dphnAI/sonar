@@ -11,10 +11,14 @@ from dataclasses import dataclass, fields
 from functools import reduce
 
 import jinja2
-from sonar_cutlass_library_extension import (
+from cutlass_library import (
     DataType,
     EpilogueScheduleTag,
     EpilogueScheduleType,
+    TileSchedulerTag,
+    TileSchedulerType,
+)
+from sonar_cutlass_library_extension import (
     MixedInputKernelScheduleType,
     SONARDataType,
     SONARDataTypeNames,
@@ -23,8 +27,6 @@ from sonar_cutlass_library_extension import (
     SONARDataTypeTag,
     SONARDataTypeTorchDataTypeTag,
     SONARKernelScheduleTag,
-    TileSchedulerTag,
-    TileSchedulerType,
 )
 
 #

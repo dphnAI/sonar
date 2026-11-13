@@ -17,6 +17,9 @@ The value passed to `--served-model-name` is the model name that clients send.
 If you omit it, clients must use the model path or repository name that started
 the server.
 
+`--api-key` authenticates routes under `/v1`, `/v2`, `/inference`, and `/cohere`.
+Protect other routes separately at the network or proxy boundary.
+
 ## Check the service
 
 ```bash
@@ -94,6 +97,10 @@ response = client.embeddings.create(
 )
 ```
 
+For models supporting `dimensions`, the value cannot exceed the output
+embedding size, which may differ from the model's hidden size. Models declaring
+`matryoshka_dimensions` also restrict it to the listed values.
+
 ## Audio and multimodal requests
 
 Supported multimodal models accept OpenAI message content with image, audio, or
@@ -115,6 +122,9 @@ Parser names and output formats are model-specific. Do not select a parser
 only because the server accepts its name. Follow the model publisher's format
 and test both streaming and non-streaming responses. See
 [Reasoning and tool parsers](/features/reasoning-and-tools/).
+
+With a reasoning parser, `/v1/chat/completions/batch` sums reasoning-token usage
+across conversations, including when `include_reasoning` is false.
 
 ## Sonar request parameters
 
@@ -145,6 +155,11 @@ duplicate generation.
 Limit input and output lengths at the application boundary. A server-wide
 `--max-model-len` limits the combined sequence length. Per-request token limits
 still control each response.
+
+With `--scheduling-policy priority`, lower `priority` values run first.
+The body value and `X-Sonar-Priority` header use signed 32-bit integers.
+The header overrides the body. Python rejects out-of-range header values;
+the Rust frontend ignores such a header and uses the body value.
 
 ## Measure the deployed path
 

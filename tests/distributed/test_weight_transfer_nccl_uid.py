@@ -8,8 +8,8 @@ trainer) initialize NCCL weight transfer from a unique id minted out of band.
 * Unit tests for the mutually-exclusive rendezvous-mode validation on the NCCL
   init infos.
 * Two-GPU integration tests driving the real worker engine against a peer: one
-  via Sonar's own ``PyNcclCommunicator``, one via a genuinely torch-free trainer
-  (cupy buffer + raw ``ncclBroadcast``).
+  via Sonar's own `PyNcclCommunicator`, one via a genuinely torch-free trainer
+  (cupy buffer + raw `ncclBroadcast`).
 
 The shared Ray helpers come from the sibling module (unchanged); the worker task
 is local so the sibling's TCP test and its worker stay untouched.
@@ -332,8 +332,8 @@ def trainer_broadcast_tensor_torch_free(
 
     Drives NCCL through the raw ctypes wrapper with a cupy send buffer, so it
     exercises interop with a foreign NCCL peer rather than Sonar against itself.
-    ``PyNcclCommunicator.__init__`` runs a one-element warm-up all_reduce right
-    after ``ncclCommInitRank``; that is a collective, so this peer must issue the
+    `PyNcclCommunicator.__init__` runs a one-element warm-up all_reduce right
+    after `ncclCommInitRank`; that is a collective, so this peer must issue the
     matching all_reduce before the broadcast or both ranks deadlock.
     """
     import cupy as cp
@@ -436,7 +436,7 @@ def _run_uid_transfer(trainer_task) -> None:
 )
 def test_nccl_weight_transfer_between_processes_uid():
     """Weight transfer over a pre-shared ncclUniqueId (no TCPStore), with both
-    ranks on Sonar's ``PyNcclCommunicator``."""
+    ranks on Sonar's `PyNcclCommunicator`."""
     _run_uid_transfer(trainer_broadcast_tensor_uid)
 
 
@@ -446,6 +446,6 @@ def test_nccl_weight_transfer_between_processes_uid():
 )
 def test_nccl_weight_transfer_torch_free_trainer():
     """UID weight transfer against a foreign peer that uses no torch and no Sonar
-    communicator, only a cupy buffer and raw ``ncclBroadcast``."""
+    communicator, only a cupy buffer and raw `ncclBroadcast`."""
     pytest.importorskip("cupy")
     _run_uid_transfer(trainer_broadcast_tensor_torch_free)

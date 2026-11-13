@@ -63,8 +63,6 @@ variants:
         extra_args:
           - "--kv-cache-dtype"
           - "fp8"
-          - "--gpu-memory-utilization"
-          - "0.92"
           - "--load-format"
           - "fastsafetensors"
           - "--max-num-batched-tokens"
@@ -79,8 +77,6 @@ variants:
           - "--enable-prefix-caching"
           - "--max-num-batched-tokens"
           - "8192"
-          - "--gpu-memory-utilization"
-          - "0.95"
 
 compatible_strategies:
   - single_node_tp
@@ -134,7 +130,7 @@ guide: |
   ### Install Sonar (NVIDIA)
 
   ```bash
-  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu132 --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
   ### Install Sonar (AMD ROCm)
@@ -163,7 +159,7 @@ guide: |
   ### NVIDIA — TP4 (4x H200/H20/H100 or 4x A100/A800)
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M2.7 \
+  sonar run MiniMaxAI/MiniMax-M2.7 \
     --tensor-parallel-size 4 \
     --tool-call-parser minimax_m2 \
     --reasoning-parser minimax_m2 \
@@ -176,7 +172,7 @@ guide: |
   ### DP8+EP
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M2.7 \
+  sonar run MiniMaxAI/MiniMax-M2.7 \
     --data-parallel-size 8 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -187,7 +183,7 @@ guide: |
   ### TP4+EP (recommended for H100)
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M2.7 \
+  sonar run MiniMaxAI/MiniMax-M2.7 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -198,7 +194,7 @@ guide: |
   ### TP8+EP
 
   ```bash
-  sonar serve MiniMaxAI/MiniMax-M2.7 \
+  sonar run MiniMaxAI/MiniMax-M2.7 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -209,7 +205,7 @@ guide: |
   ### AMD ROCm — TP2
 
   ```bash
-  SONAR_ROCM_USE_AITER=1 sonar serve MiniMaxAI/MiniMax-M2.7 \
+  SONAR_ROCM_USE_AITER=1 sonar run MiniMaxAI/MiniMax-M2.7 \
     --tensor-parallel-size 2 \
     --tool-call-parser minimax_m2 \
     --reasoning-parser minimax_m2 \
@@ -220,7 +216,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --backend sonar \
     --model MiniMaxAI/MiniMax-M2.7 \
     --endpoint /v1/completions \

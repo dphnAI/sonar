@@ -9,6 +9,7 @@ use std::process::{ExitCode, ExitStatus};
 
 use anyhow::{Context, Result, anyhow, bail};
 use sonar_managed_engine::ManagedEngineHandle;
+use sonar_tracing::LogLevel;
 use thiserror_ext::AsReport as _;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
@@ -89,9 +90,12 @@ fn main() -> ExitCode {
             "serve" | "frontend" => "RustFrontend",
             _ => "Rust",
         };
-    sonar_tracing::init_tracing(process_label);
-
-    let cli = Cli::parse();
+    // Parsing warns about no-op arguments before `--log-level` is known.
+    let cli = {
+        let _guard = sonar_tracing::set_default_tracing(process_label, LogLevel::from_env());
+        Cli::parse()
+    };
+    sonar_tracing::init_tracing(process_label, cli.log_level(), cli.log_formatter());
 
     let mut runtime = tokio::runtime::Builder::new_multi_thread();
     runtime.enable_all();

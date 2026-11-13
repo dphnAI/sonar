@@ -6,12 +6,13 @@ from enum import Enum
 from typing import NamedTuple
 from unittest.mock import MagicMock
 
+import numpy as np
 import regex as re
 import torch
 
 from sonar import CompletionOutput
 from sonar.config import ReasoningConfig
-from sonar.utils.torch_utils import make_tensor_with_pad
+from sonar.utils.torch_utils import make_ndarray_with_pad
 from sonar.v1.sample.logits_processor import BatchUpdate, LogitsProcessor
 from sonar.v1.sample.metadata import SamplingMetadata
 
@@ -170,13 +171,7 @@ def create_prompt_tokens_tensor(
     vocab_size: int,
     device: torch.device,
 ) -> torch.Tensor:
-    return make_tensor_with_pad(
-        prompt_token_ids,
-        pad=vocab_size,
-        device=device,
-        dtype=torch.int64,
-        pin_memory=False,
-    )
+    return torch.from_numpy(make_ndarray_with_pad(prompt_token_ids, pad=vocab_size, dtype=np.int64)).to(device)
 
 
 class LogitsprocsTestFakes(NamedTuple):
@@ -192,7 +187,7 @@ class LogitsprocsTestFakes(NamedTuple):
         """Yield logits processors of a specific class.
 
         Args:
-          cls: :class:`LogitsProcessor` subclass
+          cls: `LogitsProcessor` subclass
 
         Returns:
           Iterator over logits processors
@@ -225,10 +220,10 @@ def fake_apply_logitsprocs(
 ) -> torch.Tensor:
     """Imitate application of logits processors in engine core.
 
-    When ``thinking_budget_state_holder`` has tracked requests, this mirrors
-    :meth:`Sampler.apply_logits_processors` by refreshing per-slot
-    ``output_token_ids`` (if ``slot_output_token_ids`` is provided), then
-    ``update_state`` + ``apply_to_logits`` on the holder after built-in logits
+    When `thinking_budget_state_holder` has tracked requests, this mirrors
+    `Sampler.apply_logits_processors` by refreshing per-slot
+    `output_token_ids` (if `slot_output_token_ids` is provided), then
+    `update_state` + `apply_to_logits` on the holder after built-in logits
     processors.
     """
     logits = test_fakes.logits[torch.tensor(slice_indices, dtype=torch.long)].clone()

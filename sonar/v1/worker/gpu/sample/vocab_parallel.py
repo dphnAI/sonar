@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Sampling over tensor-parallel vocabulary shards without gathering logits.
 
-Each rank keeps its own ``[start, start + size)`` slice of the vocabulary and
+Each rank keeps its own `[start, start + size)` slice of the vocabulary and
 exchanges only small per-row partial results. Every random draw is keyed by
 the global token id, so sampling a shard reproduces the per-token noise of the
 full-vocabulary path.
@@ -30,7 +30,7 @@ class VocabShard:
         return self.start + self.size
 
     def all_gather(self, tensor: torch.Tensor) -> torch.Tensor:
-        """Stack every rank's ``tensor`` along a new leading dimension.
+        """Stack every rank's `tensor` along a new leading dimension.
 
         Ranks must pass tensors of identical shape and dtype. The result is
         ordered by rank, which is also ascending vocabulary order.
@@ -40,10 +40,10 @@ class VocabShard:
         return gathered.view(self.world_size, *tensor.shape)
 
     def gather_rows(self, local: torch.Tensor, rows: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
-        """Rebuild full-vocab rows of a sharded ``[R, ..., size]`` cache.
+        """Rebuild full-vocab rows of a sharded `[R, ..., size]` cache.
 
-        Writes ``out[rows]`` from every rank's ``local[rows]`` and returns
-        ``out``. Rows not listed in ``rows`` are left untouched.
+        Writes `out[rows]` from every rank's `local[rows]` and returns
+        `out`. Rows not listed in `rows` are left untouched.
         """
         selected = local[rows]
         gathered = self.all_gather(selected)
@@ -57,7 +57,7 @@ def vocab_shard_for(lm_head: torch.nn.Module) -> VocabShard | None:
     """Return the shard of a vocab-parallel head, or None if it is unsuitable.
 
     Shards must be equal-sized, contiguous and free of padding or added
-    vocabulary, so a local column ``i`` is global token ``start + i``.
+    vocabulary, so a local column `i` is global token `start + i`.
     """
     tp_size = getattr(lm_head, "tp_size", 1)
     if tp_size <= 1:

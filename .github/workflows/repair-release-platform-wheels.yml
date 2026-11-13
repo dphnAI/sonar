@@ -37,7 +37,7 @@ jobs:
       DOCKER_HOST: tcp://127.0.0.1:23750
       MAX_JOBS: "64"
       NVCC_THREADS: "4"
-      CUDA_VERSION: "13.0.3"
+      CUDA_VERSION: "13.2.1"
       TORCH_CUDA_ARCH_LIST: "8.0 8.6 8.9 9.0 10.0 11.0 12.0+PTX"
     steps:
       - name: Check out repair source

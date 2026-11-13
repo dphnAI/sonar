@@ -727,7 +727,7 @@ def test_snapshot_restore_rejects_identity_mismatch(tmp_path: Path):
     args = _restore_fixture(tmp_path)
 
     identity_mismatch = _fake_snapshot_tools()
-    identity_mismatch.current_identity.side_effect = lambda _gpu_uuid: (_runtime_identity(sonar_version="different"))
+    identity_mismatch.current_identity.side_effect = lambda _gpu_uuid: _runtime_identity(sonar_version="different")
     with pytest.raises(SnapshotCompatibilityError, match="sonar_version"):
         restore_snapshot(args, tools=identity_mismatch)
     identity_mismatch.restore.assert_not_called()

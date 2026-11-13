@@ -3,12 +3,12 @@
 """Sanity tests for the small registry / CLI-arg / config additions made
 by the Cohere v2 chat API:
 
-* ``sonar/renderers/registry.py``: new ``"cohere"`` renderer entry.
-* ``sonar/tokenizers/registry.py``: new ``"cohere"`` tokenizer entry
+* `sonar/renderers/registry.py`: new `"cohere"` renderer entry.
+* `sonar/tokenizers/registry.py`: new `"cohere"` tokenizer entry
   (aliased to the cached HF tokenizer).
-* ``sonar/entrypoints/common/cli_args.py``: new
-  ``cohere_is_reasoning_model`` field.
-* ``sonar/config/model.py``: ``"cohere"`` added to ``TokenizerMode``
+* `sonar/entrypoints/common/cli_args.py`: new
+  `cohere_is_reasoning_model` field.
+* `sonar/config/model.py`: `"cohere"` added to `TokenizerMode`
   Literal.
 """
 
@@ -56,9 +56,9 @@ class TestTokenizerModeLiteral:
 
 
 class TestCohereCliArg:
-    """Verifies the new ``--cohere-is-reasoning-model`` flag end-to-end
-    through ``make_arg_parser`` — mirrors the pattern used in
-    :mod:`tests.entrypoints.openai.test_cli_args`.
+    """Verifies the new `--cohere-is-reasoning-model` flag end-to-end
+    through `make_arg_parser` — mirrors the pattern used in
+    `tests.entrypoints.openai.test_cli_args`.
     """
 
     def test_default_value_on_dataclass_is_true(self):

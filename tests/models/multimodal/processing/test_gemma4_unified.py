@@ -2,12 +2,19 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from collections.abc import Mapping
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 from PIL import Image as PILImage
 from transformers.models.gemma4 import Gemma4AudioFeatureExtractor
 
+from sonar.exceptions import SonarValidationError
+from sonar.model_executor.layers.fusion.mm_input_norm import (
+    IdentityInputNorm,
+    build_mm_input_norm,
+)
 from sonar.model_executor.models.gemma4_mm import (
     Gemma4ImagePixelInputs,
     _dummy_audio_num_samples,
@@ -19,6 +26,7 @@ from sonar.model_executor.models.gemma4_unified import (
 )
 from sonar.multimodal import MULTIMODAL_REGISTRY
 from sonar.multimodal.inputs import MultiModalFieldConfig
+from sonar.platforms import current_platform
 from sonar.utils.gpu_sync_debug import gpu_sync_allowed
 
 from ....conftest import ImageTestAssets
@@ -74,7 +82,7 @@ def test_compute_num_soft_tokens_does_not_exceed_max_soft_tokens(
     image_height: int,
     max_soft_tokens: int,
 ):
-    """Verify ``_compute_num_soft_tokens`` caps output at ``max_soft_tokens``."""
+    """Verify `_compute_num_soft_tokens` caps output at `max_soft_tokens`."""
     ctx = build_model_context(
         model_id,
         mm_processor_kwargs={"do_pan_and_scan": True},
@@ -209,7 +217,7 @@ def test_limit_mm_per_prompt(
 
     mm_data = {"image": images}
 
-    with pytest.raises(ValueError, match="At most 1 image"):
+    with pytest.raises(SonarValidationError, match="At most 1 image"):
         processor(
             prompt,
             mm_items=processor.info.parse_mm_data(mm_data),
@@ -217,13 +225,47 @@ def test_limit_mm_per_prompt(
         )
 
 
-def test_dummy_audio_length_falls_back_for_the_unified_extractor():
-    """The unified audio feature extractor does not define ``fft_length``.
+@pytest.mark.usefixtures("default_sonar_config")
+def test_mm_device_do_normalize():
+    device = current_platform.device_type
+    ctx = build_model_context(GEMMA4_UNIFIED_MODEL_ID, limit_mm_per_prompt={"image": 2, "video": 1})
+    assert ctx.model_config.multimodal_config.mm_device_do_normalize
 
-    ``Gemma4DummyInputsBuilder.get_dummy_mm_data`` read that attribute
-    unconditionally, so memory profiling raised ``AttributeError`` for every
+    processor = MULTIMODAL_REGISTRY.create_processor(ctx.model_config)
+    hf_processor = processor.info.get_hf_processor()
+    rng = np.random.default_rng(0)
+    images = [
+        PILImage.fromarray(rng.integers(0, 256, (470, 310, 3), dtype=np.uint8)),
+        PILImage.fromarray(rng.integers(0, 256, (320, 480, 3), dtype=np.uint8)),
+    ]
+    frames = rng.integers(0, 256, (2, 240, 320, 3), dtype=np.uint8)
+    mm_items = processor.info.parse_mm_data(
+        {"image": images, "video": [(frames, {"fps": 2.0, "frames_indices": [0, 1]})]}
+    )
+    prompt = hf_processor.image_token * len(images) + hf_processor.video_token
+
+    def pixels(mm_device_do_normalize: bool) -> list[torch.Tensor]:
+        ctx.model_config.multimodal_config.mm_device_do_normalize = mm_device_do_normalize
+        data = processor(prompt, mm_items=mm_items)["mm_kwargs"].get_data()
+        return [*data["pixel_values"], *data["pixel_values_videos"]]
+
+    normalized = pixels(False)
+    raw = pixels(True)
+
+    input_norm = build_mm_input_norm(ctx.model_config).to(device)
+    for raw_values, normalized_values in zip(raw, normalized, strict=True):
+        assert raw_values.dtype == torch.uint8
+        output = input_norm(raw_values.to(device), normalized_values.dtype)
+        torch.testing.assert_close(output, normalized_values.to(device))
+
+
+def test_dummy_audio_length_falls_back_for_the_unified_extractor():
+    """The unified audio feature extractor does not define `fft_length`.
+
+    `Gemma4DummyInputsBuilder.get_dummy_mm_data` read that attribute
+    unconditionally, so memory profiling raised `AttributeError` for every
     unified Gemma 4 deployment in which audio is the modality with the largest
-    per-item token count -- which is the case as soon as ``audio_seq_length``
+    per-item token count -- which is the case as soon as `audio_seq_length`
     is raised above the video budget.
     """
 
@@ -319,6 +361,8 @@ class _MockUnifiedModel(Gemma4UnifiedForConditionalGeneration):
         device: str = "cpu",
     ):
         torch.nn.Module.__init__(self)
+        self.config = SimpleNamespace(vision_config=SimpleNamespace())
+        self.vision_input_norm = IdentityInputNorm()
         self.vision_embedder = _build_test_embedder(embed_dim=embed_dim, max_pos=max_pos, dtype=dtype, device=device)
         self.embed_vision = _MockEmbedVision(embed_dim=embed_dim, dtype=dtype, device=device)
 

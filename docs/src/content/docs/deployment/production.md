@@ -151,6 +151,15 @@ for `NixlConnector`.
 The example uses one GPU per instance. Each side can use tensor, pipeline, or
 data parallelism when the connector supports that layout.
 
+NIXL pull supports a smaller prefill block size than decode for supported
+non-hybrid models. NIXL push requires identical block sizes.
+
+The extensible KV cache needs an IMEX channel for same-host NIXL transfers
+over NVLink. Without one, Sonar disables extensible caching for this path to
+avoid TCP fallback. Make a channel available to every worker and inspect
+`UCX_PROTO_INFO=y` output for `cuda_ipc`. Cross-host RDMA does not need a
+channel; explicitly enable extensible caching for that topology if needed.
+
 ### Put a P/D router in front
 
 Clients must send requests to a P/D-aware router. A normal HTTP load balancer
@@ -175,10 +184,22 @@ Use this proxy to validate the topology. A production router must perform
 health-aware P/D selection, propagate cancellations, preserve streaming, and
 remove failed engines from service discovery.
 
+For text-only chat handoff, `kv_transfer_params.prompt_token_ids` must be a
+nonempty list of nonnegative integers. Non-text messages, `echo`, or
+`return_prompt_text` make the decoder render `messages` instead, so preserve the
+original messages as well as the transfer metadata.
+
 Sonar also contains P2P NCCL and LMCache examples under
 `examples/disaggregated_prefill/`. Treat the P2P NCCL XpYd example as
 experimental. Select a connector from its tested transport, model, and
 parallelism support.
+
+For MoRIIO WRITE transfers, pipeline parallelism is supported on a single-node
+prefill producer with layer-outermost KV layout. Decode-side PP, READ mode,
+`kv_both`, and multi-node prefill are rejected. Reserve nonoverlapping worker
+port ranges from both `notify_port` and `handshake_port`.
+GLM-5.2 PP4 requires indexer-aligned boundaries such as
+`SONAR_PP_LAYER_PARTITION=22,20,20,16`.
 
 ### Choose a KV load failure policy
 
@@ -257,6 +278,46 @@ For TCP-only transfers, set `MC_FORCE_TCP=1` in addition to
 `"mooncake_protocol": "tcp"` in the transfer connector's extra configuration,
 or `"protocol": "tcp"` in the Store configuration.
 
+Use `device_name_per_gpu` in the Store JSON to select an RDMA NIC per physical
+GPU. When combining transfers and Store in `MultiConnector`, list
+`MooncakeConnector` first and set `reuse_pd_transfer_engine: true` in the
+Store connector's extra configuration to share its transport. The transfer
+connector then owns transport settings. Leave `MOONCAKE_GLOBAL_SEGMENT_SIZE`
+unset so only the Store configuration allocates the CPU segment.
+
+Store prefix lookups default to a one-second timeout. Failures become misses;
+three consecutive Store failures suspend lookups for 30 seconds. Use
+`lookup_async: true` with a positive `lookup_prefetch_limit` to begin lookups
+while requests queue.
+
+Set `cache_prefix` to a deployment-specific value when sharing a Store.
+`"auto"` derives it from model/cache configuration and `SONAR_IMAGE_TAG` or
+`SONAR_BUILD_COMMIT`. Supply an immutable build identity for custom images.
+Weight files and environment settings are not hashed, so change a custom
+prefix when changing weights under the same model path.
+
+### CPU offload huge pages
+
+`SimpleCPUOffloadConnector` accepts `cpu_hugepage_block_size: "2MB"` or `"1GB"`
+in `kv_connector_extra_config` on Linux 5.14+. Reserve enough HugeTLB pages
+for every rank and set matching container limits. Insufficient pages fail
+startup rather than falling back to ordinary pages. Without the setting,
+ordinary pages remain the default.
+
+### Shared UMBP on ROCm
+
+Start MORI's `umbp_standalone_server` separately with `UMBP_STANDALONE_ADDRESS`
+and `UMBP_DRAM_CAPACITY`. Select `UMBPStoreConnector` with extra configuration
+`{"mode":"standalone","endpoint":"/run/umbp/node.grpc.sock"}`.
+The server must see every GPU used by its clients and share their host IPC
+namespace. Restricting its visible GPUs can crash the shared pool.
+
+The pool survives engine restarts. If the server restarts, restart attached
+engines to restore GPU registrations. `reset_external=true` on a prefix-cache
+reset clears the pool for every attached engine. Use a distinct `key_namespace`
+for each weight version, and select `kv_load_failure_policy: "recompute"` if
+requests should recompute failed loads.
+
 ## Configure the proxy
 
 Permit streaming responses and disable response buffering. Set the upstream
@@ -292,6 +353,20 @@ replica writable cache space or use a cache that supports concurrent writers.
 
 Keep secrets outside command history. Inject API keys through a secret manager
 or environment file with restricted permissions.
+
+Sleep and cache-memory release reset external connector caches by default.
+Use `reset_connector=False` only when weights remain unchanged, or isolate
+requests with a `cache_salt` per weight version. Block hashes do not include
+weight contents.
+
+Level-2 sleep discards model parameters and KV contents while retaining other
+model-loading state. After wake, reload every non-preserved parameter, including
+unchanged ones. Preserve draft weights with `sleep_preserve_parameter_names`
+when the update only reloads the target. A level-2 wake is not ready to serve
+until the weight update completes.
+
+Wait for `pause_generation()` to finish before resuming. This also applies to
+data-parallel MoE deployments, which can reject an early resume.
 
 ## Capacity and overload
 

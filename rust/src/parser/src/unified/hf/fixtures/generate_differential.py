@@ -130,7 +130,7 @@ CASES = [
         "gemma4",
         GEMMA4,
         "",
-        'Before <|tool_call>call:f{x:<|"|>a, b<|"|>,y:[1,2.5,-3],z:{w:true}}<tool_call|> after',
+        ('Before <|tool_call>call:f{x:<|"|>a, b<|"|>,y:[1,2.5,-3],z:{w:true}}<tool_call|> after'),
         None,
     ),
     (
@@ -169,15 +169,17 @@ CASES = [
         "invoke",
         INVOKE,
         "",
-        'noise <invoke name="get" id="1"><param name="city">"Paris"</param>'
-        '<param name="n">3</param><param name="raw">not json</param></invoke>',
+        (
+            'noise <invoke name="get" id="1"><param name="city">"Paris"</param>'
+            '<param name="n">3</param><param name="raw">not json</param></invoke>'
+        ),
         None,
     ),
     (
         "invoke",
         INVOKE,
         "",
-        '<invoke name="get"><param name="k">1</param><param name="k">2</param></invoke>',
+        ('<invoke name="get"><param name="k">1</param><param name="k">2</param></invoke>'),
         None,
     ),
     ("invoke", INVOKE, "", "bare text only", None),
@@ -193,14 +195,14 @@ CASES = [
         "kv_tools",
         KV_TOOLS,
         "",
-        "<tool_call>\n<function=set_alarm>\nhour: 7\nratio: 0.5\nenabled: 1\nlabel: 7\nmaybe: None\n</tool_call>",
+        ("<tool_call>\n<function=set_alarm>\nhour: 7\nratio: 0.5\nenabled: 1\nlabel: 7\nmaybe: None\n</tool_call>"),
         ALARM_TOOLS,
     ),
     (
         "kv_tools",
         KV_TOOLS,
         "",
-        "<tool_call>\n<function=set_alarm>\nhour: seven\nratio: 1e3\nenabled: nope\n</tool_call>",
+        ("<tool_call>\n<function=set_alarm>\nhour: seven\nratio: 1e3\nenabled: nope\n</tool_call>"),
         ALARM_TOOLS,
     ),
     (

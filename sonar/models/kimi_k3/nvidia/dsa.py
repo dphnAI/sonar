@@ -3,12 +3,12 @@
 """Kimi K3.1 DSA (DeepSeek Sparse Attention) for the kimi_k3 stack.
 
 The DSA indexer uses the native upstream facilities
-(``DeepseekV32IndexerCache`` + ``torch.ops.sonar.sparse_attn_indexer``); the
-sparse MLA layers go through ``MultiHeadLatentAttentionWrapper`` with
-``MLAModules(is_sparse=True)``. Checkpoints name indexer weights
-``self_attn.indexer.{wq_b,wk,weights_proj,k_norm}``; the module tree keeps
-``self_attn.dsa_indexer.*``; load_weights renames into it and stacks ``wk``
-and ``weights_proj`` into the merged ``wkv_index``.
+(`DeepseekV32IndexerCache` + `torch.ops.sonar.sparse_attn_indexer`); the
+sparse MLA layers go through `MultiHeadLatentAttentionWrapper` with
+`MLAModules(is_sparse=True)`. Checkpoints name indexer weights
+`self_attn.indexer.{wq_b,wk,weights_proj,k_norm}`; the module tree keeps
+`self_attn.dsa_indexer.*`; load_weights renames into it and stacks `wk`
+and `weights_proj` into the merged `wkv_index`.
 """
 
 import math
@@ -18,7 +18,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from sonar.config import CacheConfig, SonarConfig, get_current_sonar_config
+from sonar.config import CacheConfig, CUDAGraphMode, SonarConfig, get_current_sonar_config
 from sonar.distributed import get_dcp_group, get_tensor_model_parallel_world_size
 from sonar.forward_context import get_forward_context
 from sonar.logger import init_logger
@@ -52,6 +52,7 @@ from sonar.models.kimi_k3.nvidia.mla import (
     _GATE_MULTI_STREAM_TOKEN_THRESHOLD,
     _gate_sigmoid_mul,
 )
+from sonar.models.kimi_k3.nvidia.ops.dcp_topk_merge import init_dcp_topk_merge
 from sonar.models.kimi_k3.nvidia.ops.dsa_indexer import (
     dsa_fused_prologue,
     indexer_k_norm_quant_insert,
@@ -67,6 +68,10 @@ from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
 from sonar.utils.multi_stream_utils import maybe_execute_in_parallel
 from sonar.utils.torch_utils import _encode_layer_name
 from sonar.v1.attention.backends.mla import indexer as v32_indexer
+from sonar.v1.attention.backends.mla.index_group import (
+    SparseMLAIndexGroupBuilder,
+    get_sparse_mla_index_group_max_rows,
+)
 
 logger = init_logger(__name__)
 
@@ -107,11 +112,11 @@ class _PackedNf12Queries(nn.Module):
 class KimiK3DSAIndexerKNorm(nn.Module):
     """Bias-full fp32 LayerNorm for the DSA indexer shared key.
 
-    ``F.layer_norm(x.float(), (dim,), weight.float(), bias.float(),
-    eps).type_as(x)`` -- fp32 compute with a cast back to the input dtype.
+    `F.layer_norm(x.float(), (dim,), weight.float(), bias.float(),
+    eps).type_as(x)` -- fp32 compute with a cast back to the input dtype.
     weight/bias are stored in fp32 directly (numerically equivalent to
     casting per forward), keeping only the input/output dtype casts.
-    Selected via ``dsa_config.index_k_norm_type == "layernorm"``; legacy
+    Selected via `dsa_config.index_k_norm_type == "layernorm"`; legacy
     checkpoints keep the RMSNorm path untouched.
     """
 
@@ -127,10 +132,10 @@ class KimiK3DSAIndexerKNorm(nn.Module):
 
 
 class KimiK3DSAIndexer(nn.Module):
-    """wq / wkv indexer projections + native ``DeepseekV32IndexerCache``.
+    """wq / wkv indexer projections + native `DeepseekV32IndexerCache`.
 
     Forward quantizes the indexer query, folds the scales into the per-head
-    weights and drives ``torch.ops.sonar.sparse_attn_indexer`` directly (the
+    weights and drives `torch.ops.sonar.sparse_attn_indexer` directly (the
     upstream deepseek_v2.Indexer pattern).
     """
 
@@ -242,6 +247,9 @@ class KimiK3DSAIndexer(nn.Module):
         self.dcp_world_size = self._parallel_config.decode_context_parallel_size
         self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_world_size > 1 else 0
         self._cp_kv_cache_interleave_size: int | None = None
+        # The specialized decode merges each rank's packed local top-N in one
+        # exchange (0 keeps the generic merge).
+        self.dcp_local_topk = init_dcp_topk_merge(sonar_config, index_topk)
 
     @property
     def cp_kv_cache_interleave_size(self) -> int:
@@ -282,6 +290,24 @@ class KimiK3DSAIndexer(nn.Module):
         )
         return index_q, index_k
 
+    def _shardq_indexer_rows(self) -> torch.Tensor | None:
+        """The rows a ShardQ step scores on this rank (decode rows, then this
+        rank's prefill tokens; see shardq_gather_indices), or None outside
+        ShardQ steps and in cudagraph capture or replay: a graph would bake in
+        the capture batch's row count and the address of its rows tensor."""
+        if not getattr(self.k_cache, "use_shardq", False):
+            return None
+        forward_context = get_forward_context()
+        if forward_context.cudagraph_runtime_mode != CUDAGraphMode.NONE or torch.cuda.is_current_stream_capturing():
+            return None
+        attn_metadata = forward_context.attn_metadata
+        if not isinstance(attn_metadata, dict):
+            return None
+        prefill = getattr(attn_metadata.get(self.k_cache.prefix), "prefill", None)
+        if prefill is None:
+            return None
+        return prefill.shardq_gather_indices
+
     def _fused_k_insert(self, index_k: torch.Tensor, num_tokens: int) -> None:
         attn_metadata = get_forward_context().attn_metadata
         kv_cache = self.k_cache.kv_cache
@@ -315,15 +341,25 @@ class KimiK3DSAIndexer(nn.Module):
         rotary_emb: nn.Module | None = None,
         index_q: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if index_q_input is None:
+            # q_lora_rank is None: MultiHeadLatentAttention.forward_native
+            # passes q_c=None, so the indexer query reads hidden_states.
+            index_q_input = hidden_states
+        # A ShardQ step scores this rank's rows only: project and quantize the
+        # query of just those (the op detects the compact query).
+        rows = self._shardq_indexer_rows() if self.use_fused_k_insert else None
         if index_q is None:
-            if index_q_input is None:
-                # With no query LoRA, the indexer reads hidden_states.
-                index_q_input = hidden_states
+            if rows is not None:
+                index_q_input = index_q_input[rows]
             index_q = self.wq_index(index_q_input)[0]
+        elif rows is not None:
+            index_q = index_q[rows]
         index_q = index_q.view(-1, self.index_num_heads, self.index_head_dim)
         index_k, index_weights = self.wkv_index(hidden_states)[0].split(
             [self.index_head_dim, self.index_num_heads], dim=-1
         )
+        if rows is not None:
+            index_weights = index_weights[rows]
         if self.use_fused_k_insert:
             self._fused_k_insert(index_k, hidden_states.shape[0])
             index_k = None
@@ -345,8 +381,8 @@ class KimiK3DSAIndexer(nn.Module):
         index_weights: torch.Tensor,
         index_k: torch.Tensor | None,
     ) -> torch.Tensor:
-        """Top-k of the current rows into ``topk_indices_buffer``; ``index_k`` is
-        None when the key was already inserted (``use_fused_k_insert``)."""
+        """Top-k of the current rows into `topk_indices_buffer`; `index_k` is
+        None when the key was already inserted (`use_fused_k_insert`)."""
         weight_scale = self.index_softmax_scale * self.indexer_weight_scale
         q_scale: torch.Tensor | None = None
         if self.use_fp4_cache:
@@ -392,7 +428,7 @@ class KimiK3DSAAttention(nn.Module):
     """Kimi K3.1 DSA (DeepSeek Sparse Attention) inference path.
 
     Same MLA projections as the dense Kimi-K3 MLA path, plus the DSA indexer
-    wired through ``MLAModules(is_sparse=True)`` so the FlashMLA sparse
+    wired through `MLAModules(is_sparse=True)` so the FlashMLA sparse
     backend consumes the top-k indices.
     """
 
@@ -615,6 +651,10 @@ class KimiK3DSAAttention(nn.Module):
             indexer_rotary_emb=self.rotary_emb,
             is_sparse=True,
             topk_indices_buffer=self.topk_indices_buffer,
+            index_group_builder=SparseMLAIndexGroupBuilder(
+                self.topk_indices_buffer,
+                get_sparse_mla_index_group_max_rows(sonar_config),
+            ),
         )
         self.mla_attn = MultiHeadLatentAttentionWrapper(
             self.hidden_size,
@@ -629,6 +669,7 @@ class KimiK3DSAAttention(nn.Module):
             cache_config,
             quant_config,
             prefix,
+            shardq_eligible=True,
             aux_stream=(
                 aux_stream if not self.weights_offloaded and current_platform.is_device_capability(103) else None
             ),
@@ -639,6 +680,11 @@ class KimiK3DSAAttention(nn.Module):
         indexer = self.dsa_indexer
         if not indexer.use_pcp:
             indexer.dense_mha_metadata_layer_name = self.mla_attn.mla_attn.layer_name
+        # ShardQ (sparse_mla_shard_q): the indexer is not an indexer_op, so
+        # its cache follows the MLA layer's split here.
+        if self.mla_attn.mla_attn.use_shardq:
+            indexer.k_cache.use_shardq = True
+
         self.aux_stream = aux_stream
         self._gate_events: tuple[torch.cuda.Event, torch.cuda.Event] | None = None
         # Set by pack_projections(): the packed input and query weights.
@@ -665,9 +711,12 @@ class KimiK3DSAAttention(nn.Module):
 
     def pack_projections(self) -> None:
         """Enable the fused forward (as DeepseekV32Attention): pack
-        ``[q_a | kv_a | wk | weights_proj]`` and ``[q_b | wq_index]`` into one
+        `[q_a | kv_a | wk | weights_proj]` and `[q_b | wq_index]` into one
         weight each, the linears becoming views. Other configurations keep the
         wrapper forward."""
+        if self._packed is not None:
+            # A rerun after a reload: the loader refilled the views in place.
+            return
         attn = cast(Any, self.mla_attn.mla_attn)
         indexer = cast(Any, self.dsa_indexer)
         if not (
@@ -688,8 +737,6 @@ class KimiK3DSAAttention(nn.Module):
             (self.fused_qkv_a_proj, indexer.wkv_index),
             (self.q_b_proj, indexer.wq_index),
         )
-        # Packed NF12 and other quantized weights must use the wrapper,
-        # whose linears dispatch through quant_method.apply.
         if not all(
             isinstance(linear.quant_method, UnquantizedLinearMethod)
             and linear.weight.dtype == torch.bfloat16

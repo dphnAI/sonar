@@ -15,8 +15,7 @@ from tests.utils import SONAR_PATH
     ["Qwen/Qwen3-Embedding-0.6B"],
 )
 @torch.inference_mode
-def test_decoder_token_embed_model_runner_v2(hf_runner, sonar_runner, monkeypatch, model: str):
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+def test_decoder_token_embed_model_runner_v2(hf_runner, sonar_runner, model: str):
     chunk_size = 10
     n_prompt_tokens = [55, 56, 57]
     token_prompts = [[1024 + i for i in range(n)] for n in n_prompt_tokens]
@@ -32,7 +31,6 @@ def test_decoder_token_embed_model_runner_v2(hf_runner, sonar_runner, monkeypatc
         enable_chunked_prefill=True,
         enable_prefix_caching=True,
     ) as sonar_model:
-        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
         sonar_outputs = sonar_model.token_embed(
             [TokensPrompt(prompt_token_ids=t) for t in token_prompts],
         )
@@ -74,11 +72,11 @@ def test_last_pool_score_chunked_prefill_matches_unchunked(
 ):
     """LAST-pooling score must not depend on whether the prompt is chunked.
 
-    Regression test for a wrong-score bug where, under ``torch.compile`` (i.e.
-    not ``enforce_eager``), a query+document pair long enough to be split across
+    Regression test for a wrong-score bug where, under `torch.compile` (i.e.
+    not `enforce_eager`), a query+document pair long enough to be split across
     prefill chunks produced a corrupted last-token hidden state and thus a
     wrong relevance score, while the same input scored correctly unchunked.
-    The existing pooling+chunked-prefill coverage runs ``enforce_eager=True``
+    The existing pooling+chunked-prefill coverage runs `enforce_eager=True`
     and so never exercised the compiled path.
     """
     chat_template = _RERANKER_TEMPLATE.read_text()
@@ -110,7 +108,7 @@ def test_last_pool_score_chunked_prefill_matches_unchunked(
 
 
 @torch.inference_mode
-def test_sequence_embed_model_runner_v2(hf_runner, sonar_runner, monkeypatch) -> None:
+def test_sequence_embed_model_runner_v2(hf_runner, sonar_runner) -> None:
     model = "Qwen/Qwen3-Embedding-0.6B"
     chunk_size = 10
     token_prompts = [[1024 + i for i in range(n)] for n in (25, 27)]
@@ -124,7 +122,6 @@ def test_sequence_embed_model_runner_v2(hf_runner, sonar_runner, monkeypatch) ->
             embedding = torch.nn.functional.normalize(output.last_hidden_state.float()[0, -1], dim=0)
             hf_outputs.append(embedding.cpu().tolist())
 
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     with sonar_runner(
         model,
         runner="pooling",
@@ -136,7 +133,6 @@ def test_sequence_embed_model_runner_v2(hf_runner, sonar_runner, monkeypatch) ->
         enforce_eager=True,
         enable_chunked_prefill=True,
     ) as sonar_model:
-        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
         sonar_outputs = sonar_model.embed(prompts)
 
     check_embeddings_close(

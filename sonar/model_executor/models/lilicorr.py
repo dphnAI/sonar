@@ -14,15 +14,11 @@ from sonar.compilation.backends import set_model_tag
 from sonar.compilation.decorators import support_torch_compile
 from sonar.config import SonarConfig
 from sonar.model_executor.layers.linear import (
-    LinearBase,
     ReplicatedLinear,
-    UnquantizedLinearMethod,
 )
 from sonar.model_executor.layers.logits_processor import LogitsProcessor
 from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
-from sonar.model_executor.layers.quantization.modelopt import ModelOptLinearMethod
-from sonar.model_executor.layers.quantization.utils.quant_utils import kNvfp4Static
-from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.utils import refill_derived
 from sonar.v1.worker.gpu.spec_decode.lilicorr.config import LiLiCorrSpeculatorConfig
 
 from .nemotron_h import NemotronHMLP
@@ -223,26 +219,31 @@ class LiLiCorrHead(nn.Module):
         )
         self._fused_edge_weight: torch.Tensor | None = None
         self._fused_edge_bias: torch.Tensor | None = None
-        self._factor_input_splits: tuple[torch.Tensor, ...]
+        self._factor_input_splits: tuple[torch.Tensor, ...] = ()
         self._attn_bias: torch.Tensor | None = None
         self._rank_frac_col: torch.Tensor
         self._is_top1_col: torch.Tensor
 
     @torch.no_grad()
     def materialize_inference_buffers(self, device: torch.device, dtype: torch.dtype) -> None:
-        """Build inference-only views/copies after checkpoint weights are loaded."""
+        """Build inference-only copies of the loaded weights; reloads refill them
+        in place."""
         topk = self.candidate_topk
-        self._attn_bias = self._build_attention_bias(device=device, dtype=dtype)
+        refill_derived(self, "_attn_bias", self._build_attention_bias(device=device, dtype=dtype))
         # Both projections consume the same candidate features f:
         #   out = W_out @ f + b_out
         #   incoming = W_in @ f + b_in
         # Stack weights and biases to compute both in one linear call. score()
         # splits the result and normalizes the two vectors separately.
-        self._fused_edge_weight = (
-            torch.cat([self.out_head.weight, self.in_head.weight], dim=0).to(device=device, dtype=dtype).contiguous()
+        refill_derived(
+            self,
+            "_fused_edge_weight",
+            torch.cat([self.out_head.weight, self.in_head.weight], dim=0).to(device=device, dtype=dtype).contiguous(),
         )
-        self._fused_edge_bias = (
-            torch.cat([self.out_head.bias, self.in_head.bias], dim=0).to(device=device, dtype=dtype).contiguous()
+        refill_derived(
+            self,
+            "_fused_edge_bias",
+            torch.cat([self.out_head.bias, self.in_head.bias], dim=0).to(device=device, dtype=dtype).contiguous(),
         )
         # For candidate state x and request anchor a, the trained projection is:
         #   W @ concat(x, a, x*a) + b
@@ -252,19 +253,20 @@ class LiLiCorrHead(nn.Module):
         # W_a @ a across candidates, adding the original bias only once.
         weight = self.factor_input_proj.weight
         hdim = self.hidden_size
-        self._factor_input_splits = (
-            weight[:, :hdim].contiguous(),
-            weight[:, hdim : 2 * hdim].contiguous(),
-            weight[:, 2 * hdim :].contiguous(),
-        )
+        splits = (weight[:, :hdim], weight[:, hdim : 2 * hdim], weight[:, 2 * hdim :])
+        if self._factor_input_splits:
+            for cached, split in zip(self._factor_input_splits, splits):
+                cached.copy_(split)
+        else:
+            self._factor_input_splits = tuple(s.contiguous() for s in splits)
         if topk > 1:
             rank_frac = torch.arange(topk, device=device, dtype=torch.float32).view(1, 1, topk) / float(topk - 1)
         else:
             rank_frac = torch.zeros(1, 1, topk, device=device, dtype=torch.float32)
         is_top1 = torch.zeros(1, 1, topk, device=device, dtype=torch.float32)
         is_top1[..., 0] = 1.0
-        self._rank_frac_col = rank_frac.contiguous()
-        self._is_top1_col = is_top1.contiguous()
+        refill_derived(self, "_rank_frac_col", rank_frac.contiguous())
+        refill_derived(self, "_is_top1_col", is_top1.contiguous())
 
     def _build_attention_bias(self, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
         topk = self.candidate_topk
@@ -424,44 +426,11 @@ class LiLiCorrForCausalLM(DFlashQwen3ForCausalLM):
         )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
-        quantized_metadata: set[str] = set()
-        for name, module in self.named_modules():
-            name = name.removeprefix("model.")
-            if not isinstance(module, (LinearBase, ParallelLMHead)) or isinstance(
-                module.quant_method, UnquantizedLinearMethod
-            ):
-                continue
-            required = {"weight", "bias"}
-            method = module.quant_method
-            if isinstance(method, ModelOptLinearMethod) and method.spec.weight == kNvfp4Static:
-                # NVFP4 scales are trained checkpoint data. Only W4A16's
-                # deprecated, unused input_scale may be absent.
-                required.update(("weight_scale", "weight_scale_2"))
-                if method.spec.activation is not None:
-                    required.add("input_scale")
-            quantized_metadata.update(
-                f"{name}.{parameter}"
-                for parameter, _ in module.named_parameters(recurse=False)
-                if parameter not in required
-            )
-        expected = {
-            name.removeprefix("model.")
-            for name, _ in self.named_parameters()
-            if (
-                name.startswith("model.lilicorr.")
-                or ".attention_conv." in name
-                or ".mlp_conv." in name
-                or (self.has_own_lm_head and name.startswith("lm_head."))
-            )
-            and name.removeprefix("model.") not in quantized_metadata
-        }
-        seen: set[str] = set()
         head_weights: list[tuple[str, torch.Tensor]] = []
 
         def normalized_weights():
             for name, value in weights:
                 name = name.removeprefix("model.")
-                seen.add(name)
                 # The backbone stacks up_proj into gate_up_proj. Load the
                 # nongated correlator separately to avoid that transformation.
                 if name.startswith("lilicorr."):
@@ -471,9 +440,6 @@ class LiLiCorrForCausalLM(DFlashQwen3ForCausalLM):
 
         super().load_weights(normalized_weights())
         AutoWeightsLoader(self.model.lilicorr).load_weights(head_weights)
-        missing = expected - seen
-        if missing:
-            raise ValueError(f"LiLiCorr checkpoint coverage mismatch: missing={sorted(missing)}")
         head = self.model.lilicorr
         parameter = head.slot_embedding
         head.materialize_inference_buffers(parameter.device, parameter.dtype)

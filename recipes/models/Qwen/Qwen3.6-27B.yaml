@@ -16,8 +16,6 @@ meta:
     rtx_pro_6000: verified
     dgx_station_gb300: verified
     rtx_5090: verified
-    ascend_950dt: verified
-    ascend_910c: verified
     arc_pro_b60: verified
     arc_pro_b70: verified
     mi300x: verified
@@ -101,40 +99,12 @@ variants:
   default:
     precision: bf16
     vram_minimum_gb: 65
-    description: "Full precision BF16 — fits on 1x H200, 2x H100, 4x Intel Arc Pro B60, 2x Intel Arc Pro B70, or an Ascend A3 node (TP2+DP8)"
-    tp:
-      ascend_910c: 2
+    description: "Full precision BF16 — fits on 1x H200, 2x H100, 4x Intel Arc Pro B60, 2x Intel Arc Pro B70"
     hardware_overrides:
       rtx_pro_6000:
         extra_args:
           - "--max-num-seqs"
           - "8"
-      ascend_910c:
-        docker_image: "swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:v0.23.0-a3"
-        extra_args:
-          - "--data-parallel-size"
-          - "8"
-          - "--served-model-name"
-          - "qwen3.6"
-          - "--max-num-seqs"
-          - "32"
-          - "--max-model-len"
-          - "133000"
-          - "--max-num-batched-tokens"
-          - "16384"
-          - "--gpu-memory-utilization"
-          - "0.90"
-          - "--no-enable-prefix-caching"
-          - "--compilation-config"
-          - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
-          - "--async-scheduling"
-        extra_env:
-          SONAR_USE_MODELSCOPE: "True"
-          PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
-          HCCL_BUFFSIZE: "512"
-          OMP_PROC_BIND: "false"
-          OMP_NUM_THREADS: "1"
-          TASK_QUEUE_ENABLE: "1"
   fp8:
     model_id: "Qwen/Qwen3.6-27B-FP8"
     precision: fp8
@@ -166,8 +136,6 @@ variants:
           - "fp8"
           - "--attention-backend"
           - "flashinfer"
-          - "--gpu-memory-utilization"
-          - "0.92"
           - "--max-model-len"
           - "262144"
           - "--max-num-batched-tokens"
@@ -203,8 +171,6 @@ variants:
           - "fp8"
           - "--attention-backend"
           - "flashinfer"
-          - "--gpu-memory-utilization"
-          - "0.9"
           - "--max-model-len"
           - "262144"
           - "--max-num-seqs"
@@ -224,8 +190,6 @@ variants:
           - "FLASHINFER"
           - "--attention-config"
           - '{"use_trtllm_attention": true}'
-          - "--gpu-memory-utilization"
-          - "0.93"
           # 32 GB leaves ~9 GB for KV cache after the NVFP4 weights.
           - "--max-model-len"
           - "36608"
@@ -233,8 +197,6 @@ variants:
           - "8"
           - "--max-num-batched-tokens"
           - "4096"
-          - "--gpu-memory-utilization"
-          - "0.95"
           - "--enable-chunked-prefill"
           - "--enable-prefix-caching"
           - "--async-scheduling"
@@ -247,90 +209,6 @@ variants:
     label: "FP8 (RedHat)"
     vram_minimum_gb: 33
     description: "RedHatAI FP8 dynamic quantization"
-  ascend_w8a8_mxfp8:
-    model_id: "Eco-Tech/Qwen3.6-27B-w8a8-mxfp8"
-    precision: mxfp8
-    label: "W8A8 (Ascend)"
-    vram_minimum_gb: 34
-    supported_hardware: [ascend_950dt]
-    tp: 1
-    min_vllm_version: "0.23.0"
-    default_modes:
-      spec_decoding: qwen3_5_mtp
-    extra_args:
-      - "--distributed-executor-backend"
-      - "mp"
-      - "--data-parallel-size"
-      - "8"
-      - "--quantization"
-      - "ascend"
-      - "--served-model-name"
-      - "qwen3.6"
-      - "--max-num-seqs"
-      - "32"
-      - "--max-model-len"
-      - "262144"
-      - "--max-num-batched-tokens"
-      - "16384"
-      - "--gpu-memory-utilization"
-      - "0.90"
-      - "--no-enable-prefix-caching"
-      - "--compilation-config"
-      - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
-      - "--additional-config"
-      - '{"enable_cpu_binding":true}'
-    extra_env:
-      SONAR_USE_MODELSCOPE: "True"
-      PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
-      HCCL_BUFFSIZE: "512"
-      OMP_PROC_BIND: "false"
-      OMP_NUM_THREADS: "1"
-      TASK_QUEUE_ENABLE: "1"
-    hardware_overrides:
-      ascend_950dt:
-        docker_image: "quay.io/ascend/vllm-ascend:v0.23.0-a5"
-  ascend_w8a8:
-    model_id: "Eco-Tech/Qwen3.6-27B-w8a8"
-    precision: int8
-    label: "W8A8 (Ascend A3)"
-    vram_minimum_gb: 33
-    supported_hardware: [ascend_910c]
-    tp: 2
-    min_vllm_version: "0.23.0"
-    default_modes:
-      spec_decoding: qwen3_5_mtp
-    extra_args:
-      - "--data-parallel-size"
-      - "8"
-      - "--quantization"
-      - "ascend"
-      - "--served-model-name"
-      - "qwen3.6"
-      - "--max-num-seqs"
-      - "32"
-      - "--max-model-len"
-      - "133000"
-      - "--max-num-batched-tokens"
-      - "16384"
-      - "--gpu-memory-utilization"
-      - "0.90"
-      - "--no-enable-prefix-caching"
-      - "--compilation-config"
-      - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
-      - "--additional-config"
-      - '{"enable_cpu_binding":true}'
-      - "--async-scheduling"
-    extra_env:
-      SONAR_USE_MODELSCOPE: "True"
-      PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
-      HCCL_BUFFSIZE: "512"
-      OMP_PROC_BIND: "false"
-      OMP_NUM_THREADS: "1"
-      TASK_QUEUE_ENABLE: "1"
-    hardware_overrides:
-      ascend_910c:
-        docker_image: "swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:v0.23.0-a3"
-    description: "ModelSlim INT8 W8A8 checkpoint for one Atlas 800 A3 node (16x Ascend 910C), using TP2+DP8. Requires --quantization ascend."
 
 compatible_strategies:
   - single_node_tp
@@ -382,7 +260,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### Docker
@@ -395,7 +273,7 @@ guide: |
   ### Single-GPU FP8
 
   ```bash
-  sonar serve Qwen/Qwen3.6-27B-FP8 \
+  sonar run Qwen/Qwen3.6-27B-FP8 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
   ```
@@ -403,7 +281,7 @@ guide: |
   ### BF16 on 2xH100 (TP2)
 
   ```bash
-  sonar serve Qwen/Qwen3.6-27B \
+  sonar run Qwen/Qwen3.6-27B \
     --tensor-parallel-size 2 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
@@ -412,7 +290,7 @@ guide: |
   ### MTP speculative decoding
 
   ```bash
-  sonar serve Qwen/Qwen3.6-27B-FP8 \
+  sonar run Qwen/Qwen3.6-27B-FP8 \
     --speculative-config '{"method": "mtp", "num_speculative_tokens": 1}' \
     --reasoning-parser qwen3
   ```
@@ -420,7 +298,7 @@ guide: |
   ### Text-only (skip vision encoder)
 
   ```bash
-  sonar serve Qwen/Qwen3.6-27B-FP8 \
+  sonar run Qwen/Qwen3.6-27B-FP8 \
     --language-model-only \
     --reasoning-parser qwen3 \
     --enable-prefix-caching
@@ -472,11 +350,11 @@ guide: |
     -e GLOO_SOCKET_IFNAME="$ETH_IF" \
     -e TP_SOCKET_IFNAME="$ETH_IF" \
     -e NCCL_IGNORE_CPU_AFFINITY=1 \
-    -e SONAR_FLOAT32_MATMUL_PRECISION=high \
+    -e VLLM_FLOAT32_MATMUL_PRECISION=high \
     -e HEAD_IP="$HEAD_IP" \
     -e MASTER_PORT="$MASTER_PORT" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    "$IMAGE" sonar serve nvidia/Qwen3.6-27B-NVFP4 \
+    "$IMAGE" vllm serve nvidia/Qwen3.6-27B-NVFP4 \
     --host 0.0.0.0 \
     --port 8000 \
     --trust-remote-code \
@@ -512,11 +390,11 @@ guide: |
     -e GLOO_SOCKET_IFNAME="$ETH_IF" \
     -e TP_SOCKET_IFNAME="$ETH_IF" \
     -e NCCL_IGNORE_CPU_AFFINITY=1 \
-    -e SONAR_FLOAT32_MATMUL_PRECISION=high \
+    -e VLLM_FLOAT32_MATMUL_PRECISION=high \
     -e HEAD_IP="$HEAD_IP" \
     -e MASTER_PORT="$MASTER_PORT" \
     -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
-    "$IMAGE" sonar serve nvidia/Qwen3.6-27B-NVFP4 \
+    "$IMAGE" vllm serve nvidia/Qwen3.6-27B-NVFP4 \
     --host 0.0.0.0 \
     --port 8000 \
     --trust-remote-code \
@@ -551,7 +429,7 @@ guide: |
   sharply as the prompt grows; `ROCM_AITER_FA` stays flat.
 
   ```bash
-  SONAR_ROCM_USE_AITER=1 sonar serve Qwen/Qwen3.6-27B \
+  SONAR_ROCM_USE_AITER=1 sonar run Qwen/Qwen3.6-27B \
     --attention-backend ROCM_AITER_FA \
     --enable-auto-tool-choice --tool-call-parser qwen3_coder \
     --reasoning-parser qwen3
@@ -578,7 +456,7 @@ guide: |
   ### Docker (Intel XPU B60 / B70)
 
   Validated on 4× Intel Arc Pro B60 or 2x Intel Arc Pro B70 (B60 24 GB, B70 32 GB per card) with the
-  official Sonar XPU image `vllm/vllm-openai-xpu:latest`.
+  upstream vLLM XPU image `vllm/vllm-openai-xpu:latest`.
 
   ```bash
   docker run --device /dev/dri \

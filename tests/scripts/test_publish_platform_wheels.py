@@ -92,7 +92,7 @@ def test_publish_platform_wheels_filters_distribution(
     assert unrelated not in document
     assert f"#sha256={hashlib.sha256(current.encode()).hexdigest()}" in document
     if backend == "cuda":
-        assert "--torch-backend cu130" in document
+        assert "--torch-backend cu132" in document
     assert f"/platform-wheels/{channel}/{backend}/{architecture}/wheels/" in document
 
 
@@ -135,6 +135,6 @@ def test_reconciled_commit_index_uses_pinned_generator(tmp_path: Path, backend: 
         check=True,
     )
     document = document_path.read_text()
-    assert ("--torch-backend cu130" in document) == (backend == "cuda")
+    assert ("--torch-backend cu132" in document) == (backend == "cuda")
     assert f"/{backend}/aarch64/commits/abc123" in document
     assert "#sha256=deadbeef" in document

@@ -389,11 +389,11 @@ def test_muse_megamoe_dummy_loading(tmp_path, monkeypatch, sonar_runner, nvfp4):
     monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     ModelRegistry.register_model(
-        "MuseSpark1xForCausalLM",
-        "sonar.models.muse_spark.nvidia.model:MuseSpark1xForCausalLM",
+        "MuseSparkForCausalLM",
+        "sonar.models.muse_spark.nvidia.model:MuseSparkForCausalLM",
     )
     config = dict(
-        architectures=["MuseSpark1xForCausalLM"],
+        architectures=["MuseSparkForCausalLM"],
         model_type="muse_spark_text",
         vocab_size=128,
         hidden_size=512,

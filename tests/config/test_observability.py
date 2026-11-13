@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Tests for ObservabilityConfig validation."""
 
+import logging
+
 import pytest
 from pydantic import ValidationError
 
@@ -51,3 +53,12 @@ def test_custom_histogram_buckets_rejects_invalid(buckets, match):
     """Each validation rule must name the field, the value, and the rule."""
     with pytest.raises(ValidationError, match=match):
         ObservabilityConfig(custom_histogram_buckets=buckets)
+
+
+def test_enable_layerwise_nvtx_tracing_is_deprecated(caplog_sonar):
+    msg = "enable_layerwise_nvtx_tracing is deprecated"
+    with caplog_sonar.at_level(logging.WARNING, logger="sonar"):
+        ObservabilityConfig()
+        assert msg not in caplog_sonar.text
+        ObservabilityConfig(enable_layerwise_nvtx_tracing=True)
+    assert msg in caplog_sonar.text

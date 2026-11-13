@@ -50,6 +50,10 @@ class SonarValidationError(SonarClientError):
         return f"{base} ({', '.join(extras)})" if extras else base
 
 
+class PromptUpdateMismatchError(SonarValidationError):
+    """Raised when a multi-modal item has no matching placeholder in the prompt."""
+
+
 class SonarNotFoundError(SonarClientError):
     """Sonar-specific NotFoundError."""
 

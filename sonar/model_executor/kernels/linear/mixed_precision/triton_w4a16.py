@@ -317,7 +317,7 @@ class TritonW4A16LinearKernel(MPLinearKernel):
         if c.weight_type not in cls.SUPPORTED_QUANT_TYPES:
             return (
                 False,
-                f"Quant type {c.weight_type} not supported; supported: {cls.SUPPORTED_QUANT_TYPES}",
+                (f"Quant type {c.weight_type} not supported; supported: {cls.SUPPORTED_QUANT_TYPES}"),
             )
 
         if c.act_type not in (torch.float16, torch.bfloat16):
@@ -327,16 +327,18 @@ class TritonW4A16LinearKernel(MPLinearKernel):
         if N % 8 != 0:
             return (
                 False,
-                f"Output features ({N}) must be divisible by 8 (8 int4 values packed per int32)",
+                (f"Output features ({N}) must be divisible by 8 (8 int4 values packed per int32)"),
             )
 
         gs = c.group_size
         if gs not in TRITON_W4A16_SUPPORTED_GROUP_SIZES and gs != c.full_weight_shape[0]:
             return (
                 False,
-                f"Group size {gs} not supported; "
-                f"supported: {TRITON_W4A16_SUPPORTED_GROUP_SIZES} "
-                f"or full K ({c.full_weight_shape[0]})",
+                (
+                    f"Group size {gs} not supported; "
+                    f"supported: {TRITON_W4A16_SUPPORTED_GROUP_SIZES} "
+                    f"or full K ({c.full_weight_shape[0]})"
+                ),
             )
 
         K = c.partition_weight_shape[0]

@@ -5,7 +5,11 @@ import torch
 from torch import nn
 
 from sonar.config import SonarConfig
-from sonar.model_executor.layers.fused_moe import FusedMoEFactory, GateLinear
+from sonar.model_executor.layers.fused_moe import (
+    FusedMoEFactory,
+    GateLinear,
+    RoutedScaleMode,
+)
 from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
 from sonar.model_executor.layers.linear import (
     MergedColumnParallelLinear,
@@ -17,7 +21,7 @@ from .activation import beam_silu_mul
 
 
 class BeamMLP(nn.Module):
-    """SwiGLU MLP for the ``dense`` entries of ``mlp_layer_types``."""
+    """SwiGLU MLP for the `dense` entries of `mlp_layer_types`."""
 
     def __init__(
         self,
@@ -56,7 +60,7 @@ class BeamMLP(nn.Module):
 
 
 class BeamSparseMoeBlock(nn.Module):
-    """Grouped sigmoid ``noaux_tc`` MoE block."""
+    """Grouped sigmoid `noaux_tc` MoE block."""
 
     def __init__(self, sonar_config: SonarConfig, prefix: str = "", reduce_results: bool = True) -> None:
         super().__init__()
@@ -90,7 +94,7 @@ class BeamSparseMoeBlock(nn.Module):
             scoring_func="sigmoid",
             e_score_correction_bias=e_score_correction_bias,
             routed_scaling_factor=config.routed_scaling_factor,
-            apply_routed_scale_to_output=True,
+            routed_scale_mode=RoutedScaleMode.OUTPUT,
             router_logits_dtype=self.gate.out_dtype,
             enable_eplb=parallel_config.enable_eplb,
             num_redundant_experts=parallel_config.eplb_config.num_redundant_experts,

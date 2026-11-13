@@ -24,8 +24,6 @@ model:
     - "--trust-remote-code"
     - "--dtype"
     - "bfloat16"
-    - "--gpu-memory-utilization"
-    - "0.9"
     - "--enable-chunked-prefill"
     - "--compilation-config"
     - '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
@@ -132,11 +130,10 @@ guide: |
   ## Launching the Server
 
   ```bash
-  NCCL_DEBUG=WARN sonar serve inclusionAI/Ling-3.0-flash \
+  NCCL_DEBUG=WARN sonar run inclusionAI/Ling-3.0-flash \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 4 \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \
@@ -149,11 +146,10 @@ guide: |
   For the serialized FP8 variant on 2x H200, use:
 
   ```bash
-  sonar serve inclusionAI/Ling-3.0-flash-fp8 \
+  sonar run inclusionAI/Ling-3.0-flash-fp8 \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 2 \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \
@@ -165,12 +161,11 @@ guide: |
   For the validated TP4+EP4 alternative on 4x H200, use:
 
   ```bash
-  sonar serve inclusionAI/Ling-3.0-flash-fp8 \
+  sonar run inclusionAI/Ling-3.0-flash-fp8 \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \
@@ -182,11 +177,10 @@ guide: |
   For the FP4 variant on one GPU, use:
 
   ```bash
-  sonar serve inclusionAI/Ling-3.0-flash-fp4 \
+  sonar run inclusionAI/Ling-3.0-flash-fp4 \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 1 \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \
@@ -198,11 +192,10 @@ guide: |
   For the INT4 variant on one GPU, use:
 
   ```bash
-  sonar serve inclusionAI/Ling-3.0-flash-int4 \
+  sonar run inclusionAI/Ling-3.0-flash-int4 \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 1 \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \
@@ -231,7 +224,7 @@ guide: |
   replace the served target checkpoint. It can be paired with any
   Ling-3.0-flash target variant; pass the DSpark repository through
   `--speculative-config.model` while keeping the selected target as the model
-  served by `sonar serve`.
+  served by `sonar run`.
 
   The checkpoint was trained with query block size `Q=8`. Runtime
   `num_speculative_tokens` (`K`) may be any integer from 1 through 8. The recipe
@@ -275,11 +268,10 @@ guide: |
 
   ```bash
   export SONAR_ROCM_USE_AITER=1
-  sonar serve inclusionAI/Ling-3.0-flash \
+  sonar run inclusionAI/Ling-3.0-flash \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 4 \
-    --gpu-memory-utilization 0.9 \
     --enable-chunked-prefill \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}' \
     --enable-prefix-caching \

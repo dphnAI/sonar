@@ -225,8 +225,8 @@ check_cuda() {
         head -n 1)
     [ -n "$supported_cuda" ] ||
         die "Could not determine the CUDA version supported by the NVIDIA driver."
-    version_at_least "$supported_cuda" 13.0 ||
-        die "The NVIDIA driver supports CUDA $supported_cuda. Sonar requires CUDA 13.0 or newer."
+    version_at_least "$supported_cuda" 13.2 ||
+        die "The NVIDIA driver supports CUDA $supported_cuda. Sonar requires CUDA 13.2 or newer."
 
     compute_caps=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null || true)
     [ -n "$compute_caps" ] ||
@@ -449,30 +449,47 @@ if [ "$dry_run" -eq 0 ]; then
     trap 'rm -rf "$installer_dir"' EXIT
     trap 'exit 1' HUP INT TERM
     requirements_path="$installer_dir/pyproject.toml"
-    "$venv_python" - "$requirements_path" "$wheel_index" <<'PY'
+    "$venv_python" - "$requirements_path" "$wheel_index" "$backend" <<'PY'
 import json
 import pathlib
 import sys
 
-pathlib.Path(sys.argv[1]).write_text(
-    '[project]\nname = "sonar-installer"\nversion = "0"\ndependencies = ["sonar"]\n'
+torch_packages = (
+    ["torch", "torchvision", "torchaudio", "torchcodec"]
+    if sys.argv[3] == "cuda"
+    else []
+)
+project = (
+    '[project]\nname = "sonar-installer"\nversion = "0"\n'
+    f'dependencies = {json.dumps(["sonar", *torch_packages])}\n'
     '[tool.uv.sources]\nsonar = { index = "sonar-wheels" }\n'
+)
+for package in torch_packages:
+    project += f'{package} = {{ index = "pytorch-cu132" }}\n'
+project += (
     '[[tool.uv.index]]\nname = "sonar-wheels"\n'
     f'url = {json.dumps(sys.argv[2])}\nexplicit = true\n'
 )
+if torch_packages:
+    # Use an explicit index so existing uv versions need not recognize cu132.
+    project += (
+        '[[tool.uv.index]]\nname = "pytorch-cu132"\n'
+        'url = "https://download.pytorch.org/whl/cu132"\nexplicit = true\n'
+    )
+pathlib.Path(sys.argv[1]).write_text(project)
 PY
 else
     requirements_path='<temporary-directory>/pyproject.toml'
     say "+ Generate a temporary project pinning sonar exclusively to $wheel_index"
+    if [ "$backend" = cuda ]; then
+        say "+ Pin torch, torchvision, torchaudio and torchcodec to https://download.pytorch.org/whl/cu132"
+    fi
 fi
 set -- uv pip install --python "$venv_python" --upgrade --reinstall-package sonar \
     --requirements "$requirements_path" \
     --index-strategy first-index \
     --only-binary sonar
 case "$backend" in
-    cuda)
-        set -- "$@" --torch-backend cu130
-        ;;
     cpu)
         # triton-cpu is a direct URL dependency, which wheels cannot declare for uv, so
         # request it here. Keep the URLs and markers in sync with requirements/cpu.txt.

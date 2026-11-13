@@ -20,7 +20,6 @@ from sonar.config import (
     set_current_sonar_config,
 )
 from sonar.logger import init_logger
-from sonar.model_executor.layers.attention import is_deferred_attention_layer
 from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
@@ -137,9 +136,9 @@ def initialize_model(
 def process_weights_after_loading(model: nn.Module, model_config: ModelConfig, target_device: torch.device) -> None:
     """Post-process loaded weights into runtime format.
 
-    Under ``weights_already_processed`` (weight cache IPC loader), quant
+    Under `weights_already_processed` (weight cache IPC loader), quant
     methods skip tensor transforms and must declare
-    ``supports_pre_processed_weights``, otherwise this raises ``RuntimeError``.
+    `supports_pre_processed_weights`, otherwise this raises `RuntimeError`.
     """
     # Reclaim memory when an explicit lm_head has been
     # loaded, but it is identical to the input embeddings.
@@ -196,18 +195,7 @@ def process_weights_after_loading(model: nn.Module, model_config: ModelConfig, t
             # the caching allocator, which starves the OS on UMA devices.
             release_device_memory_under_pressure(target_device)
 
-    # Initialize post-load attention weights for any attention layer and MM
-    # encoder. NOTE: Happens after other modules so we can easily decompress
-    # weights.
-    for _, module in model.named_modules():
-        if is_deferred_attention_layer(module):
-            # TODO(lucas): see if there is a way to unify the signatures
-            # of process_weights_after_loading
-            with device_loading_context(module, target_device):
-                module.process_weights_after_loading(model_config.dtype)
-
-    # Model-level post-load hook, after the per-layer quant finalize.
-    finalize_model_weights(model)
+    finalize_model_weights(model, target_device)
 
     # Needed for torchao model reloading via model.reload_weights
     # @kylesayrs @jerryzh168 this can be removed if callers move to `reload_weights`
@@ -216,8 +204,8 @@ def process_weights_after_loading(model: nn.Module, model_config: ModelConfig, t
 
 
 @contextmanager
-def device_loading_context(module: torch.nn.Module, target_device: torch.device):
-    if target_device.type == "cpu":
+def device_loading_context(module: torch.nn.Module, target_device: torch.device | None):
+    if target_device is None or target_device.type == "cpu":
         # If target is CPU, no need to move anything
         yield module
         return
@@ -254,7 +242,7 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
 
 @contextmanager
 def online_quantization_timing_context(layer: nn.Module, quant_method: QuantizeMethodBase):
-    """Accumulate online quantization processing time for ``quant_method``."""
+    """Accumulate online quantization processing time for `quant_method`."""
     from sonar.model_executor.layers.quantization.online.base import (
         OnlineQuantizationConfig,
     )

@@ -90,7 +90,6 @@ def test_shared_reuse_requires_content_stable_identifiers():
     config.ec_transfer_config.ec_connector = "ECMooncakeConnector"
     config.ec_transfer_config.ec_connector_extra_config["cross_encoder_cache"] = True
     config.model_config.multimodal_config = MultiModalConfig(mm_processor_cache_gb=0)
-    config.use_v2_model_runner = True
     config.lora_config = None
     with pytest.raises(ValueError, match="mm_processor_cache_gb"):
         MooncakeECConfig.from_sonar_config(config)
@@ -488,7 +487,7 @@ def test_partial_registration_rejection_releases_publication(backend):
     native = backend.store_client.store
     register = native.register_buffer
     put = native.batch_put_from_multi_buffers
-    native.register_buffer = lambda addr, size: (-500 if size == 24 else register(addr, size))
+    native.register_buffer = lambda addr, size: -500 if size == 24 else register(addr, size)
     native.batch_put_from_multi_buffers = MagicMock()
     tensor = torch.ones(2, 2)
     owner = weakref.ref(tensor)

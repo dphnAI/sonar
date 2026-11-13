@@ -449,7 +449,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
             start=self.start_layer,
         ):
             boundary_indices = ced_indices if idx == self.ced_decoder_start else None
-            if layer.ffn.use_native_mega_moe and (mega_gate_metadata is None or boundary_indices is not None):
+            if layer.ffn.use_mega_gate and (mega_gate_metadata is None or boundary_indices is not None):
                 routing_ids = gather_rows(input_ids, boundary_indices) if boundary_indices is not None else input_ids
                 if routing_ids is None:
                     raise ValueError("Native MegaMoE routing requires input_ids")
@@ -717,8 +717,6 @@ class DeepseekV41LLMForCausalLM(UpstreamDeepseekV41LLMForCausalLM):
                 module.prepare_mhc()
             if isinstance(module, DeepseekV41B12xAttention):
                 module.setup_wo_projection()
-            if isinstance(module, Engram):
-                module.process_weights_after_loading()
         layers = [module for module in self.model.layers if isinstance(module, DeepseekV4DecoderLayer)]
         for layer, following in zip(layers, layers[1:]):
             layer.next_attn_prefetch = l2_prefetch.attention_plan(following.attn)

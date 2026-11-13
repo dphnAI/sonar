@@ -143,9 +143,9 @@ def add_rmsnorm(
     weight: torch.Tensor,
     eps: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Fused ``res = residual + delta; y = rmsnorm(res)``.
+    """Fused `res = residual + delta; y = rmsnorm(res)`.
 
-    Returns ``(y, res)``; both are fresh tensors (cudagraph-friendly, no
+    Returns `(y, res)`; both are fresh tensors (cudagraph-friendly, no
     in-place update of the inputs).
     """
     assert residual.ndim == 2 and delta.ndim == 2, (residual.shape, delta.shape)
@@ -225,12 +225,12 @@ def embed_rmsnorm(
     eps: float,
     chain_weight: torch.Tensor | None = None,
 ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-    """Fused ``rmsnorm(embed_table[input_ids], weight)`` row gather + norm.
+    """Fused `rmsnorm(embed_table[input_ids], weight)` row gather + norm.
 
     Requires the full vocab on-rank (replicated or tp_size == 1).
-    ``weight=None`` skips the norm (``use_embed_norm=False``), leaving a pure
+    `weight=None` skips the norm (`use_embed_norm=False`), leaving a pure
     embedding-table gather.
-    ``chain_weight`` additionally emits ``rmsnorm(out, chain_weight)`` (the
+    `chain_weight` additionally emits `rmsnorm(out, chain_weight)` (the
     first decoder layer's pre-attention norm) as a second output, still one
     launch. Bit-exact vs the unfused module sequence."""
     ids = input_ids.view(-1)
@@ -315,9 +315,9 @@ def embed_dual_rmsnorm_cat(
 ) -> torch.Tensor:
     """The MTP depth-layer input in one launch.
 
-    Computes ``cat([rmsnorm(hidden, w_h), rmsnorm(pre?(emb), w_e)], -1)``.
-    The embed side is either a fused row gather ``embed_table[input_ids]`` or
-    precomputed ``embeds``. ``pre_norm_weight`` chains the backbone embed_norm
+    Computes `cat([rmsnorm(hidden, w_h), rmsnorm(pre?(emb), w_e)], -1)`.
+    The embed side is either a fused row gather `embed_table[input_ids]` or
+    precomputed `embeds`. `pre_norm_weight` chains the backbone embed_norm
     in front of the depth embed_norm, bit-exact against the unfused sequence.
     """
     T, n = hidden.shape

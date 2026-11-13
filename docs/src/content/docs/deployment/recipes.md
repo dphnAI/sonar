@@ -12,7 +12,6 @@ Measure each result with [`sonar bench`](/deployment/benchmarking/).
 ```bash
 sonar serve Qwen/Qwen3-8B-AWQ \
   --max-model-len auto \
-  --gpu-memory-utilization 0.90 \
   --max-num-seqs 16
 ```
 
@@ -23,7 +22,6 @@ Use a quantized checkpoint when weights leave too little KV cache.
 ```bash
 sonar serve Qwen/Qwen3-32B \
   --max-model-len auto \
-  --gpu-memory-utilization 0.92 \
   --max-num-seqs 64
 ```
 
@@ -62,16 +60,41 @@ sonar serve MOE_MODEL \
 
 Measure all-to-all traffic and expert imbalance. Disable EPLB for a baseline.
 
+For DeepEP builds using NCCL older than 2.31, keep the runtime NCCL version
+matched to the build. Rebuild DeepEP after changing it. The EP installer
+reports whether it applied the pinned GIN barrier patch; investigate a skipped
+patch before using an unpinned DeepEP revision.
+
 ## AMD ROCm
 
 ```bash
-sonar serve MODEL \
-  --max-model-len auto \
-  --gpu-memory-utilization 0.90
+sonar serve MODEL --max-model-len auto
 ```
 
 Use a Sonar wheel or source build for ROCm that matches the installed ROCm
 version.
+
+HY4 checkpoints (`tencent/Hy4-preview` and `tencent/Hy4-preview-FP8`) use
+breakable HIP graphs by default on ROCm. No
+`SONAR_USE_BREAKABLE_CUDAGRAPH` override is needed. The AMD backbone does not
+support `torch.compile`; use `--enforce-eager` to debug without graphs.
+
+MiniMax M3 can reuse sparse top-k indices on ROCm with
+`--hf-overrides '{"text_config":{"use_index_cache":true,"index_topk_freq":4}}'`.
+Index sharing is disabled by default.
+
+## DeepSeek V4.1 Engram tables
+
+Packed MXFP4 Engram tables are selected by checkpoint metadata and support CPU
+offload, shared host storage, and GPU peer reads. Do not override their packed
+format independently of the checkpoint.
+
+To split GPU tables across engines in one NVLink domain, set
+`--engram-config.cpu_offload false`, `--engram-config.peer_group_size N`, and
+the same fresh `--engram-config.peer_group_store PATH` for every engine.
+`N` is the total GPU count across the engines. This requires CUDA fabric
+handles/IMEX, TP=1, and PP=1. Weight reload is unsupported; restart the whole
+group when any engine restarts.
 
 ## Jetson Thor
 

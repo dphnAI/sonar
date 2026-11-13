@@ -14,7 +14,7 @@ from sonar.entrypoints.pooling.token_embed.protocol import TokenEmbeddingRespons
 from tests.models.utils import check_embeddings_close
 from tests.utils import RemoteOpenAIServer
 
-MODEL_NAME = "intfloat/multilingual-e5-small"
+MODEL_NAME = "vllm-project/multilingual-e5-small"
 DTYPE = "bfloat16"
 input_text = "The best thing about Sonar is that it supports many different models"
 input_tokens = [

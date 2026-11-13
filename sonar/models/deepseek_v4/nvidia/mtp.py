@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """MTP draft model for DeepSeek V4 (internal codename: DeepseekV4).
 
-Split from ``deepseek_mtp.py`` because the V4 architecture introduces several
+Split from `deepseek_mtp.py` because the V4 architecture introduces several
 pieces that have no analogue in V3/V32:
-  * separate ``e_proj`` / ``h_proj`` with fp8 linear quantization (instead of
-    the fused ``eh_proj``);
-  * ``hc_head`` hypercompressed vocab projection applied in ``compute_logits``;
-  * ``DeepseekV4DecoderLayer`` with its own aux-stream management;
-  * V4-specific checkpoint weight-name remapping in ``load_weights``.
+  * separate `e_proj` / `h_proj` with fp8 linear quantization (instead of
+    the fused `eh_proj`);
+  * `hc_head` hypercompressed vocab projection applied in `compute_logits`;
+  * `DeepseekV4DecoderLayer` with its own aux-stream management;
+  * V4-specific checkpoint weight-name remapping in `load_weights`.
 """
 
 import typing
@@ -20,7 +20,6 @@ import torch.nn as nn
 
 import sonar.envs as envs
 from sonar.config import SonarConfig
-from sonar.config.kernel import NATIVE_MEGA_MOE_BACKENDS
 from sonar.distributed import get_tensor_model_parallel_world_size
 from sonar.forward_context import get_forward_context, is_forward_context_available
 from sonar.logger import init_logger
@@ -36,9 +35,6 @@ from sonar.model_executor.layers.linear import ReplicatedLinear
 from sonar.model_executor.layers.logits_processor import LogitsProcessor
 from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
-)
-from sonar.model_executor.model_loader.mtp_validation import (
-    is_mtp_completeness_check_enabled,
 )
 from sonar.model_executor.model_loader.weight_utils import default_weight_loader
 from sonar.model_executor.models.deepseek_mtp import SharedHead
@@ -60,6 +56,7 @@ from .model import (
     DeepseekV4DecoderLayer,
     DeepseekV4Model,
     _select_dsv4_attn_cls,
+    _use_mega_gate,
     _use_sequence_parallel,
     make_deepseek_v4_expert_params_mapping,
     prepare_mega_gate_routing_metadata,
@@ -94,7 +91,7 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
         self.config = config
         quant_config = sonar_config.quant_config
         self.rms_norm_eps = config.rms_norm_eps
-        self.use_native_mega_moe = sonar_config.kernel_config.moe_backend in NATIVE_MEGA_MOE_BACKENDS
+        self.use_mega_gate = _use_mega_gate(sonar_config)
 
         self.enorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hnorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -178,7 +175,7 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
             previous_hidden_states = sp_shard(previous_hidden_states)
         hidden_states = self.h_proj(previous_hidden_states) + self.e_proj(inputs_embeds).unsqueeze(-2)
         mega_gate_metadata = None
-        if self.use_native_mega_moe:
+        if self.use_mega_gate:
             routing_input_ids = input_ids
             if self.mtp_block.use_sequence_parallel:
                 routing_input_ids = sp_shard(routing_input_ids)
@@ -302,6 +299,9 @@ class DeepSeekV4MultiTokenPredictor(nn.Module):
 
 
 class DeepSeekV4MTP(nn.Module):
+    # The checkpoint has no MTP embedding, so always reuse the target's.
+    has_own_embed_tokens = False
+
     def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
         self.config = sonar_config.model_config.hf_config
@@ -478,24 +478,6 @@ class DeepSeekV4MTP(nn.Module):
                     weight_loader(param, loaded_weight)
                     loaded_params.add(name)
                     continue
-
-        loaded_layers: set[int] = set()
-        for param_name in loaded_params:
-            spec_layer = get_spec_layer_idx_from_weight_name(self.config, param_name)
-            if spec_layer is not None:
-                loaded_layers.add(spec_layer)
-        for layer_idx in range(
-            self.model.mtp_start_layer_idx,
-            self.model.mtp_start_layer_idx + self.model.num_mtp_layers,
-        ):
-            if layer_idx not in loaded_layers and is_mtp_completeness_check_enabled():
-                raise ValueError(
-                    f"MTP speculative decoding layer {layer_idx} weights "
-                    f"missing from checkpoint. The checkpoint may have "
-                    f"been quantized without including the MTP layers. "
-                    f"Use a checkpoint that includes MTP layer weights, "
-                    f"or disable speculative decoding."
-                )
         logger.info_once("MTP draft model loaded: %d params", len(loaded_params))
         return loaded_params
 

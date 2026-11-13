@@ -34,10 +34,9 @@ class FakeGuard:
 
 
 @pytest.fixture
-def scheduler(monkeypatch):
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
+def scheduler():
     with patch("tests.v1.core.utils.AsyncScheduler", PhraseScheduler):
-        result = create_scheduler(async_scheduling=True, enable_prefix_caching=True, use_v2_model_runner=False)
+        result = create_scheduler(async_scheduling=True, enable_prefix_caching=True)
     result.tokenizer = object()
     result.sonar_config.model_config.logits_processors = [PhraseRetryProcessor]
     return result
@@ -59,7 +58,6 @@ def accept(scheduler, scheduled, tokens):
         scheduled,
         ModelRunnerOutput(
             req_ids=req_ids,
-            req_id_to_index={rid: i for i, rid in enumerate(req_ids)},
             sampled_token_ids=[[tokens[rid]] for rid in req_ids],
             logprobs=None,
             prompt_logprobs_dict={},
@@ -94,15 +92,14 @@ def test_rewind_drains_old_frames_without_stalling_other_requests(scheduler):
     assert a.num_in_flight_tokens == 0
     accept(scheduler, fenced, {b.request_id: 20})
     resumed = scheduler.schedule()
-    assert a.request_id in resumed.phrase_rewinds
+    restored = next(r for r in resumed.scheduled_new_reqs if r.req_id == a.request_id)
+    assert restored.sampling_params.extra_args["_sonar_phrase_retry"] == (0, [10])
     accept(scheduler, resumed, {a.request_id: 13, b.request_id: 20})
     assert list(a.output_token_ids) == [13]
     assert list(b.output_token_ids) == [20] * 6
 
 
-@pytest.mark.parametrize("v2", [False, True])
-def test_rewind_preserves_other_request_and_resumes_prefix(scheduler, v2):
-    scheduler.use_v2_model_runner = v2
+def test_rewind_preserves_other_request_and_resumes_prefix(scheduler):
     a, b = add_requests(scheduler)
     published = []
     for token in [10, 11, 12]:
@@ -121,23 +118,16 @@ def test_rewind_preserves_other_request_and_resumes_prefix(scheduler, v2):
     assert a.num_output_placeholders == 0
     assert a.num_in_flight_tokens == 0
     resumed = scheduler.schedule()
-    if v2:
-        restored = next(r for r in resumed.scheduled_new_reqs if r.req_id == a.request_id)
-        assert restored.sampling_params.extra_args["_sonar_phrase_retry"] == (0, [10])
-        assert a.sampling_params is restored.sampling_params
-        assert restored.num_computed_tokens >= 32
-    else:
-        assert a.request_id in resumed.phrase_rewinds
-        row = resumed.scheduled_cached_reqs.req_ids.index(a.request_id)
-        assert resumed.scheduled_cached_reqs.num_computed_tokens[row] >= 32
+    restored = next(r for r in resumed.scheduled_new_reqs if r.req_id == a.request_id)
+    assert restored.sampling_params.extra_args["_sonar_phrase_retry"] == (0, [10])
+    assert a.sampling_params is restored.sampling_params
+    assert restored.num_computed_tokens >= 32
     batches = accept(scheduler, resumed, {a.request_id: 13, b.request_id: 20})
     outputs = [o for batch in batches.values() for o in batch.outputs]
     assert next(o for o in outputs if o.request_id == a.request_id).new_token_ids == [13]
 
 
-@pytest.mark.parametrize("v2", [False, True])
-def test_exhausted_retry_finishes_only_affected_request(scheduler, v2):
-    scheduler.use_v2_model_runner = v2
+def test_exhausted_retry_finishes_only_affected_request(scheduler):
     a, b = add_requests(scheduler)
     scheduler.guards[a.request_id].pending = PendingText(("Once",))
     a.sampling_params.allowed_token_ids = [10]
@@ -203,7 +193,8 @@ def test_ban_detected_in_output_of_memory_preempted_request(scheduler):
     accept(scheduler, last, {a.request_id: 12, b.request_id: 20})
     assert a.num_output_placeholders == 0
     resumed = scheduler.schedule()
-    assert a.request_id in resumed.phrase_rewinds
+    restored = next(r for r in resumed.scheduled_new_reqs if r.req_id == a.request_id)
+    assert restored.sampling_params.extra_args["_sonar_phrase_retry"] == (0, [10])
     accept(scheduler, resumed, {a.request_id: 13, b.request_id: 20})
     assert list(a.output_token_ids) == [13]
 
@@ -240,7 +231,6 @@ def test_logprobs_follow_held_tokens_and_discard_rejected_rows(scheduler):
             scheduled,
             ModelRunnerOutput(
                 req_ids=ids,
-                req_id_to_index={rid: i for i, rid in enumerate(ids)},
                 sampled_token_ids=tokens,
                 logprobs=LogprobsLists(np.array(tokens), np.full((len(ids), 1), -0.5), np.ones(len(ids))),
                 prompt_logprobs_dict={a.request_id: prompt_rows} if token == 10 else {},

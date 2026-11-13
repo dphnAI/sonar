@@ -147,7 +147,7 @@ class Mamba2Model(nn.Module):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
-        for i, layer in enumerate(self.layers):
+        for layer in self.layers:
             hidden_states, residual = layer(positions=positions, hidden_states=hidden_states, residual=residual)
 
         if not get_pp_group().is_last_rank:

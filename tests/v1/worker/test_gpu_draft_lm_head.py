@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import gc
+from contextlib import ExitStack
 from types import SimpleNamespace
 
 import pytest
@@ -113,6 +114,9 @@ def _draft_update_worker(sonar_config, drafter: torch.nn.Module, **engine) -> Wo
     )
     worker.model_runner = SimpleNamespace(get_draft_model=lambda: drafter)
     worker._weight_update_active = False
+    worker._incomplete_weight_updates = set()
+    worker._kv_cache_reclaimable = False
+    worker._weight_update_kv_cache_loan = ExitStack()
     worker._set_draft_weight_update_target = lambda: None  # type: ignore[method-assign]
     return worker
 

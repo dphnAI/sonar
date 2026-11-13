@@ -39,6 +39,7 @@ from sonar.model_executor.models.interfaces import (
     SupportsLoRA,
     SupportsMultiModal,
     SupportsMultiModalPruning,
+    SupportsReplaySSM,
 )
 from sonar.model_executor.models.module_mapping import MultiModelKeys
 from sonar.model_executor.models.nemotron_h import NemotronHForCausalLM
@@ -322,18 +323,13 @@ class NanoNemotronVLProcessingInfo(BaseProcessingInfo):
     def get_num_frames_with_most_features(
         self,
         seq_len: int,
-        mm_counts: Mapping[str, int],
+        num_videos: int,
     ) -> int:
-        max_images = mm_counts.get("image", 0)
-        max_videos = mm_counts.get("video", 0)
-
         processor = self.get_hf_processor()  # we get the CustomProcessor here
         T = processor.video_temporal_patch_size
-
-        max_image_tokens = self.get_max_image_tokens() * max_images
         tokens_per_tubelet = processor.num_video_token
-        max_total_tubelets = (seq_len - max_image_tokens) // tokens_per_tubelet
-        max_tubelets_per_video = max_total_tubelets // max(max_videos, 1)
+        max_total_tubelets = seq_len // tokens_per_tubelet
+        max_tubelets_per_video = max_total_tubelets // max(num_videos, 1)
         max_frames_per_video = max_tubelets_per_video * T
         return max(max_frames_per_video, 1)
 
@@ -597,7 +593,7 @@ class NanoNemotronVLMultiModalProcessor(BaseMultiModalProcessor[NanoNemotronVLPr
 
         Videos whose bytes are missing or that contain no audio stream are
         silently skipped.  The returned *has_audio* mask is aligned with
-        the video list so callers know which ``<video>`` tokens need an
+        the video list so callers know which `<video>` tokens need an
         accompanying audio context.
 
         Returns:
@@ -823,7 +819,7 @@ class NanoNemotronVLDummyInputsBuilder(BaseDummyInputsBuilder[NanoNemotronVLProc
             else:
                 video_width, video_height = image_size, image_size
 
-            target_num_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts)
+            target_num_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts.get("video", 0))
             mm_config = self.info.ctx.get_mm_config()
             if num_frames := mm_config.media_io_kwargs.get("video", {}).get("num_frames"):
                 assert num_frames > 0
@@ -875,6 +871,7 @@ class NemotronH_Nano_VL_V2(
     SupportsMultiModal,
     SupportsMultiModalPruning,
     SupportsLoRA,
+    SupportsReplaySSM,
 ):
     supports_mm_device_do_normalize = True
     requires_sequential_video_encoding = True

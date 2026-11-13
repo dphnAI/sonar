@@ -106,10 +106,10 @@ def _log_fast_prefill_skip(reason: str, *, warn_on_skip: bool) -> None:
 class YocoReducedContextMetadata:
     """Reduced-query metadata for YOCO cross-decoder fast prefill.
 
-    ``selected_query_indices`` indexes into the original packed token sequence
-    built by ``MetalModelRunner._start_paged_forward``: decode tokens first,
+    `selected_query_indices` indexes into the original packed token sequence
+    built by `MetalModelRunner._start_paged_forward`: decode tokens first,
     followed by each prefill chunk. The other fields mirror
-    ``PagedAttentionContext`` but describe the reduced cross-decoder query set,
+    `PagedAttentionContext` but describe the reduced cross-decoder query set,
     where every selected query is represented as a length-1 segment.
     """
 
@@ -131,10 +131,10 @@ def build_yoco_reduced_context_from_full_metadata(
 ) -> YocoReducedContextMetadata:
     """Build reduced YOCO metadata from an existing paged-attention context.
 
-    ``prepare_unified`` already computes the full packed metadata used by the
+    `prepare_unified` already computes the full packed metadata used by the
     self-decoder. The YOCO cross-decoder needs the last query from each packed
     segment while preserving that segment's full K/V context. This helper keeps
-    the contract close to the actual ``PagedAttentionContext`` fields without
+    the contract close to the actual `PagedAttentionContext` fields without
     importing MLX or the runtime context class.
     """
     if not cu_seqlens or int(cu_seqlens[0]) != 0:

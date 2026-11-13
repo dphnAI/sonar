@@ -13,14 +13,14 @@ import pytest
     "unrelated",
     [
         "other_engine-1.0-cp38-abi3-linux_x86_64.whl",
-        "sonar_engine-0.2.dev1+cu130-cp38-abi3-linux_x86_64.whl",
+        "sonar_engine-0.2.dev1+cu132-cp38-abi3-linux_x86_64.whl",
         "aphrodite_engine-0.1-cp38-abi3-linux_x86_64.whl",
     ],
 )
 def test_generate_nightly_index_lists_all_wheels(tmp_path: Path, unrelated: str) -> None:
     script = Path(__file__).parents[2] / ".github" / "scripts" / "generate_nightly_index.py"
-    current = "sonar-0.2.dev2+cu130-cp38-abi3-linux_x86_64.whl"
-    previous = "sonar-0.2.dev1+cu130-cp38-abi3-linux_x86_64.whl"
+    current = "sonar-0.2.dev2+cu132-cp38-abi3-linux_x86_64.whl"
+    previous = "sonar-0.2.dev1+cu132-cp38-abi3-linux_x86_64.whl"
     current_url = current
     previous_url = previous.replace("+", "%2B")
     entries = tmp_path / "entries.tsv"

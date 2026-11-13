@@ -61,8 +61,8 @@ def _read_model_type(config_file: Path) -> str | None:
 def is_stt_model(model_path: str) -> bool:
     """Return True when *model_path* resolves to a known STT model type.
 
-    Detection is based on ``model_type`` in the model's ``config.json``.
-    Falls back to ``False`` if the config cannot be read.
+    Detection is based on `model_type` in the model's `config.json`.
+    Falls back to `False` if the config cannot be read.
     """
     config_file = _resolve_config_file(model_path)
     if config_file is None:

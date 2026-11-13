@@ -91,5 +91,5 @@ cd sonar
 uv venv --python 3.13 --seed --prompt sonar
 source .venv/bin/activate
 SONAR_USE_PRECOMPILED=1 \
-  uv pip install --editable . --torch-backend=cu130
+  uv pip install --editable . --torch-backend=cu132
 ```

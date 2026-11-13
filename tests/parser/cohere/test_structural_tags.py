@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""``adjust_request``: folding tools and JSON schemas into Cohere structural tags."""
+"""`adjust_request`: folding tools and JSON schemas into Cohere structural tags."""
 
 from __future__ import annotations
 
@@ -147,7 +147,7 @@ def parser(tokenizer: MockCohereTokenizer) -> CohereCommandParser:
 
 @pytest.fixture(scope="module")
 def parser_no_model_config(tokenizer: MockCohereTokenizer) -> CohereCommandParser:
-    """Parser with no ``model_config`` (cannot resolve architecture)."""
+    """Parser with no `model_config` (cannot resolve architecture)."""
     parser = make_parser(tokenizer, "cohere_command4")
     assert isinstance(parser, CohereCommandParser)
     return parser
@@ -295,7 +295,7 @@ class TestAdjustRequestFoldFromStructuredOutputs:
         assert _first_json_schema(o.structured_outputs.structural_tag) == expected_schema
 
     def test_responses_request_default_empty_tools(self, parser) -> None:
-        """``ResponsesRequest.tools`` defaults to ``[]``, not ``None``."""
+        """`ResponsesRequest.tools` defaults to `[]`, not `None`."""
         r = ResponsesRequest.model_validate(
             {
                 "input": "hi",
@@ -348,7 +348,7 @@ class TestAdjustRequestFoldFromStructuredOutputs:
         ],
     )
     def test_json_wrong_type_raises(self, construct) -> None:
-        """Non-str / non-dict ``json`` fails at Pydantic validation."""
+        """Non-str / non-dict `json` fails at Pydantic validation."""
         with pytest.raises(ValidationError):
             construct()
 

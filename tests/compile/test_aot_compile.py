@@ -221,8 +221,8 @@ def test_load_on_another_device(monkeypatch: pytest.MonkeyPatch, sonar_tmp_cache
 
 
 @pytest.mark.skipif(
-    not current_platform.is_cuda() or not is_torch_equal_or_newer("2.10.0"),
-    reason="requires CUDA and torch 2.10",
+    not current_platform.is_cuda_alike() or not is_torch_equal_or_newer("2.10.0"),
+    reason="requires CUDA/ROCm and torch 2.10",
 )
 def test_sparse_activation_standalone_aot_preserves_dependencies(
     monkeypatch: pytest.MonkeyPatch, sonar_tmp_cache: Path
@@ -501,7 +501,7 @@ def test_gpt2_cache_hit(monkeypatch: pytest.MonkeyPatch):
     """Test that compiling gpt2 twice results in a cache hit.
 
     Counter values are read from the EngineCore subprocess via
-    ``LLM.collective_rpc`` so the test works under default V1
+    `LLM.collective_rpc` so the test works under default V1
     multiprocessing (no shared memory between test and engine).
     """
     from sonar import LLM
@@ -985,7 +985,7 @@ def graph_cache_probe(tmp_path):
             [
                 sys.executable,
                 "-c",
-                "from tests.compile.test_aot_compile import _run_graph_cache_probe; _run_graph_cache_probe()",
+                ("from tests.compile.test_aot_compile import _run_graph_cache_probe; _run_graph_cache_probe()"),
             ],
             cwd=Path(__file__).resolve().parents[2],
             env=env,

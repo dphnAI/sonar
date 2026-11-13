@@ -75,9 +75,14 @@ def _quick_allreduce_worker(
     quant_level: str,
     dtype_name: str,
     cast_bf16: bool,
+    use_aiter: bool = False,
 ):
     os.environ["SONAR_ROCM_QUICK_REDUCE_QUANTIZATION"] = quant_level
     os.environ["SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16"] = "1" if cast_bf16 else "0"
+    os.environ["SONAR_ROCM_USE_AITER"] = "1" if use_aiter else "0"
+    from sonar._aiter_ops import rocm_aiter_ops
+
+    rocm_aiter_ops.refresh_env_variables()
     _log(f"worker start: rank={rank} quant={quant_level} dtype={dtype_name} cast_bf16={cast_bf16}")
 
     device = torch.device(f"cuda:{rank}")
@@ -97,6 +102,8 @@ def _quick_allreduce_worker(
 
         qar = QuickAllReduce(group=dist.GroupMember.WORLD, device=rank)
         assert not qar.disabled
+        # With AITER on, INT4 builds AITER's FlyDSL kernels for BF16 payloads.
+        assert (qar._flydsl_int4 is not None) == (use_aiter and quant_level == "INT4")
 
         num_elements = 8 * MB if dtype_name == "float16" else 4 * MB
 
@@ -126,6 +133,7 @@ def _run_two_gpu_quick_allreduce_test(
     quant_level: str,
     dtype_name: str,
     cast_bf16: bool,
+    use_aiter: bool = False,
 ):
     _log(f"launch 2-GPU case: quant={quant_level} dtype={dtype_name} cast_bf16={cast_bf16}")
     ctx = mp.get_context("spawn")
@@ -135,7 +143,7 @@ def _run_two_gpu_quick_allreduce_test(
     for rank in range(WORLD_SIZE):
         proc = ctx.Process(
             target=_quick_allreduce_worker,
-            args=(rank, port, quant_level, dtype_name, cast_bf16),
+            args=(rank, port, quant_level, dtype_name, cast_bf16, use_aiter),
         )
         proc.start()
         procs.append(proc)
@@ -811,6 +819,31 @@ def test_quick_allreduce_two_gpu_correctness(quant_level):
         quant_level=quant_level,
         dtype_name="float16",
         cast_bf16=False,
+    )
+
+
+def _flydsl_quick_reduce_supported() -> bool:
+    if not current_platform.is_rocm():
+        return False
+    from sonar._aiter_ops import is_aiter_found_and_supported
+    from sonar.platforms.rocm import get_cdna_version
+
+    return is_aiter_found_and_supported() and get_cdna_version() in (3, 4)
+
+
+@pytest.mark.skipif(
+    current_platform.device_count() < WORLD_SIZE or not _flydsl_quick_reduce_supported(),
+    reason="requires 2 CDNA3/CDNA4 GPUs with AITER",
+)
+def test_quick_allreduce_two_gpu_flydsl_int4():
+    # The init builds AITER's FlyDSL INT4 QuickReduce, as serving with
+    # SONAR_ROCM_USE_AITER=1 and INT4 does; then one BF16 all-reduce runs on it.
+    _log("two-GPU FlyDSL INT4 case")
+    _run_two_gpu_quick_allreduce_test(
+        quant_level="INT4",
+        dtype_name="bfloat16",
+        cast_bf16=False,
+        use_aiter=True,
     )
 
 

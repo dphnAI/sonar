@@ -14,6 +14,8 @@ it in Sonar comes down to two things, both exercised here:
      (weight, activation) pair.
 """
 
+import contextlib
+
 import pytest
 import torch
 
@@ -25,6 +27,7 @@ from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8DynamicTokenSym,
     kMxfp4Static,
     kMxfp8Dynamic,
+    kNvfp4Dynamic,
 )
 from sonar.utils.import_utils import has_humming
 
@@ -146,3 +149,78 @@ def test_checkpoint_mxfp8_runs_as_block_fp8_on_hopper(monkeypatch, capability, u
 
     assert str(schema.a_dtype) == "float8e4m3"
     assert schema.input_scale_group_size == expected_group_size
+
+
+def _mxfp6_weight_schema():
+    from sonar.utils.humming import BaseWeightSchema
+
+    return BaseWeightSchema.from_config(
+        {
+            "quant_method": "humming",
+            "dtype": "float6e2m3",
+            "scale_dtype": "float8e8m0",
+            "group_size": 32,
+            "weight_scale_type": "group",
+        }
+    )
+
+
+@contextlib.contextmanager
+def _mock_sm_version(capability):
+    from unittest.mock import patch
+
+    from sonar.platforms.interface import DeviceCapability
+
+    class _Device:
+        sm_version = capability
+
+    with (
+        patch("sonar.model_executor.layers.quantization.utils.humming.schema.current_platform") as platform_mock,
+        patch("humming.schema.humming.current_device", _Device()),
+    ):
+        platform_mock.get_device_capability.return_value = DeviceCapability(capability // 10, capability % 10)
+        yield
+
+
+def _resolve_input_schema(capability, activation_key, **kwargs):
+    from sonar.model_executor.layers.quantization.utils.humming import (
+        check_and_fallback_input_schema,
+        quant_key_to_input_schema,
+    )
+
+    with _mock_sm_version(capability):
+        return check_and_fallback_input_schema(
+            _mxfp6_weight_schema(),
+            quant_key_to_input_schema(activation_key),
+            param_dtype=torch.bfloat16,
+            **kwargs,
+        )
+
+
+@pytest.mark.skipif(not has_humming(), reason="humming is not installed")
+@pytest.mark.parametrize(
+    "capability,activation_key,kwargs,expected",
+    [
+        # SM90 WGMMA has no block-scaled MX path: keep the 16-bit fallback.
+        (90, kMxfp8Dynamic, {}, "16bit"),
+        (100, kMxfp8Dynamic, {}, "fp8"),
+        (103, kMxfp8Dynamic, {}, "fp8"),
+        (120, kMxfp8Dynamic, {}, "fp8"),
+        # MoE grouped-GEMM FP8 is unvalidated on SM100-SM119: keep the gate.
+        (100, kMxfp8Dynamic, {"allow_fp8_sm100": False}, "16bit"),
+        # FP4 requests keep their gate on SM100.
+        (100, kNvfp4Dynamic, {}, "not_fp4"),
+    ],
+)
+def test_input_schema_honors_sm_activation_gates(capability, activation_key, kwargs, expected):
+    """Honor MXFP8 requests while preserving architecture and MoE gates."""
+    from sonar.utils.humming import dtypes as humming_dtypes
+
+    resolved = _resolve_input_schema(capability, activation_key, **kwargs)
+    if expected == "fp8":
+        assert resolved.a_dtype == humming_dtypes.float8e4m3
+        assert resolved.input_scale_group_size == 32
+    elif expected == "16bit":
+        assert resolved.a_dtype is None or resolved.a_dtype.num_bits == 16
+    else:
+        assert resolved.a_dtype is None or resolved.a_dtype.num_bits != 4

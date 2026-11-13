@@ -59,22 +59,30 @@ def _validate_prefix_cache_retention_interval(
         )
 
 
-def replay_boundaries(num_prompt_tokens: int, scheduler_block_size: int, use_eagle: bool) -> tuple[int, ...]:
+def replay_boundaries(
+    num_prompt_tokens: int,
+    scheduler_block_size: int,
+    use_eagle: bool,
+    num_hash_lookahead_tokens: int,
+) -> tuple[int, ...]:
     """Positions a later request replaying a prompt can resume at.
 
     A hit is the shortest across all groups, so every group retains state
     at each position; EAGLE groups also keep the block above, which they
-    match and drop back from (see ``reachable_block_mask``).
+    match and drop back from (see `reachable_block_mask`).
 
     Two positions are reachable: a resend of the identical prompt is capped
-    at ``num_tokens - 1`` (its last token is recomputed for logits), a
+    at `num_tokens - 1` (its last token is recomputed for logits), a
     longer sibling matches the final aligned block. They differ only on a
     block-aligned prompt, where retaining just the higher one collapses the
     resend's hit to 0. The alignment is the scheduler block size, not the
     finer hash granularity, which would over-estimate the reach.
+
+    A lookahead hash exists only once the tokens after its block are known, so
+    a resend reaches at most `num_tokens - num_hash_lookahead_tokens`.
     """
     if not use_eagle:
-        return (num_prompt_tokens - 1,)
+        return (num_prompt_tokens - max(1, num_hash_lookahead_tokens),)
     block = scheduler_block_size
     resend = (num_prompt_tokens - 1) // block * block
     extension = num_prompt_tokens // block * block
@@ -344,6 +352,7 @@ class KVCacheCoordinator(ABC):
             request.num_prompt_tokens,
             self.scheduler_block_size,
             use_eagle=bool(self.drop_eagle_group_ids),
+            num_hash_lookahead_tokens=self.block_pool.num_hash_lookahead_tokens,
         )
         for group_id, manager in enumerate(self.single_type_managers):
             if not manager.enable_caching:
@@ -435,7 +444,7 @@ class KVCacheCoordinator(ABC):
         """Returns per-group hit blocks, hit length, and uncached common prefix.
 
         The third value is a shared prefix that a sparse-retention group has not
-        cached yet; it is 0 unless hybrid cache reconciliation detects one.
+        cached yet. It is 0 unless hybrid cache reconciliation detects one.
         """
         pass
 
@@ -568,7 +577,7 @@ class SpecGroup(NamedTuple):
     """KV cache groups that share one spec, batched together for a single
     cache-hit lookup.
 
-    ``use_eagle`` is True iff any member group is an EAGLE/MTP group. Members
+    `use_eagle` is True iff any member group is an EAGLE/MTP group. Members
     sharing a spec are cached and looked up jointly, so the EAGLE last-block drop
     is necessarily decided for the whole spec group.
     """
@@ -721,12 +730,12 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
                     self.single_type_managers[gid].use_eagle = True
 
     def _align_cacheable(self, num_tokens: int) -> int:
-        """Largest prefix of ``num_tokens`` a future cache hit could match.
+        """Largest prefix of `num_tokens` a future cache hit could match.
 
-        Hits are ``scheduler_block_size``-aligned (see
-        ``find_longest_cache_hit``) unless fine-grained partial hash hits are
+        Hits are `scheduler_block_size`-aligned (see
+        `find_longest_cache_hit`) unless fine-grained partial hash hits are
         enabled, in which case no rounding applies -- rounding even to
-        ``hash_block_size`` would re-register a privatized Mamba tail.
+        `hash_block_size` would re-register a privatized Mamba tail.
         """
         if self.enable_partial_hash_hits:
             return num_tokens
@@ -764,7 +773,7 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
             A tuple containing:
                 - A tuple of the cache hit blocks for each single type manager.
                 - The number of tokens of the reconciled (combined) cache hit.
-                - ``num_uncached_common_prefix_tokens``: a shared prefix that a
+                - `num_uncached_common_prefix_tokens`: a shared prefix that a
                   sparse-retention group has not cached yet (0 unless hybrid).
 
         """

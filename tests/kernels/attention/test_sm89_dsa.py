@@ -8,12 +8,12 @@ Covers the four custom ops
   - sm89_fp8_mqa_logits, ragged prefill indexer logits
   - sm89_sparse_mla_fwd, sparse MLA forward from an fp8_ds_mla pool
 
-The synthetic pool builders are byte-exact mirrors of the in-tree cache writers
-in csrc/libtorch_stable/cache_kernels.cu. The indexer K cache stores each
-64-token page as [64x128 fp8 keys, token-major][64 fp32 per-token scales]
+The synthetic pool builders produce the same cache contents as the writers in
+`csrc/libtorch_stable/cache_kernels.cu`. The indexer K cache stores each
+64-token page as `[64x128 fp8 keys, token-major][64 fp32 per-token scales]`
 (8448 B/page, scale = max(amax, 1e-4) / 448, optionally rounded up to a power
-of two), and the fp8_ds_mla cache stores each token as [512 fp8 nope][4 fp32
-per-128-tile scales][64 bf16 rope] (656 B/token).
+of two). The fp8_ds_mla cache stores each token as
+`[512 fp8 nope][4 fp32 per-128-tile scales][64 bf16 rope]` (656 B/token).
 """
 
 import pytest
@@ -238,7 +238,7 @@ def _sparse_mla_ref(
     indices: torch.Tensor,
     sm_scale: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """out[t] = softmax(q_t . kv[idx_t]^T * sm_scale) @ kv[idx_t][:, :512]."""
+    """Compute `out[t] = softmax(q_t . kv[idx_t]^T * sm_scale) @ kv[idx_t][:, :512]`."""
     T, h, _ = q.shape
     out = torch.zeros(T, h, DS_NOPE, dtype=torch.float32, device=q.device)
     lse = torch.full((T, h), NEG_INF, dtype=torch.float32, device=q.device)

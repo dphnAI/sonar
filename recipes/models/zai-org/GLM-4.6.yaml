@@ -124,7 +124,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### Install Sonar (AMD ROCm)
@@ -138,7 +138,7 @@ guide: |
   ### Tensor Parallel (FP8)
 
   ```bash
-  sonar serve zai-org/GLM-4.6-FP8 \
+  sonar run zai-org/GLM-4.6-FP8 \
       --tensor-parallel-size 8 \
       --tool-call-parser glm45 \
       --reasoning-parser glm45 \
@@ -148,7 +148,7 @@ guide: |
   ### Enabling MTP Speculative Decoding
 
   ```bash
-  sonar serve zai-org/GLM-4.6-FP8 \
+  sonar run zai-org/GLM-4.6-FP8 \
       --tensor-parallel-size 4 \
       --speculative-config.method mtp \
       --speculative-config.num_speculative_tokens 1 \
@@ -161,7 +161,6 @@ guide: |
 
   - `--max-model-len=65536` works well for most scenarios; max is 128K.
   - `--max-num-batched-tokens=32768` is a good default for prompt-heavy workloads.
-  - `--gpu-memory-utilization=0.95` maximizes KV cache headroom.
 
   ## Client Usage
 
@@ -180,7 +179,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model zai-org/GLM-4.6-FP8 \
     --dataset-name random \
     --random-input-len 8000 \

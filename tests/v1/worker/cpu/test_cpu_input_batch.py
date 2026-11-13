@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 from sonar.platforms import CpuArchEnum, current_platform
 from sonar.triton_utils import HAS_TRITON
 from sonar.v1.worker.cpu.input_batch import (

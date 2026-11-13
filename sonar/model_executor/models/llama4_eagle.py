@@ -171,7 +171,7 @@ class EagleLlama4ForCausalLM(_EagleLlama4ForCausalLMBase, SupportsMultiModalEmbe
         speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
-        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
         # draft model quantization config may differ from target model
         quant_config = SonarConfig.get_quantization_config(
             speculative_config.draft_model_config, sonar_config.load_config

@@ -21,6 +21,7 @@ from sonar.model_executor.layers.linear import (
 )
 from sonar.model_executor.layers.mla import MultiHeadLatentAttentionWrapper
 from sonar.model_executor.layers.quantization.utils.quant_utils import QuantKey
+from sonar.model_executor.utils import refill_derived
 from sonar.platforms import current_platform
 
 _OPT_KV_LORA_RANK = 512
@@ -128,9 +129,9 @@ class KimiK3MultiHeadLatentAttentionWrapper(MultiHeadLatentAttentionWrapper):
     ) -> torch.Tensor:
         """W_fold = [W_UK @ W_qb_nope ; W_qb_pe]: one GEMM gives [ql_nope | q_pe].
 
-        ``w_qb`` is the q_b_proj weight [N * (P + R), Lq], ``w_uk`` is [L, N, P].
+        `w_qb` is the q_b_proj weight [N * (P + R), Lq], `w_uk` is [L, N, P].
         Rows hold all heads' nope rows, then all pe rows, so the two output
-        halves of ``x @ W_fold.T`` are contiguous: [B, N * L] and [B, N * R]."""
+        halves of `x @ W_fold.T` are contiguous: [B, N * L] and [B, N * R]."""
         N, P, R = num_heads, qk_nope_head_dim, qk_rope_head_dim
         L = w_uk.shape[0]
         w = w_qb.view(N, P + R, -1).float()
@@ -159,7 +160,12 @@ class KimiK3MultiHeadLatentAttentionWrapper(MultiHeadLatentAttentionWrapper):
             self.qk_nope_head_dim,
             self.v_head_dim,
         )  # [L, N, P]
-        self._w_fold = self._compute_w_fold(w_qb, W_UK, self.num_heads, self.qk_nope_head_dim, self.qk_rope_head_dim)
+        # refilled in place: a reload reruns this, and captured graphs read it
+        refill_derived(
+            self,
+            "_w_fold",
+            self._compute_w_fold(w_qb, W_UK, self.num_heads, self.qk_nope_head_dim, self.qk_rope_head_dim),
+        )
 
     def process_weights_after_loading(self) -> None:
         if self._fold_qb_uk:
@@ -178,9 +184,9 @@ class KimiK3MultiHeadLatentAttentionWrapper(MultiHeadLatentAttentionWrapper):
     ) -> torch.Tensor:
         """Decode-only MLA through one fused AITER launch.
 
-        Replaces the fp8 KV-cache write plus the ``[ql_nope | q_pe]`` concat and
+        Replaces the fp8 KV-cache write plus the `[ql_nope | q_pe]` concat and
         that query's static fp8 quant with a single
-        ``fused_qk_rope_concat_and_cache_mla``. On an untouched upstream build
+        `fused_qk_rope_concat_and_cache_mla`. On an untouched upstream build
         the concat and quant already arrive as one inductor-fused kernel, so
         this collapses two launches into one.
         """

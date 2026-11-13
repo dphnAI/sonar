@@ -7,7 +7,7 @@ import requests
 from sonar.entrypoints.pooling.pooling.protocol import PoolingResponse
 from tests.utils import RemoteOpenAIServer
 
-MODEL_NAME = "jason9693/Qwen2.5-1.5B-apeach"
+MODEL_NAME = "vllm-project/Qwen2.5-1.5B-apeach"
 DTYPE = "float32"  # Use float32 to avoid NaN issue
 input_text = "This product was excellent and exceeded my expectations"
 input_tokens = [1986, 1985, 572, 9073, 323, 33808, 847, 16665]

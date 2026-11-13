@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""E2E tests for ``thinking_token_budget`` with reasoning models.
+"""E2E tests for `thinking_token_budget` with reasoning models.
 
 Covers Qwen3-0.6B and Qwen3.5 FP8 + MTP.
 """
@@ -14,7 +14,6 @@ import openai
 import pytest
 import pytest_asyncio
 
-import sonar.envs as envs
 from sonar.platforms import current_platform
 from sonar.tokenizers import get_tokenizer
 from tests.utils import RemoteOpenAIServer, multi_gpu_only, requires_fp8
@@ -213,10 +212,6 @@ async def test_thinking_token_budget_limits_reasoning(client: openai.AsyncOpenAI
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    envs.SONAR_USE_RUST_FRONTEND,
-    reason="the Rust frontend does not serve /v1/responses",
-)
 @pytest.mark.parametrize("client", ["default"], indirect=True)
 async def test_thinking_token_budget_responses_api(client: openai.AsyncOpenAI):
     """/v1/responses applies thinking_token_budget like /v1/chat/completions."""
@@ -248,11 +243,11 @@ async def test_thinking_token_budget_responses_api(client: openai.AsyncOpenAI):
 async def test_thinking_token_budget_qwen35_fp8_mtp_concurrent_mixed_budget_and_plain(
     server_qwen35_fp8_mtp_tp2,
 ):
-    """Concurrent chat requests: some with ``thinking_token_budget``, some without.
+    """Concurrent chat requests: some with `thinking_token_budget`, some without.
 
     Exercises the scheduler / input processor under a mixed batch on the same
     Qwen3.5 FP8 + MTP (TP=2) server. Budgeted calls are checked with
-    ``_count_reasoning_decode_token_ids_between_markers`` on full token ids.
+    `_count_reasoning_decode_token_ids_between_markers` on full token ids.
     """
     _batch_spec: list[tuple[Literal["budget"], int] | tuple[Literal["plain"], None]] = [
         ("budget", 1),

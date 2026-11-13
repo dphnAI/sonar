@@ -23,7 +23,7 @@ from sonar.logger import init_logger
 from sonar.v1.worker.sentinel.expert_reload import _placement_weight_loader
 
 if TYPE_CHECKING:
-    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
@@ -234,7 +234,7 @@ def reload_experts_from_disk(
 
 def reset_eplb_async_state(model_runner: GPUModelRunner) -> None:
     """Clear stale EPLB async state after fault or scale-down."""
-    eplb_state = getattr(model_runner, "eplb_state", None)
+    eplb_state = model_runner.eplb_state
     if eplb_state is None:
         return
 

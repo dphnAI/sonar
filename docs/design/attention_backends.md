@@ -158,24 +158,37 @@ Priority is **1 = highest** (tried first).
 
 | Backend | Version | Dtypes | KV Dtypes | Block Sizes | Head Sizes | Sink | MM Prefix | DCP | Attention Types | Compute Cap. |
 | ------- | ------- | ------ | --------- | ----------- | ---------- | ---- | --------- | --- | --------------- | ------------ |
-| `CPU_ATTN` | | fp16, bf16, fp32 | `auto`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | %16 | 32, 64, 80, 96, 112, 128, 160, 192, 224, 256, 512 | ❌ | ❌ | ❌ | All | N/A |
-| `FLASHINFER` | Native† | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2`, `nvfp4` | 16, 32, 64, 128, 256, 512, 1024 | 64, 128, 256, 512 | ❌ | ❌ | ✅ | Decoder | 8.x-9.x |
-| `FLASHINFER` | XQA† | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | 16, 32, 64, 128, 256, 512, 1024 | 64, 128, 256, 512 | ❌ | ❌ | ✅ | Decoder | 9.0 |
-| `FLASHINFER` | trtllm-gen† | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2`, `nvfp4` | 16, 32, 64, 128, 256, 512, 1024 | 64, 128, 256, 512 | ✅ | ❌ | ✅ | Decoder | 10.x |
-| `FLASH_ATTN` | FA2* | fp16, bf16 | `auto`, `float16`, `bfloat16` | %16 | Any | ❌ | ❌ | ✅ | All | ≥8.0 |
+| `B12X` | | bf16 | `auto` | Any | 128, 192, 256 | ✅ | ❌ | ❌ | Decoder | Any |
+| `CPU_ATTN` | | fp16, bf16, fp32 | `auto`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | %32 | 32, 64, 80, 96, 112, 128, 160, 192, 224, 256, 512 | ❌ | ❌ | ❌ | All | N/A |
+| `CUTLASS_MSA` | | fp16, bf16 | `auto` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
+| `FLASHINFER` | Native† | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2`, `nvfp4`, `nvfp4_4over6` | 16, 32, 64, 128, 256, 512, 1024 | 64, 128, 256, 512 | ❌ | ❌ | ✅ | Decoder | 8.x-9.x |
+| `FLASHINFER` | XQA† | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2`, `nvfp4_4over6` | 16, 32, 64, 128, 256, 512, 1024 | 64, 128, 256, 512 | ❌ | ❌ | ✅ | Decoder | 9.0 |
+| `FLASHINFER` | trtllm-gen† | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2`, `nvfp4`, `nvfp4_4over6` | 16, 32, 64, 128, 256, 512, 1024 | 64, 128, 256, 512 | ✅ | ❌ | ✅ | Decoder | 10.x |
+| `FLASHINFER_TS` | | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
+| `FLASHMLA_MEGA_ATTN_DSV41` | | fp16, bf16 | `auto`, `fp8_ds_mla`, `fp8`, `nvfp4_ds_mla` | 128 | Any | ❌ | ❌ | ❌ | Decoder | 10.x |
+| `FLASHMLA_SPARSE_DSV4` | | fp16, bf16 | `auto` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
+| `FLASHMLA_SPARSE_DSV41` | | fp16, bf16 | `auto` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
+| `FLASH_ATTN` | FA2* | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | %16 | Any | ❌ | ❌ | ✅ | All | ≥8.0 |
 | `FLASH_ATTN` | FA3* | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | %16 | Any | ✅ | ❌ | ✅ | All | 9.x |
 | `FLASH_ATTN` | FA4* | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | %16 | Any | ✅ | ❌ | ✅ | All | ≥10.0 |
 | `FLASH_ATTN_DIFFKV` | | fp16, bf16 | `auto` | Any | Any | ❌ | ❌ | ✅ | Decoder | Any |
 | `FLEX_ATTENTION` | | fp16, bf16, fp32 | `auto`, `float16`, `bfloat16` | %16 | Any | ❌ | ✅ | ❌ | Decoder, Encoder Only | Any |
-| `HPC_ATTN` | | fp16, bf16 | `auto`, `bfloat16`, `fp8_e4m3` | 64 | 128 | ❌ | ❌ | ❌ | Decoder | ≥9.0 |
+| `HPC_ATTN` | | fp16, bf16 | `auto`, `bfloat16`, `fp8_e4m3` | 64 | 128 | ❌ | ❌ | ❌ | Decoder | Any |
 | `MINIMAX_M3_SPARSE` | | bf16, fp16 | `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | 128 | 128 | ❌ | ❌ | ❌ | Decoder | Any |
 | `ROCM_AITER_FA` | | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | 16, 32 | 64, 128, 256 | ✅ | ❌ | ❌ | Decoder | N/A |
-| `ROCM_AITER_UNIFIED_ATTN` | | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | %16 | Any | ✅ | ✅ | ❌ | All | N/A |
-| `ROCM_ATTN` | | fp16, bf16, fp32 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | %16 | 32, 64, 80, 96, 128, 160, 192, 224, 256 | ❌ | ✅ | ❌ | Decoder, Encoder, Encoder Only | N/A |
-| `ROCM_FLASHMLA_SPARSE_DSV4` | | fp16, bf16 | `auto` | Any | Any | ❌ | ❌ | ❌ | Decoder | N/A |
+| `ROCM_AITER_UNIFIED_ATTN` | | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | %16 | Any | ✅ | ❌ | ❌ | All | N/A |
+| `ROCM_ATTN` | | fp16, bf16, fp32 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | %16 | 32, 64, 80, 96, 128, 160, 192, 224, 256 | ❌ | ❌ | ❌ | Decoder, Encoder, Encoder Only | N/A |
+| `ROCM_FLASHMLA_SPARSE_DSV4` | | fp16, bf16 | `fp8_e4m3` | Any | Any | ❌ | ❌ | ❌ | Decoder | N/A |
+| `ROCM_FLASHMLA_SPARSE_DSV41` | | fp16, bf16 | `fp8_e4m3` | 64, 128 | Any | ❌ | ❌ | ❌ | Decoder | N/A |
+| `ROCM_OCTAVE` | | fp16, bf16 | `octave_k3v4`, `octave_k3v3`, `octave_k3v3_compact` | %16 | Any | ❌ | ❌ | ❌ | Decoder | N/A |
+| `ROCM_RDNA_ATTN` | | fp16, bf16 | `auto`, `float16`, `bfloat16` | Any | 32, 64, 80, 96, 128, 160, 192, 224, 256, 512 | ❌ | ✅ | ❌ | Decoder | N/A |
+| `ROCM_SEGMENTED_ATTN` | | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | Any | 64, 128, 256 | ✅ | ❌ | ❌ | Decoder | N/A |
+| `STEP5_DSA` | | fp16, bf16 | `auto`, `bfloat16`, `fp8`, `fp8_e4m3` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
 | `TRITON_ATTN` | | fp16, bf16, fp32 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2`, `int4_per_token_head`, `int8_per_token_head`, `fp8_per_token_head` | %16 | Any | ✅ | ✅ | ❌ | All | Any |
-| `TRITON_ATTN_DIFFKV` | | fp16, bf16 | `auto`, `bfloat16` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
+| `TRITON_ATTN_DIFFKV` | | fp16, bf16 | `auto`, `bfloat16`, `fp8`, `fp8_e4m3` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
+| `TRITON_MSA` | | fp16, bf16 | `auto` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
 | `TURBOQUANT` | | fp16, bf16 | `turboquant_k8v4`, `turboquant_4bit_nc`, `turboquant_k3v4_nc`, `turboquant_3bit_nc` | 16, 32, 64, 128 | Any | ❌ | ❌ | ❌ | Decoder | Any |
+| `ULTRAQUANT` | | bf16 | `ultraquant_4bit` | Any | Any | ❌ | ❌ | ❌ | Decoder | Any |
 
 > **†** FlashInfer Native is the regular FlashInfer path. XQA is the SM90 decode path exposed through FlashInfer's TRTLLM decode API. trtllm-gen is used on SM100 and supports sinks. Disable XQA/trtllm-gen via `--attention-config.use_trtllm_attention=0`.
 >
@@ -192,35 +205,41 @@ configuration.
 
 | Backend | Description | Compute Cap. | Enable | Disable | Notes |
 | ------- | ----------- | ------------ | ------ | ------- | ----- |
-| FLASH_ATTN | FlashAttention varlen (FA2/FA3/FA4) | Any | Default fallback | Use other backends | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128), (qk_nope_head_dim=64, qk_rope_head_dim=64, v_head_dim=128), or (qk_nope_head_dim=192, qk_rope_head_dim=64, v_head_dim=256) |
+| FLASH_ATTN | FlashAttention varlen (FA2/FA3/FA4) | Any | Default fallback | Use other backends | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) or (qk_nope_head_dim=192, qk_rope_head_dim=64, v_head_dim=256) or (qk_nope_head_dim=64, qk_rope_head_dim=64, v_head_dim=128) or (qk_nope_head_dim=256, qk_rope_head_dim=0, v_head_dim=256) only |
 | FLASHINFER | FlashInfer CUTLASS backend | 10.x | Auto-selected when valid | Select another backend | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) only |
 | TRTLLM_RAGGED | TensorRT-LLM ragged attention | 10.x | Default on SM100 when valid | Select another backend | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) or (qk_nope_head_dim=192, qk_rope_head_dim=64, v_head_dim=256) only |
 | TOKENSPEED_MLA | TokenSpeed CuTe DSL backend | 10.x | Auto-selected when valid | Select another backend | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) only |
 | ROCM_AITER_FA | ROCm AITER FlashAttention | Any | Auto-selected when valid | Select another backend | |
+| ROCM_AITER_FLYDSL_FP8 | | Any | Auto-selected when valid | Select another backend | |
+| CPU | | Any | Auto-selected when valid | Select another backend | |
+| ZEN_CPU | | Any | Auto-selected when valid | Select another backend | |
 
-> **‡** Automatic selection tries FlashAttention first. On Blackwell
-> (SM100), the fallback order is TRT-LLM Ragged, FlashInfer, then
-> TokenSpeed MLA; for (qk_nope_head_dim=192, qk_rope_head_dim=64,
-> v_head_dim=256) TRT-LLM Ragged is tried before FlashAttention. On other
-> GPUs, only FlashAttention is considered.
+> **‡** TRT-LLM Ragged is the default on Blackwell (SM100).
+> On other GPUs, FlashAttention is used as the default.
 
 ### Decode Backends
 
 | Backend | Dtypes | KV Dtypes | Block Sizes | Head Sizes | Sink | Sparse | MM Prefix | DCP | Attention Types | Compute Cap. |
 | ------- | ------ | --------- | ----------- | ---------- | ---- | ------ | --------- | --- | --------------- | ------------ |
+| `AMX_MLA` | bf16 | `auto` | %32 | 576 | ❌ | ❌ | ❌ | ❌ | Decoder | Any |
+| `B12X_DSV41` | fp16, bf16 | `auto` | %32 | 68, 512, 1024 | ✅ | ✅ | ❌ | ❌ | Decoder | 12.x |
+| `CPU_MLA` | fp16, bf16, fp32 | `auto` | 16 | 576 | ❌ | ❌ | ❌ | ❌ | Decoder | N/A |
 | `CUTLASS_MLA` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | 128 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | 10.x |
 | `FLASHINFER_MLA` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | 32, 64 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | 10.x |
-| `FLASHINFER_MLA_SPARSE` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | 32, 64 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | 10.x |
+| `FLASHINFER_MLA_SPARSE` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `nvfp4_ds_mla` | %32 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | 10.x |
 | `FLASHINFER_MLA_SPARSE_DSV4` | bf16 | `auto`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_ds_mla` | 256 | 512 | ✅ | ✅ | ❌ | ❌ | Decoder | 10.x-12.x |
-| `FLASHINFER_MLA_SPARSE_SM120` | bf16 | `auto`, `fp8`, `fp8_e4m3`, `fp8_ds_mla` | 64, 256 | Any | ❌ | ❌ | ❌ | ❌ | Decoder | 12.x |
+| `FLASHINFER_MLA_SPARSE_DSV41` | bf16 | `auto`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_ds_mla` | 128 | 512 | ✅ | ✅ | ❌ | ❌ | Decoder | 10.x-12.x |
+| `FLASHINFER_MLA_SPARSE_SM120` | bf16 | `auto`, `fp8`, `fp8_e4m3`, `fp8_ds_mla` | %64 | Any | ❌ | ❌ | ❌ | ❌ | Decoder | 12.x |
+| `FLASHINFER_MLA_SPARSE_SM90` | bf16 | `auto`, `bfloat16`, `fp8`, `fp8_e4m3` | %64 | 512, 576 | ❌ | ✅ | ❌ | ❌ | Decoder | 9.x |
 | `FLASHMLA` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | 64 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | 9.x-10.x |
-| `FLASHMLA_SPARSE` | bf16 | `auto`, `bfloat16`, `fp8_ds_mla` | 64 | 576 | ❌ | ✅ | ❌ | ❌ | Decoder | 9.x-10.x |
-| `FLASHMLA_SPARSE_DSV4` | bf16 | `auto`, `fp8_ds_mla`, `fp8` | 256 | 512 | ✅ | ✅ | ❌ | ❌ | Decoder | 9.x-10.x |
+| `FLASHMLA_SPARSE` | bf16 | `auto`, `bfloat16`, `fp8_ds_mla`, `nvfp4_ds_mla` | %64 | 576, 512 | ❌ | ✅ | ❌ | ✅ | Decoder | 9.x-10.x |
 | `FLASH_ATTN_MLA` | fp16, bf16 | `auto`, `float16`, `bfloat16` | %16 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | 9.x |
-| `FLASH_ATTN_MLA_SPARSE` | fp16, bf16 | `auto`, `float16`, `bfloat16` | 64 | Any | ❌ | ✅ | ❌ | ❌ | Decoder | 9.x |
-| `ROCM_AITER_MLA` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | %1 | Any | ❌ | ❌ | ❌ | ❌ | Decoder | N/A |
-| `ROCM_AITER_MLA_SPARSE` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | 1, 64 | Any | ❌ | ✅ | ❌ | ❌ | Decoder | N/A |
-| `ROCM_AITER_TRITON_MLA` | fp16, bf16 | `auto` | Any | Any | ❌ | ❌ | ❌ | ❌ | Decoder | N/A |
+| `FLASH_ATTN_MLA_SPARSE` | fp16, bf16 | `auto`, `float16`, `bfloat16` | %64 | Any | ❌ | ✅ | ❌ | ❌ | Decoder | 9.x |
+| `FLASH_ATTN_MLA_SPARSE_FA4` | bf16 | `auto`, `bfloat16` | %64 | 576 | ❌ | ❌ | ❌ | ✅ | Decoder | Any |
+| `KIMI_K3_KV_BALANCED_MLA` | bf16 | `fp8`, `fp8_e4m3` | 32, 64 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | 10.x |
+| `ROCM_AITER_MLA` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `fp8_e5m2` | %1 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | N/A |
+| `ROCM_AITER_MLA_SPARSE` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3`, `mxfp4_mla`, `fp8_ds_mla` | 1, %16 | Any | ❌ | ✅ | ❌ | ✅ | Decoder | N/A |
+| `ROCM_AITER_TRITON_MLA` | fp16, bf16 | `auto` | Any | Any | ❌ | ❌ | ❌ | ✅ | Decoder | N/A |
 | `SM89_MLA_SPARSE` | bf16 | `fp8_ds_mla`, `fp8` | 64 | 576 | ❌ | ✅ | ❌ | ✅ | Decoder | Any |
 | `TOKENSPEED_MLA` | fp16, bf16 | `fp8`, `fp8_e4m3` | 32, 64 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | 10.x |
 | `TRITON_MLA` | fp16, bf16 | `auto`, `float16`, `bfloat16`, `fp8`, `fp8_e4m3` | %16 | Any | ❌ | ❌ | ❌ | ✅ | Decoder | Any |

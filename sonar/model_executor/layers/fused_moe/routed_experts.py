@@ -31,7 +31,7 @@ from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     resolve_quant_method,
 )
-from sonar.model_executor.utils import kernel_parameters
+from sonar.model_executor.utils import copy_weight_, kernel_parameters
 from sonar.utils.math_utils import cdiv
 
 if TYPE_CHECKING:
@@ -220,6 +220,20 @@ class RoutedExperts(PluggableLayer):
 
         self.lora_base_layer_prefix = ""
 
+    def padding_fill_params(self) -> list[str]:
+        """Params a direct reload zero-fills; read at cold start, before PWAL."""
+        c = self.moe_config
+        inter = c.intermediate_size_per_partition
+        if not (
+            c.hidden_dim > (c.hidden_dim_unpadded or c.hidden_dim)
+            or inter > (c.intermediate_size_per_partition_unpadded or inter)
+            # The loader refills this padding too, but a load plan skips loader fills.
+            or c.tp_shard_with_padding
+        ):
+            return []
+        # Per-expert scalars ((E,), (E, <=2)) aren't padded.
+        return [n for n, p in self._parameters.items() if p is not None and p.ndim > 1 and p.numel() > 2 * p.shape[0]]
+
     # TODO(bnell): Temporary hack. Get rid of this.
     def _replace_quant_method(self, quant_method: FusedMoEMethodBase):
         self.quant_method = quant_method
@@ -358,7 +372,7 @@ class RoutedExperts(PluggableLayer):
         """
         shard_size = param.shape[shard_dim]
         loaded_weight = loaded_weight.narrow(shard_dim, shard_size * tp_rank, shard_size)
-        param.copy_(loaded_weight)
+        copy_weight_(param, loaded_weight)
 
     def _load_model_weight_or_group_weight_scale(
         self,
@@ -436,7 +450,7 @@ class RoutedExperts(PluggableLayer):
                 hidden_dim=hidden_dim,
                 shard_dim=shard_dim,
             )
-            expert_data.copy_(loaded_weight)
+            copy_weight_(expert_data, loaded_weight)
         elif shard_id in ("w1", "w3"):
             self._load_w13(
                 shard_id=shard_id,
@@ -452,7 +466,7 @@ class RoutedExperts(PluggableLayer):
         dimension and tensor rank.
 
         For 2D weight tensors the two data dims are (0, 1). For 3D tensors
-        with an expert dimension at dim 0, they are (1, 2). ``shard_dim``
+        with an expert dimension at dim 0, they are (1, 2). `shard_dim`
         occupies one of these; the hidden dimension is the other.
         For 1D tensors (e.g. per-channel scales) returns 0.
         """
@@ -562,7 +576,7 @@ class RoutedExperts(PluggableLayer):
             hidden_dim=hidden_dim,
             shard_dim=shard_dim,
         )
-        expert_data.copy_(loaded_weight)
+        copy_weight_(expert_data, loaded_weight)
 
     def _load_w2(
         self,
@@ -611,9 +625,9 @@ class RoutedExperts(PluggableLayer):
                 expert_data.chunk(num_chunks, dim=0),
                 loaded_weight.chunk(num_chunks, dim=0),
             ):
-                dst.copy_(src)
+                copy_weight_(dst, src)
             return
-        expert_data.copy_(loaded_weight)
+        copy_weight_(expert_data, loaded_weight)
 
     def _load_single_value(self, param: torch.nn.Parameter, loaded_weight: torch.Tensor, expert_id: int):
         param_data = param.data
@@ -659,11 +673,11 @@ class RoutedExperts(PluggableLayer):
             # (FIXME) for gpt-oss all experts are combined
             if "bias" in weight_name:
                 dim1 = loaded_weight.shape[1]
-                param.data[:, :dim1].copy_(loaded_weight)
+                copy_weight_(param.data[:, :dim1], loaded_weight)
             else:
                 dim1 = loaded_weight.shape[1]
                 dim2 = loaded_weight.shape[2]
-                param.data[:, :dim1, :dim2].copy_(loaded_weight)
+                copy_weight_(param.data[:, :dim1, :dim2], loaded_weight)
             return True if return_success else None
 
         from sonar.model_executor.layers.quantization.online.moe_base import (
@@ -761,7 +775,7 @@ class RoutedExperts(PluggableLayer):
                         f"Parameter shape {tuple(expert_data.shape)} != "
                         f"checkpoint shape {tuple(loaded_weight.shape)}"
                     )
-                expert_data.copy_(loaded_weight)
+                copy_weight_(expert_data, loaded_weight)
             elif shard_id in ("w1", "w3"):
                 # BnB stores weights as flat packed tensors.  _load_w13 is
                 # still used to split the w1/w3 portions along shard_dim.
@@ -798,7 +812,11 @@ class RoutedExperts(PluggableLayer):
                     loaded_weight,
                     hidden_dim=0,
                 )
-                expert_data.copy_(loaded_weight)
+                # w2 is row-parallel: its bias is added before the TP
+                # all-reduce, so only one rank may hold it.
+                if self.moe_config.tp_rank != 0:
+                    loaded_weight = torch.zeros_like(loaded_weight)
+                copy_weight_(expert_data, loaded_weight)
             else:
                 self._load_w13(
                     shard_id=shard_id,
@@ -1146,14 +1164,14 @@ class RoutedExperts(PluggableLayer):
             ckpt_up_proj_name: Name of up projection in checkpoint
             num_experts: Number of logical (non-redundant) experts
             num_redundant_experts: Number of redundant experts
-            lora_base_layer_prefix: LoRA ``base_layer.`` prefix for the
-                ``weight_name`` (checkpoint) side
-            lora_base_layer_prefix_on_param_name: same, for the ``param_name``
-                side. Independent because ``get_expert_mapping`` resolves
-                ``param_name`` via ``getattr`` against this layer's bare
-                ``w13_weight``/``w2_weight`` (no prefix), while
-                ``make_expert_params_mapping`` indexes the model-wide
-                ``params_dict`` (prefix included).
+            lora_base_layer_prefix: LoRA `base_layer.` prefix for the
+                `weight_name` (checkpoint) side
+            lora_base_layer_prefix_on_param_name: same, for the `param_name`
+                side. Independent because `get_expert_mapping` resolves
+                `param_name` via `getattr` against this layer's bare
+                `w13_weight`/`w2_weight` (no prefix), while
+                `make_expert_params_mapping` indexes the model-wide
+                `params_dict` (prefix included).
             include_fused: Prepend the fused pre-fused-checkpoint entries
             is_gated: Whether w13 holds gate and up (gated activation) or a
                 single up projection. Selects the fused checkpoint layout.
@@ -1398,6 +1416,33 @@ class RoutedExperts(PluggableLayer):
             x=x,
             router_logits=router_logits,
             input_ids=input_ids,
+        )
+
+    @property
+    def supports_precomputed_routing(self) -> bool:
+        """Whether a monolithic kernel can take Sonar's routing instead."""
+        moe_kernel = getattr(self.quant_method, "moe_kernel", None)
+        return moe_kernel is not None and moe_kernel.supports_precomputed_routing()
+
+    def forward_monolithic_routed(
+        self,
+        x: torch.Tensor,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+    ) -> torch.Tensor | UnfinalizedMoEOutput:
+        """Run a monolithic kernel on Sonar's routing, where padding rows are -1
+        and activate no expert, which the kernel's own routing cannot do."""
+        moe_kernel = self.quant_method.moe_kernel
+        assert moe_kernel is not None and moe_kernel.supports_precomputed_routing()
+        return moe_kernel.apply_monolithic_routed(
+            x,
+            self.w13_weight,
+            self.w2_weight,
+            topk_weights,
+            topk_ids,
+            activation=self.activation,
+            global_num_experts=self.global_num_experts,
+            routing_sink=self.routing_sink,
         )
 
     def forward(

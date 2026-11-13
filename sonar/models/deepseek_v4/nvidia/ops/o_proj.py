@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
@@ -65,6 +66,10 @@ def _bf16_o_proj(
     return torch.einsum("tgd,grd->tgr", o_ref.to(torch.bfloat16), weight)
 
 
+if TYPE_CHECKING:
+    from sonar.config import SonarConfig
+
+
 def compute_fp8_einsum_recipe(
     block_size: int = 128,
 ) -> tuple[tuple[int, int, int], bool]:
@@ -72,7 +77,7 @@ def compute_fp8_einsum_recipe(
 
     SM90 keeps block-row FP32 scales. SM100 uses packed per-row E8M0 scales.
 
-    Returns ``(einsum_recipe, tma_aligned_scales)`` for ``deep_gemm_fp8_o_proj``.
+    Returns `(einsum_recipe, tma_aligned_scales)` for `deep_gemm_fp8_o_proj`.
     """
     cap = current_platform.get_device_capability()
     assert cap is not None, "DeepseekV4 attention requires a CUDA device"
@@ -99,12 +104,12 @@ def deep_gemm_fp8_o_proj(
     """O projection: inverse RoPE + grouped wo_a + wo_b.
 
     Shared by the FlashMLA and FlashInfer CUDA backends. The attention
-    layer selects the recipe at initialization. ``wo_b`` is any callable over
-    the flattened ``z``: the projection module itself, or a wrapper that also
+    layer selects the recipe at initialization. `wo_b` is any callable over
+    the flattened `z`: the projection module itself, or a wrapper that also
     reduce-scatters its output (DeepSeek-V4.1 GEMM-RS).
 
-    A QuantizedActivation ``o`` was already rotated and cast by the attention
-    kernel, one ``wo_a`` group per slot with the live groups first, so only
+    A QuantizedActivation `o` was already rotated and cast by the attention
+    kernel, one `wo_a` group per slot with the live groups first, so only
     the padding groups are sliced off.
     """
     use_fp8 = wo_a.weight.dtype == torch.float8_e4m3fn
@@ -184,16 +189,19 @@ _ROPE_QUANT_HEAD_DIM = 512
 _ROPE_QUANT_BLOCK = 128
 
 
-def rope_quant_unsupported_reason(layer: torch.nn.Module) -> str | None:
-    """Why ``layer`` cannot take FlashInfer's fused inverse RoPE + FP8 output.
+def rope_quant_unsupported_reason(layer: torch.nn.Module, sonar_config: "SonarConfig") -> str | None:
+    """Why `layer` cannot take FlashInfer's fused inverse RoPE + FP8 output.
 
-    DSv4 always has 8 heads per ``wo_a`` group at any TP size, and the rest of
+    DSv4 always has 8 heads per `wo_a` group at any TP size, and the rest of
     the kernel's fixed shape (head/RoPE dims, per-128 einsum scales, FP32 RoPE
     cache) is what the SM100 layer uses anyway. What varies is the local head
     count and the configs the layer also serves unquantized.
     """
     if not is_deep_gemm_supported():
         return "RopeQuant needs DeepGEMM output projection support"
+    if sonar_config.lora_config is not None:
+        # wo_a's adapter needs the BF16 output, which RopeQuant never writes.
+        return "RopeQuant is incompatible with LoRA"
     if layer.n_local_heads != _ROPE_QUANT_NUM_HEADS:
         # Padding fewer heads up to the kernel's fixed 128 costs more
         # attention than the fused epilogue saves.
@@ -208,9 +216,9 @@ def rope_quant_unsupported_reason(layer: torch.nn.Module) -> str | None:
 def rope_quant_attn_out(num_tokens: int, device: torch.device) -> QuantizedActivation:
     """Allocate the output pair the RopeQuant kernel writes.
 
-    Values are group-major, ``[num_tokens, 16, 8 * 512]`` over physical
-    ``[group, token, K]``. Scales are MN-major packed UE8M0, one int32 per
-    head over its four 128-wide blocks. Both are what ``fp8_einsum`` consumes.
+    Values are group-major, `[num_tokens, 16, 8 * 512]` over physical
+    `[group, token, K]`. Scales are MN-major packed UE8M0, one int32 per
+    head over its four 128-wide blocks. Both are what `fp8_einsum` consumes.
     """
     n_groups = _ROPE_QUANT_NUM_HEADS // _ROPE_QUANT_HEADS_PER_GROUP
     group_width = _ROPE_QUANT_HEADS_PER_GROUP * _ROPE_QUANT_HEAD_DIM

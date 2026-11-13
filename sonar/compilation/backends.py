@@ -3,7 +3,6 @@
 
 import ast
 import dataclasses
-import hashlib
 import json
 import operator
 import os
@@ -13,7 +12,6 @@ from collections import defaultdict
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
-from functools import partial
 from typing import Any
 
 import torch
@@ -29,7 +27,7 @@ from sonar.compilation.codegen import (
 )
 from sonar.config import CompilationConfig, CUDAGraphMode, SonarConfig
 from sonar.config.compilation import DynamicShapesType
-from sonar.config.utils import Range, hash_factors
+from sonar.config.utils import CompileFactors, Range, hash_factors
 from sonar.logger import init_logger
 from sonar.logging_utils import lazy
 from sonar.platforms import current_platform
@@ -37,6 +35,12 @@ from sonar.tracing import instrument, instrument_manual
 from sonar.utils.import_utils import resolve_obj_by_qualname
 from sonar.utils.torch_utils import is_torch_equal_or_newer
 
+from .caching import (
+    SonarSerializableFunction,
+    compute_env_and_config_hashes,
+    get_code_factors,
+    read_code_files,
+)
 from .compiler_interface import (
     CompilerInterface,
     EagerAdaptor,
@@ -147,8 +151,8 @@ class CompilerManager:
     def _log_prefix(self) -> str:
         return f"[{self.prefix}] " if self.prefix else ""
 
-    def compute_hash(self, sonar_config: SonarConfig) -> str:
-        return self.compiler.compute_hash(sonar_config)
+    def compile_factors(self, sonar_config: SonarConfig) -> CompileFactors:
+        return self.compiler.compile_factors(sonar_config)
 
     @contextmanager
     def compile_context(self, compile_range: Range) -> Generator[None, None, None]:
@@ -1039,41 +1043,33 @@ class SonarBackend:
 
     @dynamo_timed("sonar_backend")
     def __call__(self, graph: fx.GraphModule, example_inputs: Sequence[Any]) -> Any:
-        from .caching import (
-            SonarSerializableFunction,
-        )
-
         sonar_config = self.sonar_config
 
         self._log_compilation_config()
 
         # Minimal hashing here with existing utilities, reused below.
 
-        env_factors = envs.compile_factors()
-        env_hash = hash_factors(env_factors)
-        # Compute config/compiler/code hashes once and reuse
-        config_hash = sonar_config.compute_hash()
-        compiler_hash = self.compiler_manager.compute_hash(sonar_config)
-        forward_code_files = list(sorted(self.compilation_config.traced_files))
-
+        (
+            env_hash,
+            config_hash,
+            env_factors,
+            config_factors,
+        ) = compute_env_and_config_hashes(sonar_config)
+        compiler_factors = self.compiler_manager.compile_factors(sonar_config)
+        compiler_hash = hash_factors(compiler_factors)
+        traced_files = self.compilation_config.traced_files
         logger.debug(
             "Traced files (to be considered for compilation cache):\n%s",
-            lazy(lambda: "\n".join(forward_code_files)),
+            lazy(lambda: "\n".join(sorted(map(str, traced_files)))),
         )
-        hash_content = []
-        for filepath in forward_code_files:
-            if filepath == "<string>":
-                # This means the function was dynamically generated, with
-                # e.g. exec(). We can't actually check these.
-                continue
-            hash_content.append(filepath)
-            try:
-                with open(filepath) as f:
-                    hash_content.append(f.read())
-            except (OSError, UnicodeDecodeError):
-                logger.warning("Failed to read file %s", filepath)
-                continue
-        code_hash = hashlib.sha256("\n".join(hash_content).encode()).hexdigest()
+        code_factors = get_code_factors(read_code_files(traced_files))
+        code_hash = hash_factors({"files": code_factors})
+        all_factors: dict[str, object] = {
+            "env": env_factors,
+            "config": config_factors,
+            "code": {"files": code_factors},
+            "compiler": compiler_factors,
+        }
         # Clear after consumption
         self.compilation_config.traced_files.clear()
         if not self.compilation_config.cache_dir:
@@ -1081,10 +1077,9 @@ class SonarBackend:
             # that affects the compilation. if none of the factors change,
             # the cache dir will be the same so that we can reuse the compiled
             # graph.
-            factors = [env_hash, config_hash, code_hash, compiler_hash]
             # Use SHA-256 for cache key hashing to be consistent across
-            # compute_hash functions. Truncate for a short cache dir name.
-            hash_key = hashlib.sha256(str(factors).encode()).hexdigest()[:10]
+            # compile_factors functions. Truncate for a short cache dir name.
+            hash_key = hash_factors(all_factors)[:10]
             cache_dir = os.path.join(envs.SONAR_CACHE_ROOT, "torch_compile_cache", hash_key)
             self.compilation_config.cache_dir = cache_dir
 
@@ -1099,16 +1094,6 @@ class SonarBackend:
 
         # Honors opt-outs such as CompilationMode.NONE or SONAR_DISABLE_COMPILE_CACHE.
         disable_cache = not is_compile_cache_enabled(self.inductor_config)
-
-        # TODO(patchy): the V1 torch.compile ngram-gpu kernel causes sonar
-        # torch compile cache errors. The V2 implementation is pure Triton and
-        # does not need the cache disabled.
-        is_v1_ngram_gpu_enabled = (
-            sonar_config.speculative_config is not None
-            and sonar_config.speculative_config.use_ngram_gpu()
-            and not sonar_config.use_v2_model_runner
-        )
-        disable_cache = disable_cache or is_v1_ngram_gpu_enabled
 
         if disable_cache:
             logger.info("%sSonar's torch.compile cache is disabled.", self._log_prefix())
@@ -1132,19 +1117,14 @@ class SonarBackend:
             local_cache_dir,
         )
 
-        # Persist and log only hash-relevant factors together.
+        # Persist cache key factors for debugging/repro.
         try:
-            logger.debug(
-                "Compile env factors (raw):\n%s\nSonar config hash: %s",
-                lazy(partial(pprint.pformat, env_factors, width=120)),
-                config_hash,
-            )
             meta_path = os.path.join(local_cache_dir, "cache_key_factors.json")
             if not os.path.exists(meta_path):
                 with open(meta_path, "w") as f:
                     json.dump(
                         {
-                            "env": env_factors,  # raw factors used for env_hash
+                            **all_factors,
                             "config_hash": config_hash,
                             "code_hash": code_hash,
                             "compiler_hash": compiler_hash,

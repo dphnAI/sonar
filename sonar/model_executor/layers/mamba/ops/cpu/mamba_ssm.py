@@ -3,7 +3,7 @@
 
 import torch
 
-import sonar._custom_ops as ops
+import sonar._cpu_ops as ops
 from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
 

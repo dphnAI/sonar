@@ -9,7 +9,10 @@ import pytest
 from sonar.entrypoints.generate.base.protocol import DeltaMessage
 from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from sonar.parser.abstract_parser import DelegatingParser
-from sonar.parser.engine.registered_adapters import Qwen3ParserReasoningAdapter
+from sonar.parser.engine.registered_adapters import (
+    GraniteParserToolAdapter,
+    Qwen3ParserReasoningAdapter,
+)
 from sonar.reasoning.basic_parsers import BaseThinkingReasoningParser
 from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 
@@ -103,6 +106,37 @@ def make_parser(tokenizer, reasoning=False, tool=False, **kwargs):
         tool_parser_cls = Hermes2ProToolParser if tool else None
 
     return TestParser(tokenizer, **kwargs)
+
+
+@pytest.mark.parametrize("parser_cls", [Hermes2ProToolParser, GraniteParserToolAdapter])
+@pytest.mark.parametrize("reasoning", [False, True])
+def test_required_stream_owns_history(tokenizer, request_obj, monkeypatch, parser_cls, reasoning):
+    monkeypatch.setattr(parser_cls, "supports_required_and_named", True)
+
+    class TestParser(DelegatingParser):
+        tool_parser_cls = parser_cls
+        reasoning_parser_cls = Qwen3ParserReasoningAdapter if reasoning else None
+
+    parser = TestParser(tokenizer)
+    request = request_obj.model_copy(update={"tool_choice": "required"})
+    parameters = [{"city": 'Beijing " north', "days": [1, 2]}, {"city": "Dallas"}]
+    text = json.dumps([{"name": "get_weather", "parameters": args} for args in parameters])
+    if reasoning:
+        text = "<think>let me think about this</think>" + text
+    results = stream_text(parser, tokenizer, text, request, prompt_token_ids=[])
+    thinking, content, calls = collect_fields(results)
+    assert thinking == ("let me think about this" if reasoning else "")
+    assert content == ""
+    assert [(call.index, call.function.name) for call in calls if call.id is not None] == [
+        (0, "get_weather"),
+        (1, "get_weather"),
+    ]
+    for index, args in enumerate(parameters):
+        arguments = [call.function.arguments or "" for call in calls if call.index == index]
+        assert json.loads("".join(arguments)) == args
+    if parser._engine_based:
+        assert parser._stream_state.previous_text == ""
+        assert parser._stream_state.previous_token_ids == []
 
 
 def stream_text(parser, tokenizer, text, request, prompt_token_ids=None):
@@ -331,7 +365,7 @@ def test_parse_delta_finished_appends_remaining_args(tokenizer, request_obj):
     remainder = ',"unit":"celsius"}'
     prompt_ids: list[int] | None = []
     results: list[DeltaMessage | None] = []
-    for i, tid in enumerate(token_ids):
+    for tid in token_ids:
         prev = results[-1] if results else None
         prev_had_args = (
             prev and prev.tool_calls and any(tc.function and tc.function.arguments for tc in prev.tool_calls)
@@ -587,7 +621,7 @@ def test_engine_reasoning_no_tool_batched_content_passthrough(tokenizer, request
     The mixed-parser tests above pair the engine reasoning parser with
     Hermes; this exercises the engine-reasoning-only path through the
     hoisted finish_streaming() transition. A single batched delta
-    carries ``</think>`` plus the following content. The post-``</think>``
+    carries `</think>` plus the following content. The post-`</think>`
     text must be emitted as content, and the marker must not leak.
     """
     parser = Qwen3ReasoningNoToolParser(tokenizer)
@@ -682,7 +716,7 @@ def test_engine_reasoning_no_tool_holdback_finished_and_hidden_reasoning(
 
 
 def _decode_stream_deltas(tokenizer, groups):
-    """Decode token-ID groups via the real incremental ``DecodeStream``."""
+    """Decode token-ID groups via the real incremental `DecodeStream`."""
     from tokenizers.decoders import DecodeStream
 
     stream = DecodeStream(skip_special_tokens=False)

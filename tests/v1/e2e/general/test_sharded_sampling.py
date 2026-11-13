@@ -97,9 +97,11 @@ def _generate(
     prompts: list[str],
     sampling_params: list[SamplingParams],
     revision: str | None,
+    model_impl: str,
 ):
     llm = LLM(
         model=model,
+        model_impl=model_impl,
         revision=revision,
         tokenizer_revision=revision,
         tensor_parallel_size=2,
@@ -267,7 +269,6 @@ def _assert_outputs_match(ref_outputs, shard_outputs, params) -> None:
 
 
 def _configure_test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     # Required for the collective_rpc mode check below.
     monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     # Queue every request before the first step, so both boots schedule the
@@ -277,14 +278,16 @@ def _configure_test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @multi_gpu_test(num_gpus=2)
 @pytest.mark.parametrize(
-    ("model", "revision", "prompts"),
+    ("model", "revision", "prompts", "model_impl"),
     [
-        pytest.param(MODEL, None, PROMPTS, id="llama"),
-        pytest.param(MODEL, None, PROMPTS[:1], id="llama-empty-rank"),
+        pytest.param(MODEL, None, PROMPTS, "auto", id="llama"),
+        pytest.param(MODEL, None, PROMPTS[:1], "auto", id="llama-empty-rank"),
+        pytest.param(MODEL, None, PROMPTS, "transformers", id="llama-transformers"),
         pytest.param(
             GPT_OSS_MODEL,
             GPT_OSS_REVISION,
             PROMPTS,
+            "auto",
             id="gpt-oss",
         ),
     ],
@@ -294,6 +297,7 @@ def test_sharded_sampling_outputs_match(
     model: str,
     revision: str | None,
     prompts: list[str],
+    model_impl: str,
 ):
     """Generation, logprobs, and prompt logprobs match between batch-sharded
     sampling and the replicated fallback."""
@@ -306,6 +310,7 @@ def test_sharded_sampling_outputs_match(
         prompts=prompts,
         sampling_params=sampling_params,
         revision=revision,
+        model_impl=model_impl,
     )
     shard_outputs = _generate(
         disable_sharding=False,
@@ -313,6 +318,7 @@ def test_sharded_sampling_outputs_match(
         prompts=prompts,
         sampling_params=sampling_params,
         revision=revision,
+        model_impl=model_impl,
     )
 
     expected_params = sampling_params + sampling_params[::-1]

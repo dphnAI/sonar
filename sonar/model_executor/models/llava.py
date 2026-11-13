@@ -529,7 +529,7 @@ class LlavaForConditionalGeneration(
         )
 
         # NOTE: These are special cases for Pixtral-12B in the HF-format
-        # https://huggingface.co/mistral-community/pixtral-12b/blob/main/config.json  # noqa
+        # https://huggingface.co/mistral-community/pixtral-12b/blob/main/config.json
         if config.text_config.architectures is None and config.text_config.model_type == "mistral":
             config.text_config.architectures = ["MistralForCausalLM"]
         if config.projector_hidden_act is None and config.vision_config.hidden_act == "gelu":

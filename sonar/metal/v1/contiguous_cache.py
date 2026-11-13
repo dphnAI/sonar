@@ -311,10 +311,10 @@ def _merge_rotating_kv_caches(
 ) -> BatchRotatingKVCache:
     """Merge per-request RotatingKVCache objects into a single BatchRotatingKVCache.
 
-    This mirrors ``BatchRotatingKVCache.merge`` but pre-computes the temporal-ordered
-    keys/values, trims them to ``len(cache)`` (the effective sliding-window length),
+    This mirrors `BatchRotatingKVCache.merge` but pre-computes the temporal-ordered
+    keys/values, trims them to `len(cache)` (the effective sliding-window length),
     and uses that length for the copy width.  The upstream implementation in
-    mlx-lm <= 0.29.1 uses ``c.offset`` which can exceed the underlying array size
+    mlx-lm <= 0.29.1 uses `c.offset` which can exceed the underlying array size
     after the cache has rotated, causing a broadcast shape error.
 
     This workaround can be removed once sonar metal can depend on an mlx-lm version

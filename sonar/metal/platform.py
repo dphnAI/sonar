@@ -193,10 +193,10 @@ class MetalPlatform(Platform):
     def manual_seed_all(cls, seed: int) -> None:
         """Seed the Metal-side RNG (MLX) for this platform.
 
-        Called from ``sonar.utils.torch_utils.set_random_seed`` after Python
-        ``random``, NumPy, and PyTorch (which reaches MPS via its default
+        Called from `sonar.utils.torch_utils.set_random_seed` after Python
+        `random`, NumPy, and PyTorch (which reaches MPS via its default
         generator) have all been seeded.  MLX maintains its own global PRNG
-        that does not auto-seed and is not reached by ``torch.manual_seed``,
+        that does not auto-seed and is not reached by `torch.manual_seed`,
         so we seed it explicitly here.
         """
         import mlx.core as mx
@@ -384,7 +384,7 @@ class MetalPlatform(Platform):
         """Update block_size for Metal platform.
 
         Delegates to Sonar's base implementation, which reads the Metal kernel
-        alignment (MultipleOf(16)) from our :meth:`_find_non_ssm_backends`
+        alignment (MultipleOf(16)) from our `_find_non_ssm_backends`
         override. Adds a one-time warning when paged attention is enabled for
         a hybrid model, explaining the cache-block-size translation mechanism
         (PR #235).

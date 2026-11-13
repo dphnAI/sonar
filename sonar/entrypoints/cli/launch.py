@@ -54,7 +54,7 @@ class LaunchSubcommand(CLISubcommand):
     """The `launch` subcommand for the Sonar CLI.
 
     Uses nested sub-subcommands so each component can define its own
-    arguments independently (e.g. ``sonar launch render``).
+    arguments independently (e.g. `sonar launch render`).
     """
 
     name = "launch"

@@ -26,8 +26,8 @@ from sonar.metal.paged_attention_common import get_context
 def is_linear_attention(module: nn.Module) -> bool:
     """Return True if *module* is a linear attention layer (e.g. GatedDeltaNet).
 
-    Checks for ``conv1d`` (present in all known GatedDeltaNet variants) and
-    the absence of ``q_proj`` (which would indicate SDPA).
+    Checks for `conv1d` (present in all known GatedDeltaNet variants) and
+    the absence of `q_proj` (which would indicate SDPA).
     """
     return hasattr(module, "conv1d") and not hasattr(module, "q_proj")
 
@@ -42,7 +42,7 @@ class GDNPagedAttentionWrapper(nn.Module):
     4. Recurrent update — C++ Metal kernel, batched, in-place state pool
     5. Output norm + projection — stateless, batched
 
-    When no ``PagedAttentionContext`` is active, delegates to the original
+    When no `PagedAttentionContext` is active, delegates to the original
     module unchanged.
     """
 

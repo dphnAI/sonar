@@ -31,9 +31,6 @@ from sonar.model_executor.models.utils import (
     maybe_prefix,
 )
 from sonar.sequence import IntermediateTensors
-from sonar.v1.outputs import SamplerOutput
-from sonar.v1.sample.metadata import SamplingMetadata
-from sonar.v1.sample.sampler import Sampler
 
 from .model import HYV4DecoderLayer, _normalize_hyv4_config
 
@@ -57,7 +54,7 @@ _MTP_QUANT_EXCLUSION_ATTRS = ("ignored_layers", "exclude_modules")
 def _get_spec_layer_idx_from_weight_name(config: PreTrainedConfig, weight_name: str) -> int | None:
     """Return the MTP layer index a checkpoint weight belongs to, or None.
 
-    Compatible with``num_nextn_predict_layers`` of 1 and 2 for a single MTP
+    Compatible with`num_nextn_predict_layers` of 1 and 2 for a single MTP
     head, matching how the HY V4 checkpoints are exported.
     """
     if getattr(config, "num_nextn_predict_layers", 0) < 1:
@@ -86,9 +83,9 @@ def _resolve_fused_expert_param(
     """Map a fused expert checkpoint suffix onto a draft parameter name.
 
     Fused checkpoints pack every expert into one tensor and name the companion
-    scales by suffixing the projection (``experts.gate_up_proj_scale_inv``),
-    while the draft model owns ``experts.routed_experts.w13_weight`` plus a
-    separate ``..._scale_inv`` parameter. Dropping the suffix would push the
+    scales by suffixing the projection (`experts.gate_up_proj_scale_inv`),
+    while the draft model owns `experts.routed_experts.w13_weight` plus a
+    separate `..._scale_inv` parameter. Dropping the suffix would push the
     scale into the weight parameter and leave the scale at its sentinel init.
 
     Args:
@@ -141,10 +138,10 @@ def _create_mtp_quant_config(
 ) -> QuantizationConfig | None:
     """Create the quantization config for the MTP layers.
 
-    The MTP quantization algorithm is given by the ``mtp_quant_algo`` field in
-    ``config.json``, independently of the backbone's quantization. Supported
-    values are ``"FP8"``, ``"NONE"`` (inherit the backbone) and ``"BF16"`` /
-    ``"FP16"`` (unquantized). A missing or ``"NONE"`` value falls back to the
+    The MTP quantization algorithm is given by the `mtp_quant_algo` field in
+    `config.json`, independently of the backbone's quantization. Supported
+    values are `"FP8"`, `"NONE"` (inherit the backbone) and `"BF16"` /
+    `"FP16"` (unquantized). A missing or `"NONE"` value falls back to the
     backbone config.
 
     Args:
@@ -208,17 +205,17 @@ def _remap_mtp_quant_exclusions(
 ) -> QuantizationConfig | None:
     """Translate checkpoint-named MTP quant exclusions to draft prefixes.
 
-    ``modules_to_not_convert`` / ``exclude_modules`` name MTP modules the way
-    the checkpoint does (``model.mtp_layers.0.self_attn.linear_gate``), while
-    the draft model builds them under ``model.layers.<num_hidden_layers + i>``.
-    ``is_layer_skipped`` compares prefixes for exact equality, so without this
+    `modules_to_not_convert` / `exclude_modules` name MTP modules the way
+    the checkpoint does (`model.mtp_layers.0.self_attn.linear_gate`), while
+    the draft model builds them under `model.layers.<num_hidden_layers + i>`.
+    `is_layer_skipped` compares prefixes for exact equality, so without this
     translation an excluded MTP module gets a quant method even though its
-    checkpoint weight is BF16 with no ``weight_scale`` / ``weight_scale_inv``
-    companion: the scale then keeps its ``finfo(float32).min`` sentinel and the
+    checkpoint weight is BF16 with no `weight_scale` / `weight_scale_inv`
+    companion: the scale then keeps its `finfo(float32).min` sentinel and the
     layer silently produces garbage.
 
     The list lives under a different attribute per config class, hence the
-    lookup over ``_MTP_QUANT_EXCLUSION_ATTRS``.
+    lookup over `_MTP_QUANT_EXCLUSION_ATTRS`.
 
     Args:
         quant_config: The MTP quantization config to widen.
@@ -372,7 +369,7 @@ class HYV4MultiTokenPredictorLayer(nn.Module):
 
 
 def _extend_layer_types(layer_types: list[str] | None, layer_idx: int, fallback: str) -> list[str] | None:
-    """Pad a per-layer config list so``layer_idx`` is addressable."""
+    """Pad a per-layer config list so`layer_idx` is addressable."""
     if layer_types is None or len(layer_types) > layer_idx:
         return layer_types
     fill = layer_types[-1] if layer_types else fallback
@@ -441,7 +438,7 @@ class HYV4MultiTokenPredictor(nn.Module):
         self.spec_step_idx: int = 0
 
     def set_skip_topk(self, skip: bool) -> None:
-        """Toggle the draft indexer for ``index_share_for_mtp_iteration``.
+        """Toggle the draft indexer for `index_share_for_mtp_iteration`.
 
         The proposer clears the flag for draft step 0 so the MTP layer builds
         its own top-k indices, then sets it for steps 1+ so they reuse what
@@ -451,7 +448,7 @@ class HYV4MultiTokenPredictor(nn.Module):
             layer.mtp_block.self_attn.skip_topk = skip
 
     def compact_topk_indices(self, slot_ids: torch.Tensor) -> None:
-        """Move the top-k rows at ``slot_ids`` to the front of the buffer.
+        """Move the top-k rows at `slot_ids` to the front of the buffer.
 
         Step 0 writes one row per query token of the multi-token batch, while
         steps 1+ decode a single token per request and index the buffer from 0.
@@ -512,13 +509,12 @@ class HYV4MTP(nn.Module):
         self.config = sonar_config.model_config.hf_config
         self.model = HYV4MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
         self.quant_config = self.model.quant_config
-        self.sampler = Sampler()
 
     def set_topk_indices_buffer(self, topk_indices_buffer: torch.Tensor) -> None:
         """Share the target sparse-index buffer with every draft consumer.
 
-        Proposers that walk ``named_modules()`` instead of calling this reach
-        the same consumers via ``HYV4MLAAttention.topk_indices_buffer``.
+        Proposers that walk `named_modules()` instead of calling this reach
+        the same consumers via `HYV4MLAAttention.topk_indices_buffer`.
         """
         self.model.topk_indices_buffer = topk_indices_buffer
         for layer in self.model.layers.values():
@@ -563,13 +559,6 @@ class HYV4MTP(nn.Module):
     ) -> torch.Tensor | None:
         self.model.spec_step_idx = spec_step_idx
         return self.model.compute_logits(hidden_states)
-
-    def sample(
-        self,
-        logits: torch.Tensor,
-        sampling_metadata: SamplingMetadata,
-    ) -> SamplerOutput | None:
-        return self.sampler(logits, sampling_metadata)
 
     def _rewrite_spec_layer_name(self, spec_layer: int, name: str) -> str:
         if f"model.layers.{spec_layer}.embed_tokens" in name:
@@ -631,7 +620,7 @@ class HYV4MTP(nn.Module):
             params_dict: The draft model's named parameters.
             loaded_params: Set updated with the parameters that received a value.
             split_expert_params_mapping: Mapping for the per-expert layout.
-            fused_expert_param_names: ``(mlp_prefix, tag) -> param name`` for the
+            fused_expert_param_names: `(mlp_prefix, tag) -> param name` for the
                 all-experts-packed layout.
             num_experts: Total number of routed experts.
 
@@ -848,28 +837,4 @@ class HYV4MTP(nn.Module):
             loaded_params.add(name)
 
         logger.info_once("HYV4 MTP draft model loaded: %d params", len(loaded_params))
-        unassigned_all = sorted(set(params_dict) - loaded_params)
-        # KVCacheScaleParameter (``k_scale`` / ``v_scale`` / ``q_scale`` /
-        # ``prob_scale``) is created by ``BaseKVCacheMethod.create_weights`` for
-        # every Attention layer that runs on an fp8-family quant method, and
-        # its -1.0 sentinel is replaced by the runtime default (1.0) in
-        # ``process_weights_after_loading`` -- which runs *after* this method.
-        # HY V4 checkpoints intentionally omit these (``kv_cache_quant_algo:
-        # null``); silence them only when the parameter is actually the
-        # sentinel type so a genuine mismatch on a same-named tensor still
-        # reaches the warning.
-        from sonar.model_executor.layers.quantization.kv_cache import (
-            KVCacheScaleParameter,
-        )
-
-        unassigned = [name for name in unassigned_all if not isinstance(params_dict.get(name), KVCacheScaleParameter)]
-        if unassigned:
-            # A draft parameter with no checkpoint source keeps its sentinel
-            # init value (FP8 scales start at finfo(float32).min), which
-            # silently destroys draft quality instead of failing the load.
-            logger.warning(
-                "HYV4 MTP draft model: %d parameters received no checkpoint value: %s",
-                len(unassigned),
-                ", ".join(unassigned),
-            )
         return loaded_params

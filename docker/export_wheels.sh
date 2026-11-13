@@ -8,7 +8,7 @@ set -e
 #   CUDA_VERSION=12.8.1 ./docker/export_wheels.sh
 #
 # Environment variables:
-#   CUDA_VERSION      - CUDA version (default: 13.0.3)
+#   CUDA_VERSION      - CUDA version (default: 13.2.1)
 #   TARGETPLATFORM    - Target platform (default: linux/amd64)
 #   TORCH_CUDA_ARCH_LIST - CUDA arch list to compile into the wheel
 #   MAX_JOBS           - Number of parallel jobs for Ninja (default: 2)
@@ -17,7 +17,7 @@ set -e
 #   SONAR_VERSION_OVERRIDE - Wheel version override. If unset and the
 #                                checkout is exactly on a tag, inferred from it.
 
-CUDA_VERSION="${CUDA_VERSION:-13.0.3}"
+CUDA_VERSION="${CUDA_VERSION:-13.2.1}"
 TARGETPLATFORM="${TARGETPLATFORM:-linux/amd64}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-7.0 7.5 8.0 8.9 9.0 10.0 11.0 12.0}"

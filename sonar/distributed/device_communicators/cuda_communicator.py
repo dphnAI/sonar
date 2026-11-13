@@ -154,6 +154,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.pcie_pull_ar_comm: PciePullAllReduce | None = None
         self.aiter_ar_comm: AiterCustomAllreduce | None = None
         self.use_aiter_ag_rs: bool = False
+        self.use_aiter_tp_all_gather: bool = False
 
         # cuMem graph buffers cannot be IPC-registered; capture copies them instead.
         config = get_current_sonar_config_or_none()
@@ -222,6 +223,10 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 self.aiter_ar_comm = None
             else:
                 self.use_aiter_ag_rs = True
+        elif self.aiter_ar_comm is not None and self.world_size in (2, 4, 8):
+            from sonar.platforms.rocm import get_cdna_version
+
+            self.use_aiter_tp_all_gather = get_cdna_version() in (3, 4)
 
         if (
             use_custom_allreduce
@@ -326,7 +331,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
     def _log_all_reduce_backend_selection(self) -> None:
         """Log the all-reduce backends that are active for this group.
 
-        The dispatch chain in ``all_reduce`` tries backends in this order and
+        The dispatch chain in `all_reduce` tries backends in this order and
         falls through to the next one if the current backend rejects the
         input (size/dtype gates) or is disabled. The list of "enabled"
         backends below is the subset of potential backends that may be
@@ -490,10 +495,33 @@ class CudaCommunicator(DeviceCommunicatorBase):
         # On ROCm, the base-class all_gather (all_gather_into_tensor) is faster
         # than pynccl-based paths for TP forward passes.
         if current_platform.is_rocm():
+            out = self._maybe_aiter_all_gather(input_, dim)
+            if out is not None:
+                return out
             return super().all_gather(input_, dim)
         if dim == 0 and should_nccl_symm_mem_ag_rs():
             return self._all_gather_symm_mem(input_.contiguous())
         return super().all_gather(input_, dim)
+
+    def _maybe_aiter_all_gather(self, input_: torch.Tensor, dim: int) -> torch.Tensor | None:
+        aiter_comm = self.aiter_ar_comm
+        if (
+            not self.use_aiter_tp_all_gather
+            or aiter_comm is None
+            or input_.dtype not in (torch.bfloat16, torch.float16, torch.float32)
+            or input_.numel() == 0
+            or not input_.is_contiguous()
+            or not aiter_comm.should_custom_ag(input_)
+        ):
+            return None
+        input_size = input_.size()
+        if dim > 0:
+            row = input_size[dim:].numel()
+            if row * input_.element_size() % 16 != 0:
+                return None
+            input_ = input_.view(-1, row)
+        output = aiter_comm.all_gather_unreg(input_, dim=0 if dim == 0 else -1)
+        return output.view(input_size[:dim] + (self.world_size * input_size[dim],) + input_size[dim + 1 :])
 
     def reduce_scatter(self, input_: torch.Tensor, dim: int = -1):
         world_size = self.world_size
@@ -649,9 +677,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
         """Persistent, pre-registered NCCL symmetric-memory scratch buffer.
 
         Allocating a fresh symm tensor per collective pays the
-        ``nccl_symm_mem_context`` snapshot + window-registration scan on every
+        `nccl_symm_mem_context` snapshot + window-registration scan on every
         call (~0.5 ms/RS+AG pair, dwarfing the NVLS transfer itself). Instead,
-        each ``(role, shape[1:], dtype, device)`` keeps a geometric high-water
+        each `(role, shape[1:], dtype, device)` keeps a geometric high-water
         allocation and returns a leading slice. Superseded allocations remain
         referenced because a captured CUDA graph may still use their pointers;
         geometric growth bounds their total capacity to less than twice the

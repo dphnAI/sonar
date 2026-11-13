@@ -44,6 +44,7 @@ class MockModelConfig:
     task = "generate"
     runner_type = "generate"
     model = MODEL_NAME
+    served_model_name = MODEL_NAME
     tokenizer = MODEL_NAME
     trust_remote_code = False
     tokenizer_mode = "auto"
@@ -125,6 +126,21 @@ def _build_serving_chat(engine: AsyncLLM, monkeypatch: pytest.MonkeyPatch) -> Op
         AsyncMock(side_effect=_fake_preprocess_chat),
     )
     return serving_chat
+
+
+@pytest.mark.asyncio
+async def test_empty_messages_rejected_before_generation(monkeypatch):
+    serving_chat = OpenAIServingChat.__new__(OpenAIServingChat)
+    create_completion = AsyncMock()
+    monkeypatch.setattr(serving_chat, "_create_chat_completion", create_completion)
+    request = ChatCompletionRequest(model=MODEL_NAME, messages=[])
+
+    response = await serving_chat.create_chat_completion(request)
+
+    assert isinstance(response, ErrorResponse)
+    assert response.error.code == 400
+    assert response.error.param == "messages"
+    create_completion.assert_not_called()
 
 
 @pytest.mark.asyncio

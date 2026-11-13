@@ -54,6 +54,8 @@ from sonar.model_executor.model_loader.weight_cache.protocol import (
 )
 from sonar.model_executor.model_loader.weight_cache.utils import (
     is_draft_model_cacheable,
+    record_external_weight_charge,
+    record_external_weight_fallback,
 )
 from sonar.model_executor.utils import weight_cache_model_construction, weights_already_processed
 from sonar.tracing import instrument
@@ -132,7 +134,8 @@ class IpcModelLoader(BaseModelLoader):
         if self.mode != "zero_copy":
             return 0
         total = self._daemon_memory()
-        if is_draft_model_cacheable(sonar_config.speculative_config):
+        # The engine runs the draft model only on the last pipeline stage.
+        if is_draft_model_cacheable(sonar_config.speculative_config) and get_pp_group().is_last_rank:
             # The draft group is queried with the same config the engine
             # would load the draft with.
             draft_config = get_draft_load_config(sonar_config)
@@ -169,7 +172,9 @@ class IpcModelLoader(BaseModelLoader):
             raise WeightCacheUnavailableError(
                 f"Weight cache daemon rejected the memory query: {response.get('message')}"
             )
-        return int(response.get("memory_bytes", 0))
+        memory_bytes = int(response.get("memory_bytes", 0))
+        record_external_weight_charge(self._resolve_socket_path(), self.is_draft, memory_bytes)
+        return memory_bytes
 
     def download_model(self, model_config: ModelConfig) -> None:
         DefaultModelLoader(self._fallback_load_config()).download_model(model_config)
@@ -253,7 +258,10 @@ class IpcModelLoader(BaseModelLoader):
             if state_fetched and self.mode == "copy":
                 self._send_release()
             torch.accelerator.empty_cache()
-        return self._fallback_load(sonar_config, model_config, prefix)
+        model = self._fallback_load(sonar_config, model_config, prefix)
+        if self.mode == "zero_copy":
+            record_external_weight_fallback(self._resolve_socket_path(), self.is_draft)
+        return model
 
     def _build_model(
         self,

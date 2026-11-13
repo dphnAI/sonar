@@ -57,8 +57,8 @@ MODELS = [
     pytest.param(
         "Intel/Qwen2-0.5B-Instruct-int4-sym-AutoRound",
         marks=pytest.mark.skipif(
-            not (current_platform.is_cuda() or current_platform.is_xpu()),
-            reason="AWQ AutoRound model only supports CUDA/XPU backend for now.",
+            not (current_platform.is_cuda_alike() or current_platform.is_xpu()),
+            reason="AWQ AutoRound model only supports CUDA/ROCm/XPU backend for now.",
         ),
         id="auto_round:auto_awq",
     ),
@@ -71,18 +71,18 @@ MODELS = [
         id="auto_round:auto_gptq_int2_tp2",
     ),
     pytest.param(
-        "INC4AI/Qwen3-8B-MXFP8-AR",
+        "vllm-project/Qwen3-8B-MXFP8-AR",
         marks=pytest.mark.skipif(
-            not (current_platform.is_cuda() or current_platform.is_xpu()),
-            reason="MXFP8 AutoRound model only supports CUDA/XPU backend for now.",
+            not (current_platform.is_cuda_alike() or current_platform.is_xpu()),
+            reason="MXFP8 AutoRound model only supports CUDA/ROCm/XPU backend for now.",
         ),
         id="auto_round:llm_compressor_mxfp8",
     ),
     pytest.param(
-        "INC4AI/Qwen3-8B-fp-w8g128x128-for-ut",
+        "vllm-project/Qwen3-8B-fp-w8g128x128-for-ut",
         marks=pytest.mark.skipif(
-            not (current_platform.is_cuda()),
-            reason="Block-wise AutoRound model only supports CUDA backend for now.",
+            not (current_platform.is_cuda_alike()),
+            reason="Block-wise AutoRound model only supports CUDA/ROCm for now.",
         ),
         id="auto_round:block_wise_fp8_on_cuda",
     ),
@@ -92,16 +92,16 @@ QWEN3_AUTOROUND_MODELS = [
     pytest.param(
         "INCModel/Qwen3-1.7B-AutoRound-MXFP4-W4A4",
         marks=pytest.mark.skipif(
-            not (current_platform.is_cuda() or current_platform.is_xpu()),
-            reason="Qwen3-1.7B MXFP4 AutoRound model requires CUDA/XPU.",
+            not (current_platform.is_cuda_alike() or current_platform.is_xpu()),
+            reason="Qwen3-1.7B MXFP4 AutoRound model requires CUDA/ROCm/XPU.",
         ),
         id="auto_round:mxfp4:qwen3-1p7b",
     ),
     pytest.param(
         "INCModel/Qwen3-30B-A3B-12L-W4A16-test",
         marks=pytest.mark.skipif(
-            not (current_platform.is_cuda() or current_platform.is_xpu()),
-            reason="Qwen3-30B-A3B W4A16 AutoRound model requires CUDA/XPU.",
+            not (current_platform.is_cuda_alike() or current_platform.is_xpu()),
+            reason="Qwen3-30B-A3B W4A16 AutoRound model requires CUDA/ROCm/XPU.",
         ),
         id="auto_round:w4a16:qwen3-30b-a3b",
     ),
@@ -116,8 +116,8 @@ QWEN3_AUTOROUND_MODELS = [
     pytest.param(
         "INCModel/Qwen3-30B-A3B-12L-MXFP8-test",
         marks=pytest.mark.skipif(
-            not (current_platform.is_cuda() or current_platform.is_xpu()),
-            reason="Qwen3-30B-A3B MXFP8 AutoRound model requires CUDA/XPU.",
+            not (current_platform.is_cuda_alike() or current_platform.is_xpu()),
+            reason="Qwen3-30B-A3B MXFP8 AutoRound model requires CUDA/ROCm/XPU.",
         ),
         id="auto_round:mxfp8:qwen3-30b-a3b",
     ),
@@ -132,12 +132,12 @@ MODEL_RUNNER_KWARGS: dict[str, dict[str, Any]] = {
         "gpu_memory_utilization": 0.8,
         "max_model_len": 512,
     },
-    "INC4AI/Qwen3-8B-MXFP8-AR": {
+    "vllm-project/Qwen3-8B-MXFP8-AR": {
         "block_size": 64,
         "gpu_memory_utilization": 0.8,
         "max_model_len": 512,
     },
-    "INC4AI/Qwen3-8B-fp-w8g128x128-for-ut": {
+    "vllm-project/Qwen3-8B-fp-w8g128x128-for-ut": {
         "gpu_memory_utilization": 0.8,
         "max_model_len": 512,
     },
@@ -145,8 +145,8 @@ MODEL_RUNNER_KWARGS: dict[str, dict[str, Any]] = {
 
 
 @pytest.mark.skipif(
-    not (current_platform.is_cpu() or current_platform.is_xpu() or current_platform.is_cuda()),
-    reason="Only supports CPU/XPU/CUDA backend.",
+    not (current_platform.is_cpu() or current_platform.is_xpu() or current_platform.is_cuda_alike()),
+    reason="Only supports CPU/XPU/CUDA/ROCm backend.",
 )
 @pytest.mark.parametrize("model", MODELS)
 def test_auto_round_model(sonar_runner, model):
@@ -370,7 +370,7 @@ def test_inc_get_quant_method_unquantized_unknown_layer_returns_none() -> None:
 def test_inc_get_quant_method_unquantized_layer_with_model_prefix(
     layer_factory,
 ) -> None:
-    """``model.``-prefixed extra_config entries trigger early exit for both
+    """`model.`-prefixed extra_config entries trigger early exit for both
     LinearBase and ParallelLMHead layers."""
     config = make_config(extra_config={"model.layer": {"bits": 16}})
     layer = layer_factory()
@@ -383,7 +383,7 @@ def test_inc_get_quant_method_unquantized_layer_with_model_prefix(
 def test_inc_get_quant_method_unquantized_routed_experts_with_model_prefix(
     monkeypatch,
 ) -> None:
-    """``model.``-prefixed extra_config entries trigger early exit for
+    """`model.`-prefixed extra_config entries trigger early exit for
     RoutedExperts layers, returning UnquantizedFusedMoEMethod."""
 
     class DummyUnquantizedFusedMoEMethod:
@@ -406,7 +406,7 @@ def test_inc_get_quant_method_unquantized_routed_experts_with_model_prefix(
 
 
 def test_inc_get_quant_method_unknown_layer_with_model_prefix_returns_none() -> None:
-    """``model.``-prefixed extra_config entries return None for unhandled
+    """`model.`-prefixed extra_config entries return None for unhandled
     layer types (non-Linear, non-MoE)."""
     config = make_config(extra_config={"model.unknown": {"bits": 16}})
 
@@ -1021,7 +1021,8 @@ def test_inc_mxfp4_moe_method_preserves_checkpoint_packing(
     expected_quant_config = object()
     expected_kernel = SimpleNamespace(
         fused_experts=SimpleNamespace(
-            process_weights_after_loading=lambda layer: captured.update({"processed_layer": layer})
+            process_weights_after_loading=lambda layer: captured.update({"processed_layer": layer}),
+            keep_constants=lambda layer: None,
         )
     )
     expected_experts_cls = object()
@@ -1414,7 +1415,6 @@ def test_inc_fp8_linear_scheme_delegates_to_fp8_linear_method(
             captured["quant_config"] = quant_config
             captured["method"] = self
             self.calls: list[tuple] = []
-            self.marlin_input_dtype = None
 
         def create_weights(
             self,
@@ -1450,10 +1450,6 @@ def test_inc_fp8_linear_scheme_delegates_to_fp8_linear_method(
         "sonar.model_executor.layers.quantization.inc.schemes.inc_fp8_linear.Fp8LinearMethod",
         DummyMethod,
     )
-    monkeypatch.setattr(
-        "sonar.model_executor.layers.quantization.inc.schemes.inc_fp8_linear.get_marlin_input_dtype",
-        lambda _prefix: "fp8-marlin",
-    )
 
     scheme = INCFp8LinearScheme(
         prefix="layers.0.mlp.down_proj",
@@ -1476,7 +1472,6 @@ def test_inc_fp8_linear_scheme_delegates_to_fp8_linear_method(
     assert captured["quant_config"].is_checkpoint_fp8_serialized is True
     assert captured["quant_config"].activation_scheme == "dynamic"
     assert captured["quant_config"].weight_block_size == [128, 128]
-    assert captured["method"].marlin_input_dtype == "fp8-marlin"
     assert result == "applied"
     assert [call[0] for call in captured["method"].calls] == [
         "create_weights",
@@ -2099,9 +2094,9 @@ E2E_MODELS = [
 
 
 def _has_xpu_ops() -> bool:
-    """True when ``sonar._xpu_ops`` is importable.
+    """True when `sonar._xpu_ops` is importable.
 
-    ``apply_weights`` imports it for the activation quantizer, and the stubs
+    `apply_weights` imports it for the activation quantizer, and the stubs
     below patch through it, so tests that exercise that path cannot even be set
     up on a build without sonar-xpu-kernels installed.
     """
@@ -2117,8 +2112,8 @@ def _has_xpu_ops() -> bool:
 def _has_w4a8_kernel() -> bool:
     """True when this build can actually run the w4a8 GEMM.
 
-    The op is registered as a side effect of importing ``sonar._xpu_ops``, so it
-    is not visible on ``torch.ops._xpu_C`` until that import happens.
+    The op is registered as a side effect of importing `sonar._xpu_ops`, so it
+    is not visible on `torch.ops._xpu_C` until that import happens.
     """
     return _has_xpu_ops() and hasattr(torch.ops._xpu_C, "int4_gemm_w4a8")
 
@@ -2142,7 +2137,7 @@ def _fake_xpu(monkeypatch, ark_available: bool = True) -> None:
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
         _ARK_STATE,
-        lambda: ((True, None, object(), DummyQuantLinear) if ark_available else (False, "missing", None, None)),
+        lambda: (True, None, object(), DummyQuantLinear) if ark_available else (False, "missing", None, None),
     )
 
 
@@ -2406,7 +2401,7 @@ def test_keeps_fp16_scales(w4a8_layer) -> None:
     """The kernel reads scales as fp16 regardless of activation dtype.
 
     Passing bf16 scales does not raise — it silently returns wrong results — so
-    an fp16 copy must exist, while the bf16 ``scales`` survive for the
+    an fp16 copy must exist, while the bf16 `scales` survive for the
     small-batch w4a16 fallback.
     """
     method, layer = w4a8_layer

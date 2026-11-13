@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The CuTe KDA RecoverSSM verify and state commit against the Triton reference
-(``causal_conv1d_update`` + ``kda_recoverssm_verify``, and the Triton commit), on
+(`causal_conv1d_update` + `kda_recoverssm_verify`, and the Triton commit), on
 Mamba page views as Sonar binds them (one padded page per slot holding the conv
 and SSM state) and per-layer verify records indexed by batch row."""
 
@@ -94,7 +94,7 @@ def _clone_pages(pages):
 def _inputs(batch: int, heads: int, window: int, varlen: bool, row_pad: int, row_offset: int):
     """Raw projections laid out as the KDA in-projection output: q/k/v, then the
     output gate, f_a, beta and the alignment padding in one row; the spec-decode
-    tokens start ``row_offset`` rows in (after a batch's non-spec tokens)."""
+    tokens start `row_offset` rows in (after a batch's non-spec tokens)."""
     lens = torch.full((batch,), window, dtype=torch.int32)
     if varlen and batch > 2:
         lens[0] = window - 2
@@ -269,9 +269,9 @@ def _check_verify(
 @pytest.mark.parametrize("recoverssm_accepted", [True, False])
 @torch.inference_mode()
 def test_cute_verify_matches_triton(heads, dim_first, conv_weight_dtype, batch, varlen, row_pad, recoverssm_accepted):
-    """``row_pad`` 3 misaligns the projection rows, so the dim-first layout falls
+    """`row_pad` 3 misaligns the projection rows, so the dim-first layout falls
     back from the warp-specialized verify to the plain tcgen05 one.
-    ``recoverssm_accepted`` feeds RecoverSSM's accepted counts (always 1: the
+    `recoverssm_accepted` feeds RecoverSSM's accepted counts (always 1: the
     commit compacts the conv state); otherwise the stock spec-decode counts."""
     assert _check_verify(heads, dim_first, conv_weight_dtype, batch, varlen, row_pad, recoverssm_accepted)
 
@@ -415,7 +415,7 @@ def test_cute_state_commit_matches_triton(heads, batch, window, monkeypatch):
 def test_recoverssm_steps_match_stock_spec_decode(heads, monkeypatch):
     """Several verify -> sample -> commit steps of RecoverSSM (CuTe verify and
     commit, one state slot per request) produce the outputs of stock
-    speculative decoding (``causal_conv1d_update`` + ``fused_recurrent_kda``
+    speculative decoding (`causal_conv1d_update` + `fused_recurrent_kda`
     over 1 + k state slots per request)."""
     from sonar.models.kimi_k3.nvidia.ops.third_party.kda import fused_recurrent_kda
 

@@ -372,9 +372,10 @@ def test_b12x_mxfp8_support_check_reports_missing_import(monkeypatch) -> None:
     )
     monkeypatch.setattr(b12x_mod, "_import_b12x_mxfp8", lambda: None)
 
-    is_supported, _ = B12xMxfp8LinearKernel.is_supported()
+    is_supported, reason = B12xMxfp8LinearKernel.is_supported()
 
     assert not is_supported
+    assert reason == "The b12x backend requires flashinfer-python>=0.7.2 from the Sonar wheel index"
 
 
 def test_b12x_mxfp8_support_respects_runtime_probe(monkeypatch) -> None:

@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 from sonar.platforms import current_platform
 from tests.kernels.utils import to_int8
 

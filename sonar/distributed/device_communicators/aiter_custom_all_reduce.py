@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Sonar-owned wrapper over AITER's ``CustomAllreduce``.
+"""Sonar-owned wrapper over AITER's `CustomAllreduce`.
 
-``CudaCommunicator`` stores one of these as ``aiter_ar_comm`` when
-``SONAR_ROCM_USE_AITER_CUSTOM_AR`` is set, so plain all-reduce and the
+`CudaCommunicator` stores one of these as `aiter_ar_comm` when
+`SONAR_ROCM_USE_AITER_CUSTOM_AR` is set, so plain all-reduce and the
 fused all-reduce + RMSNorm path share a single AITER instance with its IPC
 buffers.
 """
@@ -82,18 +82,21 @@ class AiterCustomAllreduce:
     def custom_all_gather(self, inp: torch.Tensor, dim: int = 0) -> torch.Tensor | None:
         return self._impl.custom_all_gather(inp, dim=dim)
 
+    def all_gather_unreg(self, inp: torch.Tensor, dim: int = 0) -> torch.Tensor:
+        return self._impl.all_gather_unreg(inp, dim=dim)
+
     def custom_reduce_scatter(self, inp: torch.Tensor, out: torch.Tensor, dim: int = 0) -> torch.Tensor | None:
         return self._impl.custom_reduce_scatter(inp, out, dim=dim)
 
     def use_1stage_fused_ar_rms(self, inp: torch.Tensor) -> bool:
         """Whether AITER's fused allreduce+RMSNorm runs as its one-stage kernel.
 
-        Mirrors the launcher contract of aiter's ``fused_allreduce_rmsnorm``
+        Mirrors the launcher contract of aiter's `fused_allreduce_rmsnorm`
         (csrc/include/custom_all_reduce.cuh): rows of 16-byte packs, at most
         1024 packs per row, at most 80 tokens, and the byte cap of the
         one-stage custom allreduce for this TP size and topology. Outside it
         the fused op runs the two-stage variant (cross-device reduce-scatter
-        + local norm), which is slower than an explicit ``all_reduce`` + norm,
+        + local norm), which is slower than an explicit `all_reduce` + norm,
         so callers that can fall back should require this. Capture-static:
         depends only on shape, dtype, TP size and topology.
         """

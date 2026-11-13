@@ -15,16 +15,16 @@ from sonar.model_executor.layers.vocab_parallel_embedding import (
 
 
 class InklingLogitsProcessor(LogitsProcessor):
-    """``LogitsProcessor`` that applies Inkling's muP logits width multiplier.
+    """`LogitsProcessor` that applies Inkling's muP logits width multiplier.
 
     Args:
         vocab_size: Padded vocabulary size.
-        org_vocab_size: Unpadded vocabulary size (defaults to ``vocab_size``).
-        scale: Base logits scale (kept ``1.0`` for the served checkpoint).
+        org_vocab_size: Unpadded vocabulary size (defaults to `vocab_size`).
+        scale: Base logits scale (kept `1.0` for the served checkpoint).
         logits_as_input: Whether the input is already logits.
-        soft_cap: Optional logit soft cap (``None`` for the served checkpoint).
+        soft_cap: Optional logit soft cap (`None` for the served checkpoint).
         logits_mup_width_multiplier: muP width divisor for the final logits;
-            ``None`` or ``0`` disables it.
+            `None` or `0` disables it.
 
     """
 

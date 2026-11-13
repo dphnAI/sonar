@@ -106,13 +106,35 @@ def causal_conv1d_update_ref(x, conv_state, weight, bias=None, activation=None, 
     return (out if activation is None else F.silu(out)).to(dtype=dtype_in)
 
 
+@pytest.mark.parametrize("width", [1, 8])
+@pytest.mark.skipif(
+    current_platform.is_cpu(),
+    reason="The width check lives in the Triton wrappers, which CPU bypasses.",
+)
+def test_causal_conv1d_rejects_unsupported_width(width):
+    # The kernels branch on widths 2 to 7; any other width would compute
+    # wrong values silently.
+    dim = 8
+    weight = torch.randn(dim, width, device=DEVICE)
+    conv_state = torch.zeros(1, dim, 7, device=DEVICE)
+    x = torch.randn(dim, 1, device=DEVICE)
+    query_start_loc = torch.tensor([0, 1], dtype=torch.int32, device=DEVICE)
+    with pytest.raises(ValueError, match="widths 2 to 7"):
+        causal_conv1d_fn(x, weight, None, conv_state, query_start_loc)
+    with pytest.raises(ValueError, match="widths 2 to 7"):
+        causal_conv1d_update(x.T.contiguous(), conv_state, weight)
+
+
+@pytest.mark.parametrize("explicit_out", [False, True])
 @pytest.mark.parametrize("itype", [torch.bfloat16])
 @pytest.mark.parametrize("silu_activation", [False, True])
 @pytest.mark.parametrize("has_bias", [False, True])
 @pytest.mark.parametrize("seqlen", [1])
-@pytest.mark.parametrize("width", [4])
+@pytest.mark.parametrize("width", [4, 7])
 @pytest.mark.parametrize("dim", [2048, 2048 + 16, 4096])
-def test_causal_conv1d_update(dim, width, seqlen, has_bias, silu_activation, itype):
+def test_causal_conv1d_update(dim, width, seqlen, has_bias, silu_activation, itype, explicit_out):
+    if explicit_out and current_platform.is_cpu():
+        pytest.skip("Explicit output buffers belong to the Triton update API")
     device = DEVICE
     rtol, atol = (3e-4, 1e-3) if itype == torch.float32 else (3e-3, 5e-3)
     if itype == torch.bfloat16:
@@ -132,6 +154,7 @@ def test_causal_conv1d_update(dim, width, seqlen, has_bias, silu_activation, ity
     conv_state_ref = conv_state[conv_state_indices].detach().clone()
     activation = None if not silu_activation else "silu"
 
+    output_buffer = torch.empty_like(x) if explicit_out else None
     out = causal_conv1d_update(
         x,
         conv_state,
@@ -139,18 +162,24 @@ def test_causal_conv1d_update(dim, width, seqlen, has_bias, silu_activation, ity
         bias,
         activation=activation,
         conv_state_indices=conv_state_indices,
+        **({"out": output_buffer} if explicit_out else {}),
     )
     out_ref = causal_conv1d_update_ref(x_ref, conv_state_ref, weight, bias, activation=activation)
 
     assert torch.equal(conv_state[conv_state_indices], conv_state_ref)
     assert torch.allclose(out, out_ref, rtol=rtol, atol=atol)
+    if output_buffer is not None:
+        assert out.data_ptr() == output_buffer.data_ptr()
+        assert torch.equal(x, x_ref)
+    elif not current_platform.is_cpu():
+        assert out.data_ptr() == x.data_ptr()
 
 
 @pytest.mark.parametrize("itype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("silu_activation", [False, True])
 @pytest.mark.parametrize("has_bias", [False, True])
 @pytest.mark.parametrize("seqlen", [1, 3])
-@pytest.mark.parametrize("width", [3, 4])
+@pytest.mark.parametrize("width", [3, 4, 7])
 @pytest.mark.parametrize("dim", [2048 + 16, 4096])
 # tests correctness in case subset of the sequences are padded
 @pytest.mark.parametrize("with_padding", [True, False])
@@ -217,7 +246,7 @@ def test_causal_conv1d_update_with_batch_gather(
 @pytest.mark.parametrize("itype", [torch.bfloat16])
 @pytest.mark.parametrize("silu_activation", [True])
 @pytest.mark.parametrize("has_bias", [True])
-@pytest.mark.parametrize("width", [4])
+@pytest.mark.parametrize("width", [4, 5, 6, 7])
 @pytest.mark.parametrize("seqlen", [8, 249, 4096])
 @pytest.mark.parametrize("dim", [64, 4096])
 @pytest.mark.parametrize("with_padding", [True, False])
@@ -318,7 +347,7 @@ def test_causal_conv1d_varlen(batch, with_padding, dim, seqlen, width, has_bias,
 @pytest.mark.parametrize("itype", [torch.bfloat16])
 @pytest.mark.parametrize("silu_activation", [True])
 @pytest.mark.parametrize("has_bias", [True])
-@pytest.mark.parametrize("width", [4])
+@pytest.mark.parametrize("width", [4, 7])
 @pytest.mark.parametrize("dim", [64, 2048])
 @pytest.mark.parametrize("q_lens_cfg", [[3, 1, 0, 4, 2], [1, 5, 5, 1], [2, 0, 0, 3]])
 @pytest.mark.skipif(

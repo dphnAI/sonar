@@ -105,7 +105,7 @@ def test_build_draft_attn_metadata_sets_seq_lens_cpu_upper_bound():
 
 def test_build_draft_attn_metadata_zeroes_padded_upper_bound_tail():
     """The padded tail of the upper-bound tensor is zeroed, so it stays a
-    valid tensor of length ``num_reqs_padded`` regardless of padding."""
+    valid tensor of length `num_reqs_padded` regardless of padding."""
     fake = _make_fake_speculator()
     base = torch.zeros(2, dtype=torch.int32)
 

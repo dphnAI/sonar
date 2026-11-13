@@ -18,7 +18,7 @@ from tests.tool_parsers.utils import (
 @pytest.fixture(scope="function")
 def default_tokenizer() -> PreTrainedTokenizerBase:
     """Override module-scoped default_tokenizer because gigachat tests
-    mutate the tokenizer via ``add_tokens``."""
+    mutate the tokenizer via `add_tokens`."""
     return AutoTokenizer.from_pretrained("gpt2")
 
 

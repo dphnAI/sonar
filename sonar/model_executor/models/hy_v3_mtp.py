@@ -47,9 +47,6 @@ from sonar.model_executor.model_loader.weight_utils import (
     maybe_remap_kv_scale_name,
 )
 from sonar.sequence import IntermediateTensors
-from sonar.v1.outputs import SamplerOutput
-from sonar.v1.sample.metadata import SamplingMetadata
-from sonar.v1.sample.sampler import Sampler
 
 from .hy_v3 import HYV3DecoderLayer
 from .utils import (
@@ -204,8 +201,6 @@ class HYV3MTP(nn.Module):
         self.quant_config = sonar_config.quant_config
         self.model = HYV3MultiTokenPredictor(sonar_config=sonar_config, prefix=maybe_prefix(prefix, "model"))
 
-        self.sampler = Sampler()
-
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -224,14 +219,6 @@ class HYV3MTP(nn.Module):
         spec_step_idx: int = 0,
     ) -> torch.Tensor | None:
         return self.model.compute_logits(hidden_states, spec_step_idx)
-
-    def sample(
-        self,
-        logits: torch.Tensor,
-        sampling_metadata: SamplingMetadata,
-    ) -> SamplerOutput | None:
-        next_tokens = self.sampler(logits, sampling_metadata)
-        return next_tokens
 
     def _split_qkv_weight(self, qkv: torch.Tensor):
         num_attention_heads = self.config.num_attention_heads

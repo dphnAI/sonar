@@ -40,8 +40,8 @@ _CONFIGS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "config
 def get_ssm_config_file_name(headdim: int, dstate: int, cache_dtype: str, device_name: str) -> str:
     """Return the JSON filename for the given kernel shape.
 
-    Layout: ``configs/selective_state_update/
-    headdim=<H>,dstate=<D>,device_name=<dev>,cache_dtype=<dt>.json``.
+    Layout: `configs/selective_state_update/
+    headdim=<H>,dstate=<D>,device_name=<dev>,cache_dtype=<dt>.json`.
     """
     return f"headdim={headdim},dstate={dstate},device_name={device_name},cache_dtype={cache_dtype}.json"
 
@@ -59,7 +59,7 @@ def _canonical_cache_dtype(cache_dtype: str) -> str:
 @functools.cache
 def get_ssm_configs(headdim: int, dstate: int, cache_dtype: str) -> dict[int, Any] | None:
     """Return tuned (BLOCK_SIZE_M, num_warps) configs for *selective_state_update*
-    keyed by ``effective_batch = batch * nheads``, or ``None`` if no config
+    keyed by `effective_batch = batch * nheads`, or `None` if no config
     file is found for the (headdim, dstate, cache_dtype, device) combination.
 
     They can be generated with:
@@ -129,7 +129,7 @@ def _try_get_optimal_ssm_config_cached(
     cache_dtype: str,
     is_blackwell: bool,
 ) -> tuple[int, int]:
-    """Cached resolution. See :func:`try_get_optimal_ssm_config`."""
+    """Cached resolution. See `try_get_optimal_ssm_config`."""
     effective_batch = batch * nheads
     configs = get_ssm_configs(headdim, dstate, cache_dtype)
     if configs:
@@ -147,7 +147,7 @@ _ssm_config_override: tuple[int, int] | None = None
 
 @contextmanager
 def override_ssm_config(config: tuple[int, int]):
-    """Pin ``try_get_optimal_ssm_config`` to ``config`` for the duration of
+    """Pin `try_get_optimal_ssm_config` to `config` for the duration of
     the context. Used by the tuning benchmark to time specific configs."""
     global _ssm_config_override
     prev = _ssm_config_override
@@ -168,9 +168,9 @@ def try_get_optimal_ssm_config(
 ) -> tuple[int, int]:
     """Return (BLOCK_SIZE_M, num_warps) for the given kernel shape.
 
-    Tuning is keyed on ``effective_batch = batch * nheads`` (the kernel grid
+    Tuning is keyed on `effective_batch = batch * nheads` (the kernel grid
     scales with the product), so configs transfer across (model, TP) combos
-    sharing ``(headdim, dstate, cache_dtype)``.
+    sharing `(headdim, dstate, cache_dtype)`.
     """
     if _ssm_config_override is not None:
         return _ssm_config_override
@@ -191,19 +191,33 @@ else:
         return dt
 
 
-@triton.jit
-def convert_rs_fp16x2(x: tl.tensor, rand: tl.tensor) -> tl.tensor:
-    y = tl.inline_asm_elementwise(
-        asm="""{
-cvt.rs.f16x2.f32 $0, $2, $1, $3;
-}""",
-        constraints="=r,r,r,r,r",
-        args=(x, rand),
-        dtype=tl.float16,
-        is_pure=True,
-        pack=2,
-    )
-    return y
+if current_platform.is_rocm():
+
+    @triton.jit
+    def convert_rs_fp16x2(x: tl.tensor, rand: tl.tensor) -> tl.tensor:
+        # gfx950 only. Rounds with rand[31:19]; cvt.rs.f16x2 uses [12:0] and [28:16].
+        y = tl.inline_asm_elementwise(
+            asm="v_cvt_sr_f16_f32 $0, $1, $2",
+            constraints="=v,v,v",
+            args=(x, rand),
+            dtype=tl.float16,
+            is_pure=True,
+            pack=1,
+        )
+        return y
+else:
+
+    @triton.jit
+    def convert_rs_fp16x2(x: tl.tensor, rand: tl.tensor) -> tl.tensor:
+        y = tl.inline_asm_elementwise(
+            asm="{\ncvt.rs.f16x2.f32 $0, $2, $1, $3;\n}",
+            constraints="=r,r,r,r,r",
+            args=(x, rand),
+            dtype=tl.float16,
+            is_pure=True,
+            pack=2,
+        )
+        return y
 
 
 @triton.heuristics({"HAS_DT_BIAS": lambda args: args["dt_bias_ptr"] is not None})
@@ -711,10 +725,9 @@ def selective_scan_fn(
         The pointer into cache_indices, where the cache block
         containing the initial state is located.
 
-    Returns
-    -------
-        output: (dim, total_length) for varlen or (batch, dim, seqlen)
-                supports inplace replacement
+    Returns:
+        Output of shape (dim, total_length) for varlen or (batch, dim, seqlen);
+        supports inplace replacement.
 
     """
     if u.stride(-1) != 1:

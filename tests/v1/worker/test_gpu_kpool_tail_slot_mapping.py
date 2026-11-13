@@ -15,8 +15,7 @@ import torch
 
 from sonar.platforms import current_platform
 from sonar.v1.attention.backends.utils import PAD_SLOT_ID
-from sonar.v1.kv_cache_interface import CircularBufferSpec
-from sonar.v1.worker.block_table import get_block_table_width
+from sonar.v1.kv_cache_interface import CircularBufferSpec, get_block_table_width
 from sonar.v1.worker.gpu.block_table import BlockTables
 
 pytestmark = pytest.mark.skipif(

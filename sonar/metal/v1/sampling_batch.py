@@ -10,11 +10,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import mlx.core as mx
+import numpy as np
 import torch
 
 from sonar.metal.pytorch_backend.tensor_bridge import mlx_to_torch
 from sonar.sampling_params import SamplingParams
-from sonar.utils.torch_utils import make_tensor_with_pad
+from sonar.utils.torch_utils import make_ndarray_with_pad
 from sonar.v1.outputs import LogprobsTensors
 from sonar.v1.sample.logits_processor import LogitsProcessors
 from sonar.v1.sample.logits_processor.interface import BatchUpdate
@@ -34,15 +35,15 @@ class MetalSamplerResult:
 
 
 class SamplingBatch:
-    """Sampling-side batch owner for ``MetalModelRunner``.
+    """Sampling-side batch owner for `MetalModelRunner`.
 
     This is an interim extraction that keeps sampling policy and
-    ``SamplingMetadata`` construction out of ``model_runner.py`` while the
+    `SamplingMetadata` construction out of `model_runner.py` while the
     runner is being slimmed down.
 
     Today it owns only the sampling-side state for one step. As more per-step
-    batch state moves out of ``model_runner.py``, this should evolve into a
-    fuller ``MetalInputBatch``-style owner that can absorb request indexing,
+    batch state moves out of `model_runner.py`, this should evolve into a
+    fuller `MetalInputBatch`-style owner that can absorb request indexing,
     token views, generators, logits processor ownership, and metadata refresh.
     """
 
@@ -162,6 +163,7 @@ class SamplingBatch:
             and not sampling_params.logit_bias
             and sampling_params.logprobs is None
             and sampling_params.logprob_token_ids is None
+            and "_sonar_phrase_retry" not in (sampling_params.extra_args or {})
             for sampling_params in sampling_params_list
         )
 
@@ -235,13 +237,13 @@ class SamplingBatch:
         if self.no_penalties and self.no_dry:
             return None
 
-        return make_tensor_with_pad(
-            self.prompt_token_id_lists,
-            pad=self.vocab_size,
-            device=self.device,
-            dtype=torch.int64,
-            pin_memory=False,
-        )
+        return torch.from_numpy(
+            make_ndarray_with_pad(
+                self.prompt_token_id_lists,
+                pad=self.vocab_size,
+                dtype=np.int64,
+            )
+        ).to(device=self.device)
 
     def _make_penalty_tensors(
         self,
@@ -402,11 +404,12 @@ class SamplingBatch:
             and sampling_params.logprob_token_ids is None
             and sampling_params.seed is None
             and not sampling_params.temperature_last
+            and "_sonar_phrase_retry" not in (sampling_params.extra_args or {})
             for sampling_params in self.sampling_params_list
         )
 
     def make_sampling_metadata(self) -> SamplingMetadata:
-        """Create Sonar ``SamplingMetadata`` for this batch."""
+        """Create Sonar `SamplingMetadata` for this batch."""
         self._refresh_logits_processors()
         (
             frequency_penalties,
@@ -566,7 +569,7 @@ def sample_from_logits(
     sampler: Sampler,
     device: torch.device,
 ) -> MetalSamplerResult:
-    """Sample tokens from pre-sliced 2D logits ``(batch_size, vocab)``.
+    """Sample tokens from pre-sliced 2D logits `(batch_size, vocab)`.
 
     Single entry point for all sampling paths.  Chooses native MLX greedy
     when possible, otherwise bridges to the Sonar torch sampler.
@@ -608,8 +611,8 @@ def sample_decode_tokens(
     """Sample one token per decode request from evaluated logits.
 
     Args:
-        logits: Full logits array, shape ``(1, total_tokens, vocab)``.
-        decode_reqs: ``(req_id, RequestState)`` pairs for decode requests.
+        logits: Full logits array, shape `(1, total_tokens, vocab)`.
+        decode_reqs: `(req_id, RequestState)` pairs for decode requests.
         num_decode: Number of decode requests (prefix of the token dimension).
         sampler: Sonar Sampler instance.
         device: PyTorch device for the torch bridge path.
@@ -655,8 +658,8 @@ def sample_prefill_tokens(
     """Sample one token per prefill request from the last logit position.
 
     Args:
-        logits: Full logits array, shape ``(1, total_tokens, vocab)``.
-        prefill_reqs: List of ``PrefillRequest`` objects.
+        logits: Full logits array, shape `(1, total_tokens, vocab)`.
+        prefill_reqs: List of `PrefillRequest` objects.
         cu_seqlens: Cumulative sequence lengths for logit position lookup.
         num_decode: Number of decode requests (offset into cu_seqlens).
         sampler: Sonar Sampler instance.
@@ -673,10 +676,10 @@ def sample_prefill_tokens(
         last_idx = cu_seqlens[num_decode + j + 1] - 1
         last_logits = logits[0, last_idx : last_idx + 1, :]  # (1, vocab)
 
-        if pr.full_prompt_token_ids is not None:
-            prompt_len = len(pr.full_prompt_token_ids)
-        elif pr.prompt_len is not None:
+        if pr.prompt_len is not None:
             prompt_len = pr.prompt_len
+        elif pr.full_prompt_token_ids is not None:
+            prompt_len = len(pr.full_prompt_token_ids)
         else:
             prompt_len = len(pr.token_ids)
 

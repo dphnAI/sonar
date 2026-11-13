@@ -678,6 +678,9 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
         features = self.vision.forward_features(pixel_values)
         return self.projector(features)
 
+    def encoder_eager_forward(self, mm_kwargs: dict[str, Any], path: str = "default") -> torch.Tensor:
+        return self.encoder_cudagraph_forward({"pixel_values": mm_kwargs["pixel_values"]}, path=path)
+
     def postprocess_encoder_output(
         self,
         outputs: dict[str, torch.Tensor],
@@ -689,9 +692,9 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
     ) -> None:
         """Assemble per-image embeddings from raw per-tile projector output.
 
-        ``outputs["default"]`` has shape ``[N_tiles_captured, hw, n_embed]``.
+        `outputs["default"]` has shape `[N_tiles_captured, hw, n_embed]`.
         This method re-applies newlines and the view-separator that the
-        eager ``_pixel_values_to_embedding`` path inserts in-line.
+        eager `_pixel_values_to_embedding` path inserts in-line.
         """
         assert batch_mm_kwargs is not None
         output = outputs["default"]

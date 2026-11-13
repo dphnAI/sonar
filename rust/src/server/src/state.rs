@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+use std::any::Any;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -10,6 +11,7 @@ use sha2::{Digest, Sha256};
 use sonar_chat::ChatLlm;
 use sonar_engine_core_client::EngineCoreClient;
 use sonar_engine_core_client::runtime::BackgroundShutdownRuntime;
+use sonar_llm::{EngineCoreLlm, Llm};
 use tokio::runtime::Runtime;
 use tokio::time::{Duration, Instant, sleep_until};
 use tracing::warn;
@@ -39,6 +41,9 @@ pub struct AppState {
     pub chat: ChatLlm,
     /// HTTP/API-server behavior switches.
     pub api_server_options: ApiServerOptions,
+    /// `system_fingerprint` of chat and completion responses, fixed at
+    /// startup.
+    pub system_fingerprint: Option<String>,
     /// CORS settings applied to every HTTP response.
     pub cors: CorsConfig,
     /// HTTP access log settings.
@@ -80,6 +85,7 @@ impl AppState {
             served_model_names,
             chat,
             api_server_options: ApiServerOptions::default(),
+            system_fingerprint: None,
             cors: CorsConfig::default(),
             access_log: AccessLogConfig::default(),
             server_info: None,
@@ -96,6 +102,12 @@ impl AppState {
     /// Set HTTP/API-server behavior switches.
     pub fn with_api_server_options(mut self, options: ApiServerOptions) -> Self {
         self.api_server_options = options;
+        self
+    }
+
+    /// Set the `system_fingerprint` of chat and completion responses.
+    pub fn with_system_fingerprint(mut self, system_fingerprint: Option<String>) -> Self {
+        self.system_fingerprint = system_fingerprint;
         self
     }
 
@@ -249,17 +261,28 @@ impl AppState {
     }
 
     fn ensure_lora_enabled(&self) -> Result<(), LoraDisabledError> {
-        self.engine_core_client()
-            .ready_response()
-            .supports_lora
-            .then_some(())
-            .ok_or(LoraDisabledError)
+        self.llm().info().supports_lora.then_some(()).ok_or(LoraDisabledError)
+    }
+
+    /// The [`Llm`] under the chat facade.
+    pub(crate) fn llm(&self) -> &dyn Llm {
+        self.chat.text().llm()
+    }
+
+    /// The [`EngineCoreLlm`] under the chat facade, if that is what it runs.
+    fn engine_core_llm(&self) -> Option<&EngineCoreLlm> {
+        (self.llm() as &dyn Any).downcast_ref()
     }
 
     /// Return a reference to the underlying engine core client for utility
     /// calls.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the server does not run an [`EngineCoreLlm`], which cannot
+    /// happen yet: the server always builds its state around one.
     pub(crate) fn engine_core_client(&self) -> &EngineCoreClient {
-        self.chat.engine_core_client()
+        (self.engine_core_llm().expect("the server runs an `EngineCoreLlm`")).engine_core_client()
     }
 
     /// Runtime used by middleware to isolate heavyweight request handlers from

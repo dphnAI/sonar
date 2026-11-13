@@ -3,10 +3,10 @@
 """b12x's compact W4A8 decode MoE in one SM120 kernel.
 
 For up to eight tokens b12x runs rows-quant, FC1, the SwiGLU activation and FC2
-as separate kernels. ``install`` wraps b12x's ``launch_w4a8_compact_micro`` so
-the shapes ``csrc/moe/b12x_moe_fused_sm120.cu`` computes exactly like b12x run
+as separate kernels. `install` wraps b12x's `launch_w4a8_compact_micro` so
+the shapes `csrc/moe/b12x_moe_fused_sm120.cu` computes exactly like b12x run
 b12x's rows-quant and then that persistent kernel, which streams FC1 and FC2
-weights back to back. ``projections``, ``intermediate`` and ``route_output``
+weights back to back. `projections`, `intermediate` and `route_output`
 keep b12x's bits; every other launch is b12x's own.
 """
 

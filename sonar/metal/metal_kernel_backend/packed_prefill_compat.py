@@ -17,8 +17,8 @@ def _apply_mrope_segment(
 ) -> tuple[mx.array, mx.array]:
     """Apply M-RoPE (multimodal rotary embedding) to one packed segment.
 
-    mlx_vlm's Qwen3_5RotaryEmbedding expects ``(x, position_ids)`` and returns
-    ``(cos, sin)``; actual rotation is via ``apply_multimodal_rotary_pos_emb``.
+    mlx_vlm's Qwen3_5RotaryEmbedding expects `(x, position_ids)` and returns
+    `(cos, sin)`; actual rotation is via `apply_multimodal_rotary_pos_emb`.
     For text-only requests, position_ids are simple sequential integers tiled
     across the 3 M-RoPE sections.
     """
@@ -44,17 +44,17 @@ def apply_packed_rope(
 ) -> tuple[mx.array, mx.array]:
     """Apply per-request RoPE for packed sequences.
 
-    Each segment delimited by ``cu_seqlens`` gets its own RoPE application
-    starting at the corresponding offset.  When *offsets* is ``None`` every
+    Each segment delimited by `cu_seqlens` gets its own RoPE application
+    starting at the corresponding offset.  When *offsets* is `None` every
     segment starts at position 0 (pure prefill).  For unified prefill+decode
-    batches, decode segments carry ``offset=seq_len`` while prefill segments
-    keep ``offset=0``.
+    batches, decode segments carry `offset=seq_len` while prefill segments
+    keep `offset=0`.
 
-    When ``apply_keys`` is False, keys are returned unchanged (used by
+    When `apply_keys` is False, keys are returned unchanged (used by
     YOCO KV sharing where keys arrive already RoPE'd from a prior layer).
 
-    Supports both mlx_lm's ``rope(x, offset=)`` API and mlx_vlm's
-    ``rotary_emb(x, position_ids)`` M-RoPE API (Qwen3.5).
+    Supports both mlx_lm's `rope(x, offset=)` API and mlx_vlm's
+    `rotary_emb(x, position_ids)` M-RoPE API (Qwen3.5).
     """
     rope_fn = getattr(attn_module, "rope", None)
     rotary_emb = getattr(attn_module, "rotary_emb", None) if rope_fn is None else None

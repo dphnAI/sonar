@@ -130,7 +130,7 @@ def merge_media_io_kwargs(
     """Merge config-level and per-request media_io_kwargs per modality.
 
     Each modality key is merged using the corresponding MediaIO subclass's
-    ``merge_kwargs``, which may apply modality-specific logic (e.g.
+    `merge_kwargs`, which may apply modality-specific logic (e.g.
     VideoMediaIO clears cross-dependent fps/num_frames fields).
     """
     if not defaults and not overrides:
@@ -247,7 +247,7 @@ class MediaConnector:
             return None
         # Touch mtime for LRU ordering
         try:
-            cache_path.touch()
+            os.utime(cache_path, None)
             return cache_path.read_bytes()
         except OSError:
             return None

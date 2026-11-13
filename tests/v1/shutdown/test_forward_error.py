@@ -19,7 +19,7 @@ from tests.v1.shutdown.utils import (
     SHUTDOWN_TEST_TIMEOUT_SEC,
 )
 
-MODELS = ["hmellor/tiny-random-LlamaForCausalLM"]
+MODELS = ["vllm-project/tiny-random-LlamaForCausalLM"]
 
 
 def evil_forward(self, *args, **kwargs):

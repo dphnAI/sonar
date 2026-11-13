@@ -27,7 +27,7 @@ class Qwen3VLMultimodalAdapter:
         input_tokens: list[int],
         mm_features: list[MultiModalFeatureSpec],
     ) -> tuple[mx.array, int]:
-        """Return ``((3, seq_len) int32 positions, mrope_position_delta)``.
+        """Return `((3, seq_len) int32 positions, mrope_position_delta)`.
 
         Calls upstream Sonar's mm_features-driven Qwen3-VL M-RoPE helper with a
         minimal image-only config shim, then converts the returned torch tensor

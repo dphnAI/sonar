@@ -7,6 +7,7 @@ import inspect
 import os
 import sys
 from collections.abc import Callable, Generator
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, overload
 from unittest.mock import patch
 
@@ -269,17 +270,16 @@ def _model_hash_key(fn: Callable[..., Any]) -> str:
 
 
 def _verify_source_unchanged(source_info: "SourceInfo", sonar_config: SonarConfig) -> None:
-    from .caching import _compute_code_hash, _compute_code_hash_with_content
+    from .caching import get_code_factors, read_code_files
 
-    file_contents = {}
+    file_contents: dict[Path, str | None] = {}
     for source in source_info.inlined_sources:
-        module = sys.modules[source.module]
-        file = inspect.getfile(module)
+        file = Path(inspect.getfile(sys.modules[source.module]))
         sonar_config.compilation_config.traced_files.add(file)
         file_contents[file] = source.content
-    expected_checksum = _compute_code_hash_with_content(file_contents)
-    actual_checksum = _compute_code_hash(set(file_contents.keys()))
-    if expected_checksum != actual_checksum:
+    expected = get_code_factors(file_contents)
+    actual = get_code_factors(read_code_files(file_contents))
+    if expected != actual:
         raise RuntimeError("Source code has changed since the last compilation. Recompiling the model.")
 
 
@@ -290,7 +290,7 @@ def _try_load_aot_compiled_fn(
     """Try to load an AOT-compiled function from disk.
 
     Returns the loaded callable on success, or None on failure.
-    Re-raises on failure when ``SONAR_FORCE_AOT_LOAD`` is set.
+    Re-raises on failure when `SONAR_FORCE_AOT_LOAD` is set.
     """
     try:
         with monitor_torch_compile(
@@ -489,7 +489,11 @@ def _support_torch_compile(
                         dim_shape_pairs = [(tensor.ndim + d if d < 0 else d, dim_to_shape_id.get(d)) for d in dims]
                         mark_dynamic(tensor, dim_shape_pairs)
                 else:
-                    raise ValueError(f"Unsupported dynamic dimensions {dims} for argument {k} with type {type(arg)}.")
+                    raise ValueError(
+                        f"Unsupported dynamic dimensions {dims} "
+                        f"for argument {k} with type {type(arg)}. Check the type "
+                        f"hint of {k} in {type(mod).__name__}.forward."
+                    )
 
         if mark_unbacked_dims:
             for k, dims_val in mark_unbacked_dims.items():
@@ -615,7 +619,7 @@ def _support_torch_compile(
         # properly when any of these files change.
 
         # 1. the file containing the top-level forward function
-        self.compilation_config.traced_files.add(original_code_object.co_filename)
+        self.compilation_config.traced_files.add(Path(original_code_object.co_filename))
 
         # 2. every time Dynamo sees a function call, it will inline
         # the function by calling InliningInstructionTranslator.inline_call_
@@ -625,7 +629,7 @@ def _support_torch_compile(
 
         def patched_inline_call(self_: Any) -> Any:
             code = self_.f_code
-            self.compilation_config.traced_files.add(code.co_filename)
+            self.compilation_config.traced_files.add(Path(code.co_filename))
             return inline_call(self_)
 
         # Disable the C++ compilation of symbolic shape guards. C++-fication

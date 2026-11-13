@@ -2,27 +2,27 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Inference-only MuseGlimmer multimodal model for Sonar.
 
-Native port of the MuseGlimmer text decoder (``MuseGlimmerForCausalLM``). The text
+Native port of the MuseGlimmer text decoder (`MuseGlimmerForCausalLM`). The text
 stack is a Gemma2 derivative with the
 following MuseGlimmer-specific deltas, each of which is handled explicitly here:
 
-  * SiLU-gated MLP (``hidden_activation="silu"``), not Gemma's gelu-tanh.
+  * SiLU-gated MLP (`hidden_activation="silu"`), not Gemma's gelu-tanh.
   * Scaleless RMSNorm on the token embeddings (no sqrt(hidden) scaling).
-  * Per-layer sandwich RMSNorms with a baked ``+1`` weight offset
-    (``x * (1 + w)``), matching Gemma, but with distinct eps for the
-    pre/post norms (``rms_norm_eps`` vs ``post_norm_eps``).
+  * Per-layer sandwich RMSNorms with a baked `+1` weight offset
+    (`x * (1 + w)`), matching Gemma, but with distinct eps for the
+    pre/post norms (`rms_norm_eps` vs `post_norm_eps`).
   * QK-norm (weightless, fp32) applied *before* RoPE, followed by a query
-    pre-scale of ``qk_scale_factor / sqrt(head_dim)``.
+    pre-scale of `qk_scale_factor / sqrt(head_dim)`.
   * A per-head sigmoid attention output gate.
   * iRoPE layout: NoPE layers use full attention, RoPE layers use sliding
-    window attention. RoPE is applied NEOX-style (``is_neox_style=True``):
-    the HF converter (``convert_muse_glimmer_weights_to_hf.py``, 20260806+) permutes
-    q/k into the half-split (NEOX) layout via ``_permute_for_rope`` so they
-    pair with ``rotate_half`` — matching the reference's interleaved rotation
+    window attention. RoPE is applied NEOX-style (`is_neox_style=True`):
+    the HF converter (`convert_muse_glimmer_weights_to_hf.py`, 20260806+) permutes
+    q/k into the half-split (NEOX) layout via `_permute_for_rope` so they
+    pair with `rotate_half` — matching the reference's interleaved rotation
     on the *native* (unpermuted) weights. Serving the permuted HF weights with
-    ``is_neox_style=False`` scrambles q/k and causes token-repetition collapse.
-  * Final logits are pre-scaled by ``output_multiplier`` and then tanh
-    soft-capped at ``final_logit_softcapping``.
+    `is_neox_style=False` scrambles q/k and causes token-repetition collapse.
+  * Final logits are pre-scaled by `output_multiplier` and then tanh
+    soft-capped at `final_logit_softcapping`.
   * Untied lm_head.
 
 The vision path supports variable-resolution images and temporally patched
@@ -54,6 +54,7 @@ from sonar.inputs import MultiModalDataDict
 from sonar.logger import init_logger
 from sonar.model_executor.layers.activation import SiluAndMul
 from sonar.model_executor.layers.attention import Attention, MMEncoderAttention
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
 from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
@@ -106,9 +107,9 @@ logger = init_logger(__name__)
 
 
 def _text_config(config):
-    """MuseGlimmer checkpoints may nest the text config under ``text_config``
-    (multimodal ``MuseGlimmerConfig``) or expose it directly
-    (``MuseGlimmerTextConfig``)."""
+    """MuseGlimmer checkpoints may nest the text config under `text_config`
+    (multimodal `MuseGlimmerConfig`) or expose it directly
+    (`MuseGlimmerTextConfig`)."""
     return getattr(config, "text_config", config)
 
 
@@ -164,7 +165,7 @@ class MuseGlimmerProcessingInfo(BaseProcessingInfo):
         processor = self.get_hf_processor()
         image_processor = processor.image_processor
         video_processor = processor.video_processor
-        num_frames = self.get_num_frames_with_most_features(seq_len, mm_counts)
+        num_frames = self.get_num_frames_with_most_features(seq_len, mm_counts.get("video", 0))
         return {
             "image": int(image_processor.max_image_tokens),
             "video": (
@@ -178,9 +179,9 @@ class MuseGlimmerProcessingInfo(BaseProcessingInfo):
         side = int(image_processor.patch_size) * int(image_processor.merge_size) * grid_size
         return ImageSize(width=side, height=side)
 
-    def get_num_frames_with_most_features(self, seq_len: int, mm_counts: Mapping[str, int]) -> int:
+    def get_num_frames_with_most_features(self, seq_len: int, num_videos: int) -> int:
         video_processor = self.get_hf_processor().video_processor
-        num_videos = max(mm_counts.get("video", 0), 1)
+        num_videos = max(num_videos, 1)
         groups = max(
             1,
             seq_len // num_videos // int(video_processor.max_video_frame_tokens),
@@ -215,7 +216,7 @@ class MuseGlimmerDummyInputsBuilder(BaseDummyInputsBuilder[MuseGlimmerProcessing
             "video": self._get_dummy_videos(
                 width=video_size,
                 height=video_size,
-                num_frames=self.info.get_num_frames_with_most_features(seq_len, mm_counts),
+                num_frames=self.info.get_num_frames_with_most_features(seq_len, mm_counts.get("video", 0)),
                 num_videos=mm_counts.get("video", 0),
                 overrides=mm_options.get("video"),
             ),
@@ -307,41 +308,6 @@ class MuseGlimmerMultiModalProcessor(BaseMultiModalProcessor[MuseGlimmerProcessi
                 replacement=video_replacement,
             ),
         ]
-
-
-class MuseGlimmerRMSNorm(nn.Module):
-    """RMSNorm mirroring HF MuseGlimmer exactly (fp32 compute, cast at the end).
-
-    ``normed = _norm(x.float()) * (w.float() + weight_offset)`` cast back to the
-    input dtype. When ``with_scale`` is False the layer is weightless (used for
-    QK-norm and the token-embedding norm).
-    """
-
-    def __init__(
-        self,
-        dim: int | None = None,
-        eps: float = 1e-6,
-        with_scale: bool = True,
-        weight_offset: int = 0,
-    ) -> None:
-        super().__init__()
-        self.eps = eps
-        self.with_scale = with_scale
-        self.weight_offset = weight_offset
-        if with_scale:
-            assert dim is not None
-            self.weight = nn.Parameter(torch.zeros(dim))
-        else:
-            self.register_parameter("weight", None)
-
-    def _norm(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        out = self._norm(hidden_states.float())
-        if self.with_scale:
-            out = out * (self.weight.float() + self.weight_offset)
-        return out.type_as(hidden_states)
 
 
 class MuseGlimmerVisionAttention(nn.Module):
@@ -819,7 +785,7 @@ class MuseGlimmerAttention(nn.Module):
         self.use_rope = bool(config.layer_rope_theta[self.layer_idx])
 
         # Weightless, computed in fp32, applied per head over head_dim.
-        self.qk_norm = MuseGlimmerRMSNorm(eps=config.rms_norm_eps, with_scale=False)
+        self.qk_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps, has_weight=False)
         self.scale_query_by = config.qk_scale_factor
 
         self.qkv_proj = QKVParallelLinear(
@@ -928,16 +894,10 @@ class MuseGlimmerDecoderLayer(nn.Module):
         )
         # Sandwich norms with baked +1 offset. Pre-norms use rms_norm_eps; the
         # post-norms use the (typically smaller) post_norm_eps.
-        self.input_layernorm = MuseGlimmerRMSNorm(config.hidden_size, eps=config.rms_norm_eps, weight_offset=1)
-        self.post_attention_layernorm = MuseGlimmerRMSNorm(
-            config.hidden_size, eps=config.post_norm_eps, weight_offset=1
-        )
-        self.pre_feedforward_layernorm = MuseGlimmerRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps, weight_offset=1
-        )
-        self.post_feedforward_layernorm = MuseGlimmerRMSNorm(
-            config.hidden_size, eps=config.post_norm_eps, weight_offset=1
-        )
+        self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.pre_feedforward_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
     def forward(
         self,
@@ -976,7 +936,7 @@ class MuseGlimmerModel(nn.Module, EagleModelMixin):
         )
         # MuseGlimmer normalizes token embeddings with a weightless RMSNorm instead of
         # Gemma's sqrt(hidden_size) multiplier.
-        self.embed_norm = MuseGlimmerRMSNorm(eps=config.rms_norm_eps, with_scale=False)
+        self.embed_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, has_weight=False)
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
@@ -984,7 +944,7 @@ class MuseGlimmerModel(nn.Module, EagleModelMixin):
             prefix=f"{prefix}.layers",
         )
         # Final norm: weight-as-scale, no offset.
-        self.norm = MuseGlimmerRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, dtype=torch.float32)
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
         )
@@ -1136,7 +1096,7 @@ class MuseGlimmerForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal, Suppor
 
         self.vision_encoder: MuseGlimmerVisionEncoder | None
         self.vision_adapter: MuseGlimmerVisionAdapter | None
-        self.perception_emb_norm: MuseGlimmerRMSNorm | None
+        self.perception_emb_norm: RMSNorm | None
         if self.has_vision:
             with self._mark_tower_model(sonar_config, {"image", "video"}):
                 self.vision_encoder = MuseGlimmerVisionEncoder(
@@ -1149,7 +1109,11 @@ class MuseGlimmerForCausalLM(nn.Module, SupportsLoRA, SupportsMultiModal, Suppor
                     text_config.hidden_size,
                     bias=False,
                 )
-                self.perception_emb_norm = MuseGlimmerRMSNorm(eps=text_config.rms_norm_eps, with_scale=False)
+                self.perception_emb_norm = RMSNorm(
+                    text_config.hidden_size,
+                    eps=text_config.rms_norm_eps,
+                    has_weight=False,
+                )
         else:
             self.vision_encoder = None
             self.vision_adapter = None

@@ -1,0 +1,5 @@
+# lmcache caps these below Sonar's security floors (requirements/common.txt);
+# the image keeps Sonar's versions. tools/kv_connector_lock.py ALLOWED_UNMET
+# lists the same pairs.
+opentelemetry-api
+opentelemetry-exporter-prometheus

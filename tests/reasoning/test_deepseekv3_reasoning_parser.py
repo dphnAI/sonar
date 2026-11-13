@@ -6,7 +6,6 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from sonar.entrypoints.generate.base.protocol import DeltaMessage
 from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from sonar.reasoning import ReasoningParserManager
 from sonar.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
 from sonar.reasoning.deepseek_v3_reasoning_parser import DeepSeekV3ReasoningParser
 from sonar.reasoning.identity_reasoning_parser import IdentityReasoningParser
@@ -30,12 +29,6 @@ def test_parser_selection(tokenizer, thinking, expected_parser_type):
     parser = DeepSeekV3ReasoningParser(tokenizer, chat_template_kwargs={"thinking": thinking})
 
     assert isinstance(parser._parser, expected_parser_type)
-
-
-def test_deepseek_v4_reasoning_parser_alias():
-    parser_cls = ReasoningParserManager.get_reasoning_parser("deepseek_v4")
-
-    assert parser_cls is DeepSeekV3ReasoningParser
 
 
 def test_identity_reasoning_parser_basic(tokenizer):

@@ -324,7 +324,7 @@ class TestStreamingExtraction:
     def test_mtp_streaming_massive_chunk(self, parser, mock_request):
         """Simulates MTP predicting text, tool calls,
         and trailing text all in a single chunk."""
-        chunks = ['Sure! <|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|>']
+        chunks = [('Sure! <|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|>')]
         results = self._simulate_streaming(parser, mock_request, chunks)
 
         content = self._collect_content(results)
@@ -338,9 +338,11 @@ class TestStreamingExtraction:
     def test_mtp_streaming_multiple_tools_burst(self, parser, mock_request):
         """Simulates MTP predicting an array of multiple tools in one single chunk."""
         chunks = [
-            '<|tools_prefix|>[{"get_weather": '
-            '{"location": "London"}}, '
-            '{"get_time": {"location": "Paris"}}]<|tools_suffix|>'
+            (
+                '<|tools_prefix|>[{"get_weather": '
+                '{"location": "London"}}, '
+                '{"get_time": {"location": "Paris"}}]<|tools_suffix|>'
+            )
         ]
         results = self._simulate_streaming(parser, mock_request, chunks)
 

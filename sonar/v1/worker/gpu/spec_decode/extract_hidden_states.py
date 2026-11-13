@@ -14,7 +14,6 @@ from sonar.model_executor.model_loader.utils import get_draft_load_config
 from sonar.v1.worker.gpu.dp_utils import DPSyncState
 from sonar.v1.worker.gpu.input_batch import InputBatch
 from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
-from sonar.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
 
 
 class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
@@ -28,8 +27,6 @@ class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
 
         if self.num_speculative_steps != 1:
             raise ValueError("extract_hidden_states requires num_speculative_tokens to be 1")
-        if self.speculative_config.disable_padded_drafter_batch:
-            raise ValueError("disable_padded_drafter_batch is not supported with extract_hidden_states method")
 
         self.supports_mm_inputs = False
         layer_ids = getattr(
@@ -63,7 +60,7 @@ class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
             return get_model(
                 sonar_config=self.sonar_config,
                 model_config=self.draft_model_config,
-                load_config=get_pp_safe_draft_load_config(get_draft_load_config(self.sonar_config)),
+                load_config=get_draft_load_config(self.sonar_config),
             )
 
     def load_model(self, target_model: nn.Module) -> None:

@@ -14,7 +14,15 @@ from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 import pybase64 as base64
-from pydantic import BaseModel, BeforeValidator, Field, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Field,
+    ValidationError,
+    ValidatorFunctionWrapHandler,
+    WrapValidator,
+    model_validator,
+)
 
 from sonar import PoolingParams
 from sonar.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
@@ -82,8 +90,8 @@ class EmbeddingBatchChatRequest(
 ):
     """OpenAI embeddings request with batched top-level chat conversations.
 
-    Mirrors ``BatchChatCompletionRequest`` by keeping batched conversations in
-    ``messages`` instead of introducing a separate batch-specific field.
+    Mirrors `BatchChatCompletionRequest` by keeping batched conversations in
+    `messages` instead of introducing a separate batch-specific field.
     """
 
     messages: Sequence[Annotated[list[ChatCompletionMessageParam], Field(min_length=1)]] = Field(..., min_length=1)
@@ -99,7 +107,7 @@ class EmbeddingBatchChatRequest(
 class EmbeddingChatInputRequest(
     EmbeddingChatRequest,
 ):
-    """OpenAI embeddings request with one chat conversation in ``input``."""
+    """OpenAI embeddings request with one chat conversation in `input`."""
 
     input: list[ChatCompletionMessageParam]
 
@@ -122,7 +130,7 @@ class EmbeddingChatInputRequest(
 
 
 class EmbeddingBatchChatInputRequest(EmbeddingBatchChatRequest):
-    """OpenAI embeddings request with batched chat conversations in ``input``."""
+    """OpenAI embeddings request with batched chat conversations in `input`."""
 
     input: Sequence[Annotated[list[ChatCompletionMessageParam], Field(min_length=1)]] = Field(..., min_length=1)
 
@@ -144,12 +152,34 @@ class EmbeddingBatchChatInputRequest(EmbeddingBatchChatRequest):
         return normalized
 
 
+_CHAT_ONLY_FIELDS = frozenset(EmbeddingChatRequest.model_fields).difference(EmbeddingCompletionRequest.model_fields)
+
+
+def _validate_embedding_request(data: Any, handler: ValidatorFunctionWrapHandler):
+    # Smart-mode union validation tries every member, and the chat members are
+    # slow to reject plain inputs, so try the completion request first when no
+    # chat member could accept the body.
+    if (
+        isinstance(data, dict)
+        and "input" in data
+        and _CHAT_ONLY_FIELDS.isdisjoint(data)
+        and not _is_chat_messages(data["input"])
+        and not _is_batched_chat_messages(data["input"])
+    ):
+        try:
+            return EmbeddingCompletionRequest.model_validate(data)
+        except ValidationError:
+            pass
+    return handler(data)
+
+
 EmbeddingRequest: TypeAlias = Annotated[
     EmbeddingCompletionRequest
     | EmbeddingChatRequest
     | EmbeddingBatchChatRequest
     | EmbeddingChatInputRequest
     | EmbeddingBatchChatInputRequest,
+    WrapValidator(_validate_embedding_request),
     BeforeValidator(reject_removed_pooling_parameters),
 ]
 

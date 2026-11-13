@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Synthetic Metal attention backend.
 
-Kept in its own module so :mod:`sonar.metal.platform` (loaded during plugin
-discovery) does not transitively import :mod:`sonar.v1.attention.backend`
-and re-enter a partially initialized :mod:`sonar.distributed` in the
+Kept in its own module so `sonar.metal.platform` (loaded during plugin
+discovery) does not transitively import `sonar.v1.attention.backend`
+and re-enter a partially initialized `sonar.distributed` in the
 EngineCore subprocess.
 """
 

@@ -10,7 +10,7 @@ from sonar.exceptions import SonarValidationError
 from sonar.outputs import LateChunk, LateChunkingMetadata, PoolingRequestOutput
 from sonar.renderers import TokenizeParams
 
-from ..typing import AnyRenderParam, EncodeCMPLRenderParams
+from ..types import AnyRenderParam, EncodeCMPLRenderParams
 
 
 def prepare_late_chunking_input(config: SonarConfig, render_params: AnyRenderParam) -> tuple[str, TokenizeParams]:

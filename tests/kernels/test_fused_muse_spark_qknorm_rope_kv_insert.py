@@ -20,7 +20,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def make_cos_sin_cache(max_pos, rotary_dim, base, device, dtype=torch.float32):
-    """The table ``RotaryEmbedding`` builds: cos||sin, fp32 for Muse-Spark."""
+    """The table `RotaryEmbedding` builds: cos||sin, fp32 for Muse-Spark."""
     inv_freq = 1.0 / (base ** (torch.arange(0, rotary_dim, 2, dtype=torch.float32, device=device) / rotary_dim))
     t = torch.arange(max_pos, dtype=torch.float32, device=device)
     freqs = torch.einsum("i,j->ij", t, inv_freq)

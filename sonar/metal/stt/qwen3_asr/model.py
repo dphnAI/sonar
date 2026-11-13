@@ -123,10 +123,10 @@ class AudioEncoder(nn.Module):
         """Encode mel spectrogram to audio embeddings.
 
         Args:
-            mel: Shape ``(n_mels, time)`` or ``(batch, n_mels, time)``.
+            mel: Shape `(n_mels, time)` or `(batch, n_mels, time)`.
 
         Returns:
-            Audio embeddings of shape ``(total_frames, output_dim)``.
+            Audio embeddings of shape `(total_frames, output_dim)`.
         """
         if mel.ndim == 2:
             mel = mel[None, ...]
@@ -453,10 +453,10 @@ class Qwen3ASRModel(nn.Module):
         """Encode mel spectrogram to audio embeddings.
 
         Args:
-            mel: ``(n_mels, time)`` or ``(batch, n_mels, time)``.
+            mel: `(n_mels, time)` or `(batch, n_mels, time)`.
 
         Returns:
-            Audio embeddings ``(total_frames, output_dim)``.
+            Audio embeddings `(total_frames, output_dim)`.
         """
         return self.audio_tower(mel)
 
@@ -527,9 +527,9 @@ class Qwen3ASRModel(nn.Module):
         """Map HF weight keys to MLX model structure.
 
         Handles:
-        - Strip ``thinker.`` prefix
-        - ``thinker.model.*`` → ``language_model.*``
-        - ``thinker.lm_head.*`` → ``language_model.lm_head.*``
+        - Strip `thinker.` prefix
+        - `thinker.model.*` → `language_model.*`
+        - `thinker.lm_head.*` → `language_model.lm_head.*`
         - Conv2d transpose: NCHW → NHWC
         - Dtype casting
         """

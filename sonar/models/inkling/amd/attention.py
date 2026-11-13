@@ -51,7 +51,7 @@ def compute_log_scaling_tau(positions: torch.Tensor, n_floor: int, alpha: float)
 
 
 class RelLogitsProj(nn.Module):
-    """Project the per-head relative branch ``r`` to per-distance logits."""
+    """Project the per-head relative branch `r` to per-distance logits."""
 
     def __init__(self, d_rel: int, rel_extent: int) -> None:
         super().__init__()

@@ -12,7 +12,7 @@ from sonar.model_executor.models.moss_transcribe_diarize import (
 
 
 def _parse(text: str):
-    return MossTranscribeDiarizeForConditionalGeneration.parse_diarized_transcript(text)
+    return MossTranscribeDiarizeForConditionalGeneration.parse_diarized_transcript(text, None)
 
 
 def _question(request_prompt: str = "", hotwords: str | None = None) -> str:

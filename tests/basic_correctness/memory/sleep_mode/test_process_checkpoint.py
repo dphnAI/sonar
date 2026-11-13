@@ -56,7 +56,6 @@ def test_process_checkpoint_preserves_outputs_and_graphs(tp, transport, monkeypa
     if torch.accelerator.device_count() < tp:
         pytest.skip(f"requires {tp} GPUs")
     config = {
-        "SONAR_USE_V2_MODEL_RUNNER": "1",
         "SONAR_WORKER_MULTIPROC_METHOD": "spawn",
         "SONAR_ALLOW_INSECURE_SERIALIZATION": "1",  # Test observation RPC only.
         "SONAR_BATCH_INVARIANT": "1",

@@ -257,7 +257,7 @@ def test_next_step_does_not_consume_pending_output(monkeypatch):
     pending = worker.prepare_output(_input_batch(["request"], np.array([0]), np.array([0, 1])))
     assert pending is not None
     output = async_utils.AsyncOutput(
-        ModelRunnerOutput(["request"], {"request": 0}),
+        ModelRunnerOutput(["request"]),
         SamplerOutput(torch.tensor([[7]]), None, None, None, num_rejected=torch.tensor([0])),
         torch.tensor([1]),
         Mock(),
@@ -286,7 +286,7 @@ def test_tp_failure_does_not_release_tokens_or_aux_output(monkeypatch):
     monkeypatch.setattr(async_utils, "stream", lambda *args: nullcontext())
     pending = Mock()
     status = torch.tensor([7], dtype=torch.int64)
-    result = ModelRunnerOutput(["request"], {"request": 0})
+    result = ModelRunnerOutput(["request"])
     output = async_utils.AsyncOutput(
         result,
         SamplerOutput(torch.tensor([[7]]), None, None, None, num_rejected=torch.tensor([0])),
@@ -1189,13 +1189,15 @@ def test_worker_emits_mid_block_chunked_prefill():
     worker.close()
 
 
-def test_worker_emits_published_block_and_mid_block_tail():
+@pytest.mark.parametrize("emit_start", [0, 5])
+@pytest.mark.parametrize("token_end", [7, 8, 10])
+def test_worker_emits_published_blocks_with_unkeyed_rows(token_end, emit_start):
     worker = _make_worker(1)
-    logical = np.arange(7 * 3 * 2, dtype=np.uint8).reshape(7, 3, 2)
+    logical = np.arange(token_end * 6, dtype=np.uint8).reshape(token_end, *_SHAPE)
 
     first = _metadata(
         0,
-        [_request_metadata("request", 0, 6, 0, [b"a" * 32])],
+        [_request_metadata("request", 0, 6, emit_start, [b"a" * 32])],
         {},
     )
     output = _process_output(
@@ -1210,12 +1212,12 @@ def test_worker_emits_published_block_and_mid_block_tail():
 
     second = _metadata(
         0,
-        [_request_metadata("request", 6, 1, 0, [])],
+        [_request_metadata("request", 6, token_end - 6, emit_start, [])],
         {},
     )
     output = _process_output(worker, second, logical[6:], ["request"], np.array([0]))
 
-    np.testing.assert_array_equal(output["request"].rows, logical)
+    np.testing.assert_array_equal(output["request"].rows, logical[emit_start:])
     worker.close()
 
 
@@ -1559,9 +1561,7 @@ def _step_output(request_ids: list[str], token_starts: list[int], token_counts: 
     output = SchedulerOutput.make_empty()
     output.scheduled_cached_reqs = CachedRequestData(
         req_ids=request_ids,
-        resumed_req_ids=set(),
         new_token_ids=[[] for _ in request_ids],
-        all_token_ids={},
         new_block_ids=[None for _ in request_ids],
         num_computed_tokens=token_starts,
         num_output_tokens=[0 for _ in request_ids],

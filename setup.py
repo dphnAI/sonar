@@ -726,8 +726,8 @@ def get_rocm_device_requirements() -> list[str]:
     """GPU kernel packages for TheRock builds.
 
     TheRock ships GPU kernels as separate per-arch wheels selected through
-    ``[device-<arch>]`` extras on torch, torchvision and rocm. Require them for
-    every arch this wheel was compiled for, so installing ``sonar`` works on
+    `[device-<arch>]` extras on torch, torchvision and rocm. Require them for
+    every arch this wheel was compiled for, so installing `sonar` works on
     any supported GPU.
     """
     if not _is_hip() or importlib.util.find_spec("rocm_sdk") is None:
@@ -776,7 +776,6 @@ if _is_cuda():
         # DeepGEMM requires CUDA 12.3+ (SM90/SM100)
         # Optional since it won't build on unsupported architectures
         ext_modules.append(CMakeExtension(name="sonar._deep_gemm_C", optional=True))
-        ext_modules.append(CMakeExtension(name="sonar._qutlass_C", optional=True))
     # fmha_sm100 is a Python/CuTe-DSL package installed into sonar.third_party.
     ext_modules.append(CMakeExtension(name="sonar.fmha_sm100", optional=True))
     # tml-fa4 is copied into an isolated sonar.third_party package.
@@ -908,9 +907,9 @@ setup(
     install_requires=get_requirements(),
     extras_require={
         # AMD Zen CPU optimizations via zentorch
-        "zen": ["zentorch==2.14.0.1"],
+        "zen": ["zentorch==2.14.0.2"],
         "bench": ["pandas", "matplotlib", "seaborn", "datasets", "scipy", "plotly"],
-        "tensorizer": ["tensorizer==2.10.1"],
+        "tensorizer": ["tensorizer==2.12.1"],
         "fastsafetensors": ["fastsafetensors >= 0.3.3"],
         "instanttensor": ["instanttensor >= 0.2.2"],
         "runai": ["runai-model-streamer[s3,gcs,azure] >= 0.17.1"],
@@ -926,7 +925,7 @@ setup(
         # only; also needs system GStreamer + libv4l (see docs).
         "deepstream": ["nvidia-deepstream-videodecode-cu13>=9.0.2"],
         "flashinfer": [],  # Kept for backwards compatibility
-        "b12x": ["flashinfer-python==0.7.2"],
+        "b12x": [],  # Kept for backwards compatibility
         # Optional deps for Helion kernel development
         "helion": ["helion==1.4.0"],
         # Optional deps for gRPC server (sonar serve --grpc)

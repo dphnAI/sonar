@@ -5,7 +5,7 @@ import pytest
 
 from sonar import LLM, SamplingParams
 
-MODEL = "hmellor/tiny-random-LlamaForCausalLM"
+MODEL = "vllm-project/tiny-random-LlamaForCausalLM"
 PROMPT = "Hello my name is Robert and I"
 
 

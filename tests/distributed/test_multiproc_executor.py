@@ -15,7 +15,6 @@ import pytest
 from sonar.config import SonarConfig
 from sonar.engine.arg_utils import EngineArgs
 from sonar.platforms import current_platform
-from sonar.v1.core.sched.output import SchedulerOutput
 from sonar.v1.executor import multiproc_executor
 from sonar.v1.executor.multiproc_executor import MultiprocExecutor
 from tests.utils import multi_gpu_test
@@ -98,19 +97,6 @@ def create_sonar_config(
         sonar_config.parallel_config.disable_custom_all_reduce = True
 
     return sonar_config
-
-
-def create_test_scheduler_output(num_requests: int = 1) -> SchedulerOutput:
-    """Create a minimal SchedulerOutput for testing."""
-    # This is a simplified version - in practice you'd need proper
-    # SchedulerOutput construction based on the actual Sonar v1 API
-    return SchedulerOutput(
-        scheduled_new_reqs=[],
-        scheduled_resumed_reqs=[],
-        scheduled_running_reqs=[],
-        num_scheduled_tokens={},
-        total_num_scheduled_tokens=0,
-    )
 
 
 def test_multiproc_executor_initialization():
@@ -326,10 +312,8 @@ def test_multiproc_executor_pipeline_parallel():
         output_rank = executor._get_output_rank()
         assert output_rank == 2, "Output rank should be 2 (first rank of last PP stage)"
 
-        # V2 model runner uses one extra batch to overlap async scheduling.
-        expected_concurrent_batches = 2 + int(
-            sonar_config.scheduler_config.async_scheduling and sonar_config.use_v2_model_runner
-        )
+        # One extra batch overlaps async scheduling.
+        expected_concurrent_batches = 2 + int(sonar_config.scheduler_config.async_scheduling)
         assert sonar_config.max_concurrent_batches == expected_concurrent_batches, (
             "Max concurrent batches should follow the configured PP/async scheduling policy"
         )

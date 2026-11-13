@@ -13,7 +13,7 @@ from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
 from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_to_dtype,
 )
-from sonar.models.muse_spark.common.layers import MuseSpark1xRMSNormWithInputScale
+from sonar.models.muse_spark.common.layers import MuseSparkRMSNormWithInputScale
 from sonar.platforms import current_platform
 from tests.kernels.moe.muse_spark_utils import (
     assert_cudagraph_replays,
@@ -30,7 +30,7 @@ E, N, K, TOPK, M = 8, 256, 512, 2, 8
 
 
 def _build(checkpoint: dict[str, torch.Tensor], quant_config=None):
-    norm = MuseSpark1xRMSNormWithInputScale(
+    norm = MuseSparkRMSNormWithInputScale(
         K,
         eps=1e-8,
         has_weight=True,

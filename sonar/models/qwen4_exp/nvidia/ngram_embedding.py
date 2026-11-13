@@ -11,7 +11,7 @@ from torch import nn
 from transformers import Qwen4ExpTextConfig
 
 from sonar.config import get_current_sonar_config
-from sonar.distributed import get_etp_group, get_tp_group
+from sonar.distributed import get_engram_dp_group, get_etp_group, get_tp_group
 from sonar.logger import init_logger
 from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
@@ -29,6 +29,7 @@ from ..common.ngram_embedding import (
     Qwen4ExpPLEFp8EmbeddingMethod,
     Qwen4ExpPLENvFp4EmbeddingMethod,
     Qwen4ExpPLEPinnedHostEmbedding,
+    Qwen4ExpPLESharedHostEmbedding,
     Qwen4ExpPLEUnquantizedEmbeddingMethod,
 )
 from ..common.ops.ple import ple_ngram_ids
@@ -291,7 +292,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
 
     @classmethod
     def _nth_prime_after(cls, start: int, count: int) -> int:
-        """Return the ``count``-th prime strictly greater than ``start``."""
+        """Return the `count`-th prime strictly greater than `start`."""
         prime = int(start)
         for _ in range(count):
             candidate = prime + 1
@@ -419,6 +420,8 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         embedding_cls = (
             Qwen4ExpPLEDiskOffloadEmbedding
             if engram_config is not None and engram_config.disk_offload
+            else Qwen4ExpPLESharedHostEmbedding
+            if engram_config is not None and engram_config.dp_shared_memory and get_engram_dp_group() is not None
             else Qwen4ExpPLEPinnedHostEmbedding
             if engram_config is not None and engram_config.cpu_offload
             else Qwen4ExpPLEDeviceEmbedding

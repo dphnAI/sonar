@@ -95,7 +95,6 @@ variants:
         extra_args:
           - "--trust-remote-code"
         extra_env:
-          SONAR_USE_V2_MODEL_RUNNER: "1"
           SONAR_ROCM_USE_AITER_FP8BMM: "0"
           SONAR_ROCM_USE_AITER_FP4BMM: "0"
   nvfp4:
@@ -210,7 +209,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install "sonar==0.28.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install "sonar==0.28.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   uv pip install "transformers>=5.9.0"
   ```
 
@@ -219,7 +218,7 @@ guide: |
   ### FP8 on 8xH200 (standard)
 
   ```bash
-  sonar serve zai-org/GLM-5.2-FP8 \
+  sonar run zai-org/GLM-5.2-FP8 \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
@@ -231,7 +230,7 @@ guide: |
   ```
   ### FP8 on 8xH20 (dspark with best practices)
   ```bash
-  sonar serve zai-org/GLM-5.2-FP8 \
+  sonar run zai-org/GLM-5.2-FP8 \
      --tensor-parallel-size 8 \
      --tool-call-parser glm47 \
      --reasoning-parser glm47 \
@@ -255,7 +254,7 @@ guide: |
   ```bash
   SONAR_ROCM_USE_AITER=1 \
   SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  sonar serve zai-org/GLM-5.2-FP8 \
+  sonar run zai-org/GLM-5.2-FP8 \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
@@ -301,15 +300,13 @@ guide: |
   export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-  export SONAR_USE_V2_MODEL_RUNNER=1
   export SONAR_ROCM_USE_AITER_FP8BMM=0
   export SONAR_ROCM_USE_AITER_FP4BMM=0
 
-  sonar serve amd/GLM-5.2-MXFP4 \
+  sonar run amd/GLM-5.2-MXFP4 \
     --trust-remote-code \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
-    --gpu-memory-utilization 0.90 \
     --max-model-len 32768 \
     --tool-call-parser glm47 \
     --enable-auto-tool-choice \
@@ -331,7 +328,7 @@ guide: |
   roughly halves that budget, which is what makes 1M reachable at all.
 
   ```bash
-  SONAR_DEEP_GEMM_WARMUP=skip sonar serve zai-org/GLM-5.2-FP8 \
+  SONAR_DEEP_GEMM_WARMUP=skip sonar run zai-org/GLM-5.2-FP8 \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
@@ -358,7 +355,7 @@ guide: |
   flag is needed. Select the **NVFP4** variant above (Blackwell-only) or run NVIDIA's command:
 
   ```bash
-  sonar serve nvidia/GLM-5.2-NVFP4 \
+  sonar run nvidia/GLM-5.2-NVFP4 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --reasoning-parser glm47 \
@@ -445,7 +442,7 @@ guide: |
   Add `--no-enable-prefix-caching` to the server command for a clean measurement.
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model zai-org/GLM-5.2-FP8 \
     --dataset-name random \
     --random-input 8000 \

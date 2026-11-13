@@ -5,7 +5,7 @@ import pytest
 from transformers import AutoModel
 
 from sonar.assets.base import SONAR_S3_BUCKET_URL
-from sonar.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
+from sonar.entrypoints.pooling.scoring.types import ScoreMultiModalParam
 from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageEmbedsParam,
     ChatCompletionContentPartImageParam,

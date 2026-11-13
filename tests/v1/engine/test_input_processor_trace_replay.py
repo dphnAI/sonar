@@ -8,7 +8,6 @@ from unittest.mock import patch
 import pytest
 
 from sonar import SamplingParams
-from sonar.config import SonarConfig
 from sonar.exceptions import SonarValidationError
 from sonar.v1.core.sched.utils import check_stop
 from sonar.v1.engine.input_processor import InputProcessor
@@ -106,11 +105,14 @@ def test_trace_request_accepted_when_feature_enabled():
     _validate(enable_trace_replay=True)
 
 
-def test_trace_replay_requires_v2_model_runner():
-    config = SimpleNamespace(
-        model_config=SimpleNamespace(enable_trace_replay=True),
-        use_v2_model_runner=False,
-    )
-
-    with pytest.raises(ValueError, match="trace replay requires Model Runner V2"):
-        SonarConfig._verify_trace_replay_config(config)
+def test_metal_uses_its_retained_logits_processor_validator():
+    processors = ["custom.module:Processor"]
+    processor = SimpleNamespace(model_config=SimpleNamespace(logits_processors=processors, runner_type="generate"))
+    params = SamplingParams()
+    with (
+        patch("sonar.v1.engine.input_processor.current_platform.is_metal", return_value=True),
+        patch("sonar.v1.sample.logits_processor.validate_logits_processors_parameters") as validate,
+    ):
+        validator = InputProcessor._build_logits_processors_params_validator(processor)
+        validator(params)
+    validate.assert_called_once_with(processors, params)

@@ -19,7 +19,7 @@ from sonar import (
     TokensPrompt,
 )
 from sonar import logger as sonar_logger
-from sonar.config import SonarConfig
+from sonar.config import SonarConfig, WatermarkConfig
 from sonar.entrypoints.generate.beam_search.offline import BeamSearchOfflineMixin
 from sonar.entrypoints.generate.beam_search.online import BeamSearchOnlineMixin
 from sonar.entrypoints.generate.beam_search.utils import (
@@ -56,8 +56,7 @@ class _Renderer:
 
 
 class _SonarConfig:
-    use_v2_model_runner = True
-    watermark_config = object()
+    watermark_config = WatermarkConfig(key=42)
     speculative_config = None
     model_config = SimpleNamespace(is_diffusion=False)
 
@@ -113,6 +112,7 @@ class _AsyncServing(BeamSearchOnlineMixin):
 class _OfflineServing(BeamSearchOfflineMixin):
     renderer = _Renderer()
     llm_engine = _EngineClient()
+    model_config = MagicMock(max_model_len=128)
 
     def _preprocess_cmpl(
         self,
@@ -611,10 +611,9 @@ async def test_explicit_beam_allowlist_uses_exact_scores(offline, exhausted):
     assert all(score.rank is None for step in step_scores for score in step.values())
 
 
-@pytest.mark.parametrize("case", ["empty", "grammar", "spec", "diffusion", "v1", "size", "id"])
+@pytest.mark.parametrize("case", ["empty", "grammar", "spec", "diffusion", "size", "id"])
 def test_beam_allowlist_rejects_unsupported_requests(case):
     config = SimpleNamespace(
-        use_v2_model_runner=case != "v1",
         speculative_config=object() if case == "spec" else None,
         model_config=SimpleNamespace(
             is_diffusion=case == "diffusion",

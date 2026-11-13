@@ -107,7 +107,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu132 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
   ## Launch commands
@@ -115,7 +115,7 @@ guide: |
   ### Recommended — with MTP speculative decoding
 
   ```bash
-  sonar serve internlm/Intern-S2-Preview \
+  sonar run internlm/Intern-S2-Preview \
     --trust-remote-code \
     --tensor-parallel-size 2 \
     --reasoning-parser qwen3 \
@@ -127,7 +127,7 @@ guide: |
   ### Basic serving (no MTP)
 
   ```bash
-  sonar serve internlm/Intern-S2-Preview \
+  sonar run internlm/Intern-S2-Preview \
     --trust-remote-code \
     --tensor-parallel-size 2 \
     --reasoning-parser qwen3 \
@@ -141,7 +141,7 @@ guide: |
   override the RoPE config to enable YaRN:
 
   ```bash
-  sonar serve internlm/Intern-S2-Preview \
+  sonar run internlm/Intern-S2-Preview \
     --trust-remote-code \
     --tensor-parallel-size 2 \
     --max-model-len 512000 \
@@ -196,7 +196,7 @@ guide: |
     handler landed via Sonar PR #42705 — use a nightly wheel or build from main
     once the PR merges.
   - **OOM at full 262K context:** drop `--max-model-len` to 65536 or 131072,
-    or lower `--gpu-memory-utilization` headroom.
+    or lower `--max-num-seqs`.
 
   ## References
 

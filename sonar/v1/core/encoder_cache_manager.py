@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from sonar.config import SonarConfig
-from sonar.config.ec_manager_config import EncoderCacheManagerMetadata
 from sonar.logger import init_logger
 from sonar.v1.request import Request
 
@@ -317,9 +316,6 @@ class EncoderCacheManager:
         freed = [mm_hash for mm_hash in self.freed if mm_hash not in self.cached]
         self.freed = []
         return freed
-
-    def get_manager_metadata(self) -> EncoderCacheManagerMetadata | None:
-        return None
 
 
 def compute_mm_encoder_budget(

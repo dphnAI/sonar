@@ -7,7 +7,7 @@ import torch
 
 from sonar.platforms import current_platform
 from sonar.utils.platform_utils import is_pin_memory_available
-from sonar.utils.torch_utils import make_tensor_with_pad
+from sonar.utils.torch_utils import make_ndarray_with_pad
 from sonar.v1.sample.logits_processor import LogitsProcessors
 from sonar.v1.sample.metadata import SamplingMetadata
 from sonar.v1.sample.sampler import Sampler
@@ -36,13 +36,7 @@ def _create_prompt_tokens_tensor(
     vocab_size: int,
     device: torch.device,
 ) -> torch.Tensor:
-    return make_tensor_with_pad(
-        prompt_token_ids,
-        pad=vocab_size,
-        device=device,
-        dtype=torch.int64,
-        pin_memory=False,
-    )
+    return torch.from_numpy(make_ndarray_with_pad(prompt_token_ids, pad=vocab_size, dtype=np.int64)).to(device)
 
 
 def _create_bad_words_token_ids(

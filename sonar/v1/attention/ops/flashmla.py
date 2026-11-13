@@ -34,14 +34,16 @@ def _is_flashmla_available() -> tuple[bool, str | None]:
     if not _flashmla_C_AVAILABLE:
         return (
             False,
-            "sonar._flashmla_C is not available, likely was not "
-            "compiled due to insufficient nvcc version or a supported arch "
-            "was not in the list of target arches to compile for.",
+            (
+                "sonar._flashmla_C is not available, likely was not "
+                "compiled due to insufficient nvcc version or a supported arch "
+                "was not in the list of target arches to compile for."
+            ),
         )
     if not _flashmla_extension_C_AVAILABLE:
         return (
             False,
-            "sonar._flashmla_extension_C is not available, likely was not compiled due to a build error.",
+            ("sonar._flashmla_extension_C is not available, likely was not compiled due to a build error."),
         )
 
     return True, None

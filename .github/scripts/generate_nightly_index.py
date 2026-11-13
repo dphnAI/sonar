@@ -32,7 +32,7 @@ def main() -> None:
         "--install-command",
         default="uv pip install sonar "
         "--extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple "
-        "--index-strategy first-index --torch-backend cu130",
+        "--index-strategy first-index --torch-backend cu132",
     )
     args = parser.parse_args()
 

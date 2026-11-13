@@ -23,7 +23,7 @@ model:
   min_vllm_version: "0.31.0"
   docker_image:
     nvidia: "vllm/vllm-openai:v0.31.0"
-    # AMD stays on the ROCm nightly: the gfx942 MXFP4 routing gate (sonar#58262)
+    # AMD stays on the ROCm nightly: the gfx942 MXFP4 routing gate (vllm#58262)
     # merged after the v0.31.0 branch cut, so MI300X/MI325X need it.
     amd: "vllm/vllm-openai-rocm:nightly"
   architecture: moe
@@ -74,8 +74,6 @@ variants:
     extra_args:
       - "--tensor-parallel-size"
       - "4"
-      - "--gpu-memory-utilization"
-      - "0.95"
     hardware_overrides:
       mi300x:
         extra_args:
@@ -97,8 +95,6 @@ variants:
     extra_args:
       - "--tensor-parallel-size"
       - "4"
-      - "--gpu-memory-utilization"
-      - "0.95"
     hardware_overrides:
       mi300x:
         extra_args:
@@ -199,10 +195,9 @@ guide: |
   else is identical:
 
   ```bash
-  sonar serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
+  sonar run XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
     --tensor-parallel-size 4 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.95 \
     --max-model-len auto \
     --reasoning-parser mimo \
     --tool-call-parser mimo \
@@ -215,7 +210,7 @@ guide: |
   ```bash
   SONAR_ROCM_USE_AITER=1 \
   SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 \
-  sonar serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
+  sonar run XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --kv-cache-dtype fp8 \
@@ -238,13 +233,13 @@ guide: |
   (merged 2026-09-30, after the v0.31.0 branch cut — not in any stable release
   yet, so this flag needs a nightly wheel; it also needs aiter >= 0.1.20, which
   the ROCm nightly image ships). Verified end-to-end on MI300X in that PR — see
-  it for the gsm8k and `sonar bench serve` numbers against the emulation
+  it for the gsm8k and `sonar bench run` numbers against the emulation
   baseline:
 
   ```bash
   SONAR_ROCM_USE_AITER=1 \
   SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 \
-  sonar serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
+  sonar run XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
     --tensor-parallel-size 2 \
     --trust-remote-code \
     --max-model-len auto \
@@ -269,10 +264,9 @@ guide: |
   ```
 
   ```bash
-  sonar serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
+  sonar run XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
     --tensor-parallel-size 4 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.95 \
     --max-model-len auto \
     --speculative-config "{\"method\":\"dflash\",\"model\":\"$DFLASH_DIR\",\"num_speculative_tokens\":7}" \
     --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}' \

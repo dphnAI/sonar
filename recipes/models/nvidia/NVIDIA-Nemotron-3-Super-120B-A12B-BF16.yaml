@@ -89,8 +89,6 @@ variants:
         extra_args:
           - "--max-model-len"
           - "262144"
-          - "--gpu-memory-utilization"
-          - "0.92"
           - "--load-format"
           - "fastsafetensors"
           - "--attention-backend"
@@ -149,7 +147,7 @@ guide: |
   Reference command from the [Sonar blog](https://vllm.ai/blog/nemotron-3-super) (BF16, 4x H100, FP8 KV cache):
 
   ```bash
-  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16 \
+  sonar run nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16 \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
@@ -162,7 +160,7 @@ guide: |
   FP8 weights:
 
   ```bash
-  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8 \
+  sonar run nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8 \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
@@ -174,7 +172,7 @@ guide: |
   NVFP4 (Blackwell only):
 
   ```bash
-  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  sonar run nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
     --tensor-parallel-size 2 \
     --trust-remote-code \
     --enable-auto-tool-choice \
@@ -200,7 +198,7 @@ guide: |
 
   SONAR_FLOAT32_MATMUL_PRECISION="high" \
   SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
-  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  sonar run nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
       --host 0.0.0.0 \
       --port 8000 \
       --max-model-len 262144 \
@@ -223,7 +221,6 @@ guide: |
 
   The NVFP4 variant runs on a single RTX Pro 6000 at TP=1. Requires Sonar v0.24.0 or later. A few notes:
 
-  - **Set `--gpu-memory-utilization 0.92`** to avoid an OOM at startup. If you encounter an OOM, try adjusting the value.
   - **Set `SONAR_FLOAT32_MATMUL_PRECISION="high"`** to use high precision for the matmul operations.
   - **Set `SONAR_ALLOW_LONG_MAX_MODEL_LEN=1`** to allow the model to use the full context length.
 
@@ -232,9 +229,8 @@ guide: |
 
   SONAR_FLOAT32_MATMUL_PRECISION="high" \
   SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
-  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  sonar run nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
       --max-model-len 262144 \
-      --gpu-memory-utilization 0.92 \
       --max-num-seqs 8 \
       --max-num-batched-tokens 16384 \
       --kv-cache-dtype fp8 \
@@ -250,7 +246,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8 \
     --trust-remote-code \
     --dataset-name random \

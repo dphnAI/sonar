@@ -2,6 +2,21 @@
 
 This folder demonstrates how to use LMCache for disaggregated prefilling, CPU offloading and KV cache sharing.
 
+The CPU-offload example uses `LMCacheConnectorV1` in process. The
+disaggregated-prefill and sharing scripts use `LMCacheMPConnector` with a
+separate LMCache server. Install the connector dependencies with
+`tools/install_kv_connectors.sh` from the repository root.
+
+### MP mode and the extensible KV cache
+
+Sonar loads `LMCacheMPConnector` from the installed LMCache package. The
+maintained integration declares legacy CUDA IPC, which disables the extensible
+KV cache. Do not enable `lmcache.mp.use_vmm_api` with this provider. Upstream's
+file-descriptor transport requires a provider implementing `kv_cache_access`
+and the LMCache file-descriptor channel, which this integration does not expose.
+External LMCache module paths and the engine protocol identifier `vllm` retain
+their dependency-defined spelling.
+
 ## 1. Disaggregated Prefill in Sonar v1
 
 This example demonstrates how to run LMCache with disaggregated prefill using NIXL on a single node.
@@ -46,15 +61,22 @@ The main script generates several log files:
 - `decoder.log` - Logs from the decode server
 - `proxy.log` - Logs from the proxy server
 
-## 2. CPU Offload Examples
+## 2. CPU Offload
 
-- `python cpu_offload_lmcache.py -v v0` - CPU offloading implementation for Sonar v0
-- `python cpu_offload_lmcache.py -v v1` - CPU offloading implementation for Sonar v1
+Run `PYTHONHASHSEED=0 python cpu_offload_lmcache.py --model Qwen/Qwen3-0.6B`.
+The script configures a 5 GiB CPU cache with 256-token chunks and leaves GPU
+memory utilization at Sonar's default. It disables Sonar's local prefix cache
+so the printed cached-token counts show LMCache reuse.
 
 ## 3. KV Cache Sharing
 
-The `kv_cache_sharing_lmcache_v1.py` example demonstrates how to share KV caches between Sonar v1 instances.
+Run `PYTHONHASHSEED=0 python kv_cache_sharing_lmcache_v1.py`. Both instances
+use `LMCacheMPConnector` with the `kv_both` role.
 
-## 4. Disaggregated Prefill in Sonar v0
+## 4. Disaggregated Prefill with MP
 
-The `disaggregated_prefill_lmcache_v0.py` provides an example of how to run disaggregated prefill in Sonar v0.
+Run `PYTHONHASHSEED=0 python disagg_prefill_lmcache.py`. The script starts an
+LMCache server on port 8100 with a 5 GiB LRU tier, a producer on GPU 0, and a
+consumer on GPU 1. The consumer waits for the producer's completion event
+before generating. Neither script uses the removed v0 connector or a `-v`
+version selector.

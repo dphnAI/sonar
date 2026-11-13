@@ -24,12 +24,9 @@ Sonar accepts these values in `speculative_config.method`.
 | `dflash` | Parallel diffusion-style block model | Yes | Draft a complete token block in one model pass |
 | `eagle`, `eagle3` | Autoregressive EAGLE head | Yes | General model-based speculation |
 | `draft_model` | Smaller causal language model | Yes | Target and draft models with compatible vocabularies |
-| `mlp_speculator` | Multi-head MLP | Yes | Models with a compatible MLP speculator |
-| `medusa` | Medusa prediction heads | Yes | Checkpoints trained with Medusa heads |
 | `ngram` | CPU prompt lookup | No | Repetitive prompts, code, and structured text |
 | `ngram_gpu` | GPU prompt lookup | No | Prompt lookup when CPU lookup is a bottleneck |
-| `suffix` | Prompt and response suffix trees | No | Repeated continuations across requests |
-| `custom_class` | User-provided Python proposer | Depends | Experimental integrations |
+| `suffix` | GPU prompt and response suffix matching | No | Repeated continuations across requests |
 | `extract_hidden_states` | Hidden-state extraction backend | Depends | Specialized trained proposers |
 
 Several old model-family method names remain accepted for compatibility. Sonar
@@ -348,9 +345,16 @@ sonar serve Qwen/Qwen3-4B-Thinking-2507 \
 Set `draft_tensor_parallel_size` to `1` or to the target tensor-parallel size.
 The draft model uses one rank by default when supported.
 
-Target and draft models normally need the same vocabulary. Set
-`use_heterogeneous_vocab: true` to use token-level vocabulary intersection for
-a generic draft model. This option currently requires greedy draft sampling.
+Target and draft models need compatible vocabularies.
+
+With pipeline parallelism, the complete draft model runs on the final target
+stage. `SONAR_PP_LAYER_PARTITION` applies only to the target. EAGLE3, DFlash,
+and DSpark require a target architecture that supports passing auxiliary hidden
+states between stages; unsupported pairs fail at startup.
+
+Set `draft_decode_context_parallel_size` to `1` or the target's decode-context
+parallel size. DFlash and DSpark default to `1` unless the draft is full-attention
+MLA. `parallel_drafting` is deprecated and has no effect.
 
 ## N-gram and suffix decoding
 
@@ -367,21 +371,38 @@ sonar serve MODEL \
   }'
 ```
 
-Suffix decoding also learns from previous generated responses. It uses
-frequency counts and selects a dynamic speculative length. Install its optional
-dependency first:
+Suffix decoding matches each request's prompt and output and a GPU corpus of
+previous responses. It supports async scheduling and needs no extra package:
 
 ```bash
-uv pip install arctic-inference==0.1.1
 sonar serve MODEL \
   --speculative-config '{
     "method": "suffix",
-    "num_speculative_tokens": 32
+    "num_speculative_tokens": 8
   }'
 ```
 
-For suffix decoding, `num_speculative_tokens` is a maximum. Sonar can use a
-shorter draft at each step.
+Each step drafts exactly `num_speculative_tokens` tokens. Unmatched slots repeat
+the last sampled token. Keep the depth moderate unless adaptive verification is
+enabled. `suffix_decoding_max_tree_depth` limits suffix-match length.
+`suffix_decoding_max_spec_factor` and `suffix_decoding_min_token_prob` are
+deprecated and have no effect.
+
+The corpus holds up to `suffix_decoding_corpus_tokens` tokens (default
+`1048576`). It is shared across requests, including different cache salts and
+LoRA adapters. Set this value to `0` when requests must not influence each
+other's decode timing. Setting `suffix_decoding_max_cached_requests` to `0`
+also disables the corpus.
+
+For reproducible seeded sampling, disable the corpus and adaptive verification.
+
+### Adaptive verification
+
+Set `enable_adaptive_verification: true` in the speculative configuration to
+verify only draft slots whose estimated acceptance justifies their cost. It
+supports model-based proposers and suffix decoding. It requires full CUDA
+graphs and a backend that replays variable-length decode batches, such as
+`TRITON_ATTN` or FlashAttention 3.
 
 ## Measure the result
 

@@ -3,12 +3,12 @@
 """Persist and reuse the memory-profiling result across engine boots.
 
 On startup, Sonar measures how much GPU memory the KV cache can use and
-computes the ``--kv-cache-memory-bytes`` value that reproduces that allocation.
+computes the `--kv-cache-memory-bytes` value that reproduces that allocation.
 For a fixed (model, config, hardware, library) combination the result is
 deterministic, yet it is re-measured on every boot.
 
-When ``SONAR_ENABLE_STARTUP_PLAN=1``, each worker persists that value under
-``{SONAR_CACHE_ROOT}/startup_plan/`` (regenerable derived state, alongside
+When `SONAR_ENABLE_STARTUP_PLAN=1`, each worker persists that value under
+`{SONAR_CACHE_ROOT}/startup_plan/` (regenerable derived state, alongside
 the torch.compile cache), keyed by a fingerprint of everything the value
 depends on, and later boots apply it automatically -- skipping the
 memory-profiling measurement and the CUDA-graph memory estimation pass --
@@ -27,6 +27,7 @@ import torch
 
 import sonar.envs as envs
 from sonar.config import SonarConfig
+from sonar.config.utils import hash_config
 from sonar.logger import init_logger
 from sonar.platforms import current_platform
 
@@ -38,28 +39,32 @@ logger = init_logger(__name__)
 PLAN_SCHEMA_VERSION = 2
 
 
-def compute_plan_fingerprint(sonar_config: SonarConfig, rank: int, world_size: int) -> str:
+def _pp_transport_in_use(worker: "Worker") -> str:
+    return "nccl" if worker._pp_transport is None else "copy_engine"
+
+
+def compute_plan_fingerprint(sonar_config: SonarConfig, rank: int, world_size: int, pp_transport: str = "nccl") -> str:
     """Hash everything the profiled KV-cache memory value depends on.
 
-    ``SonarConfig.compute_hash()`` covers the Sonar version and the
-    model, cache, parallel, and compilation configs, but deliberately contains
-    no device identity (``DeviceConfig.compute_hash`` is empty), so device
+    `SonarConfig.compile_factors()` covers the Sonar version and the model,
+    cache, parallel, and compilation configs, but deliberately contains no
+    device identity (`DeviceConfig.compile_factors` is empty), so device
     name, total memory, compute capability, and the torch/CUDA build are
     added here. The Sonar version is also pinned as an explicit factor so
-    version invalidation holds no matter how ``compute_hash`` evolves.
+    version invalidation holds no matter how `compile_factors` evolves.
     Rank is included because per-rank memory use differs under TP/PP.
     Driver-only changes are not part of the key; the free-memory gate at
     apply time bounds the residual risk.
     """
-    # Imported here (as SonarConfig.compute_hash does) to avoid a cycle
-    # with the top-level sonar package.
+    # Imported here (as SonarConfig.compile_factors does) to avoid a cycle with
+    # the top-level sonar package.
     from sonar import __version__ as sonar_version
 
     capability = current_platform.get_device_capability()
     factors = {
         "schema": PLAN_SCHEMA_VERSION,
         "sonar": sonar_version,
-        "sonar_config": sonar_config.compute_hash(),
+        "sonar_config": hash_config(sonar_config),
         "device_name": current_platform.get_device_name(),
         "device_total_memory": current_platform.get_device_total_memory(),
         "device_capability": str(capability) if capability else "",
@@ -67,6 +72,9 @@ def compute_plan_fingerprint(sonar_config: SonarConfig, rank: int, world_size: i
         "cuda": torch.version.cuda or "",
         "rank": rank,
         "world_size": world_size,
+        # The PP transport in use changes the memory reserved beside the KV
+        # cache, and "auto" may pick either.
+        "pp_transport": pp_transport,
     }
     digest = hashlib.sha256(json.dumps(factors, sort_keys=True).encode()).hexdigest()
     return digest[:16]
@@ -75,7 +83,7 @@ def compute_plan_fingerprint(sonar_config: SonarConfig, rank: int, world_size: i
 def _plan_path(fingerprint: str) -> str:
     """Plans are regenerable derived state, so they live under the standard
     Sonar cache root (like the torch.compile cache) and relocate with
-    ``SONAR_CACHE_ROOT`` instead of needing a location knob of their own."""
+    `SONAR_CACHE_ROOT` instead of needing a location knob of their own."""
     # SONAR_CACHE_ROOT is already user-expanded by envs.py.
     return os.path.join(envs.SONAR_CACHE_ROOT, "startup_plan", f"startup_plan_{fingerprint}.json")
 
@@ -123,12 +131,17 @@ def _applicable_kv_cache_memory_bytes(plan: dict, current_free_memory: int) -> i
 
 
 def maybe_apply_startup_plan(worker: "Worker") -> None:
-    """If enabled and ``--kv-cache-memory-bytes`` was not set explicitly, apply a
-    persisted plan by setting ``worker.cache_config.kv_cache_memory_bytes``.
-    No-op unless ``SONAR_ENABLE_STARTUP_PLAN=1``."""
+    """If enabled and `--kv-cache-memory-bytes` was not set explicitly, apply a
+    persisted plan by setting `worker.cache_config.kv_cache_memory_bytes`.
+    No-op unless `SONAR_ENABLE_STARTUP_PLAN=1`."""
     if not envs.SONAR_ENABLE_STARTUP_PLAN or worker.cache_config.kv_cache_memory_bytes is not None:
         return
-    fingerprint = compute_plan_fingerprint(worker.sonar_config, worker.rank, worker.parallel_config.world_size)
+    fingerprint = compute_plan_fingerprint(
+        worker.sonar_config,
+        worker.rank,
+        worker.parallel_config.world_size,
+        _pp_transport_in_use(worker),
+    )
     plan = _load_plan(fingerprint)
     if plan is None:
         return
@@ -152,11 +165,16 @@ def maybe_apply_startup_plan(worker: "Worker") -> None:
 
 def maybe_save_startup_plan(worker: "Worker", kv_cache_memory_bytes: int) -> None:
     """Atomically persist this boot's profiling result for future boots.
-    No-op unless ``SONAR_ENABLE_STARTUP_PLAN=1``; failures are logged,
+    No-op unless `SONAR_ENABLE_STARTUP_PLAN=1`; failures are logged,
     never raised."""
     if not envs.SONAR_ENABLE_STARTUP_PLAN:
         return
-    fingerprint = compute_plan_fingerprint(worker.sonar_config, worker.rank, worker.parallel_config.world_size)
+    fingerprint = compute_plan_fingerprint(
+        worker.sonar_config,
+        worker.rank,
+        worker.parallel_config.world_size,
+        _pp_transport_in_use(worker),
+    )
     path = _plan_path(fingerprint)
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)

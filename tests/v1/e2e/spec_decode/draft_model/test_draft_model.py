@@ -11,7 +11,6 @@ from sonar.config import CompilationConfig, SonarConfig, replace
 from sonar.config.kernel import MoEBackend
 from sonar.engine.arg_utils import EngineArgs
 from sonar.platforms import current_platform
-from sonar.v1.spec_decode.draft_model import DraftModelProposer
 from tests.utils import multi_gpu_only, single_gpu_only
 
 from ..utils import (
@@ -40,17 +39,17 @@ class ArgsTest:
     # Defaults
     method: str = "draft_model"
     enforce_eager: bool = True
-    parallel_drafting: bool = False
     target_tensor_parallel_size: int = 1
     draft_tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
     max_model_len: int = 2048
-    gpu_memory_utilization: float = 0.5
+    gpu_memory_utilization: float | None = 0.5
     dataset: str = "test_prompts"
     # Doubling 100 to 200 reduces sampling standard error by about 29%.
     num_prompts: int = 200
     max_num_seqs: int = 100
     enable_prefix_caching: bool | None = None
+    enable_adaptive_verification: bool = False
     chat_template_kwargs: dict | None = None
     reject_full_acceptance: bool = False
     engine_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -120,22 +119,6 @@ def test_draft_model_realistic_example(sonar_runner):
     assert_draft_model_correctness(args, sonar_runner)
 
 
-@single_gpu_only
-def test_draft_model_parallel_drafting(sonar_runner):
-    args = ArgsTest(
-        target_model="Qwen/Qwen3-1.7B",
-        draft_model="amd/PARD-Qwen3-0.6B",
-        dataset="likaixin/InstructCoder",
-        num_speculative_tokens=3,
-        sampling_config=greedy_sampling(),
-        parallel_drafting=True,
-        enforce_eager=False,
-        expected_acceptance_len=2.3,  # ref: 2.52
-        expected_acceptance_rate=0.4,  # ref: 0.51
-    )
-    assert_draft_model_correctness(args, sonar_runner)
-
-
 @pytest.mark.parametrize(
     "models",
     [
@@ -189,6 +172,32 @@ def test_draft_model_tensor_parallelism(sonar_runner):
 
 
 @multi_gpu_only(num_gpus=2)
+@pytest.mark.parametrize(
+    "load_kwargs",
+    [
+        {"load_format": "auto"},
+        {"load_format": "fastsafetensors"},
+    ],
+    ids=["auto", "fastsafetensors"],
+)
+def test_draft_model_pipeline_parallelism(sonar_runner, load_kwargs: dict):
+    """Ensure the draft model runs whole on the last stage when PP > 1.
+
+    fastsafetensors synchronizes across ranks, so it must load the draft model
+    without the other stages.
+    """
+    sd_case = ArgsTest(
+        target_model="Qwen/Qwen3-1.7B",
+        draft_model="Qwen/Qwen3-0.6B",
+        pipeline_parallel_size=2,
+        **some_high_acceptance_metrics(),
+        enforce_eager=False,
+        engine_kwargs=load_kwargs,
+    )
+    assert_draft_model_correctness(sd_case, sonar_runner)
+
+
+@multi_gpu_only(num_gpus=2)
 def test_draft_model_engine_args_tensor_parallelism():
     """Ensure the sonar_config for the draft model is created correctly,
     and independently of the target model (quantization, TP, etc.)"""
@@ -222,39 +231,9 @@ def test_draft_model_engine_args_tensor_parallelism():
     assert draft_config.quant_config is None
 
 
-@pytest.mark.cpu_test
-@pytest.mark.parametrize("dcp_size", [1, 2])
-def test_draft_model_inherits_target_dcp_config(monkeypatch, dcp_size):
-    monkeypatch.setattr(current_platform, "device_count", lambda: 16)
-    target_config = EngineArgs(
-        model="Qwen/Qwen3-1.7B",
-        tensor_parallel_size=16,
-        decode_context_parallel_size=dcp_size,
-        cp_kv_cache_interleave_size=16,
-        dcp_comm_backend="ag_rs",
-        distributed_executor_backend="mp",
-        speculative_config={
-            "model": "Qwen/Qwen3-0.6B",
-            "method": "draft_model",
-            "num_speculative_tokens": 3,
-        },
-    ).create_engine_config()
-    proposer = object.__new__(DraftModelProposer)
-    proposer.sonar_config = target_config
-    proposer.speculative_config = target_config.speculative_config
-    draft_config = proposer._create_draft_sonar_config()
-    draft_parallel = draft_config.parallel_config
-    assert draft_parallel.decode_context_parallel_size == dcp_size
-    assert draft_parallel.cp_kv_cache_interleave_size == 16
-    assert draft_parallel.dcp_comm_backend == "ag_rs"
-    assert draft_parallel.dcp_q_replicate == target_config.parallel_config.dcp_q_replicate
-    assert draft_parallel is not target_config.parallel_config
-    assert target_config.parallel_config.decode_context_parallel_size == dcp_size
-
-
 def _apply_draft_moe_backend(sonar_config: SonarConfig) -> SonarConfig:
-    """Replicate SpecDecodeBaseProposer._create_draft_sonar_config logic
-    so we can test it without instantiating a full proposer."""
+    """Replicate the draft moe_backend override so we can test it without
+    instantiating a full speculator."""
     spec_cfg = sonar_config.speculative_config
     assert spec_cfg is not None
     if spec_cfg.moe_backend is not None:
@@ -352,10 +331,6 @@ def test_draft_model_moe_backend_default_auto():
 
 def test_draft_model_kv_cache_dtype_override():
     """Apply the draft KV dtype without changing the target cache config."""
-    from unittest.mock import Mock
-
-    from sonar.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
-
     target_config = EngineArgs(
         model="Qwen/Qwen3-1.7B",
         kv_cache_dtype="bfloat16",
@@ -366,12 +341,8 @@ def test_draft_model_kv_cache_dtype_override():
             "kv-cache-dtype": "fp8",
         },
     ).create_engine_config()
-    proposer = Mock(
-        spec=SpecDecodeBaseProposer,
-        speculative_config=target_config.speculative_config,
-        sonar_config=target_config,
-    )
-    draft_config = SpecDecodeBaseProposer._create_draft_sonar_config(proposer)
+    assert target_config.speculative_config is not None
+    draft_config = target_config.speculative_config.apply_draft_overrides(target_config)
     assert draft_config.cache_config.cache_dtype == "fp8"
     assert target_config.cache_config.cache_dtype == "bfloat16"
 
@@ -455,7 +426,7 @@ def sonar_runner_kwargs(args: ArgsTest) -> dict[str, Any]:
             "max_model_len": args.max_model_len,
             "enforce_eager": args.enforce_eager,
             "draft_tensor_parallel_size": args.draft_tensor_parallel_size,
-            "parallel_drafting": args.parallel_drafting,
+            "enable_adaptive_verification": args.enable_adaptive_verification,
         },
         max_num_seqs=args.max_num_seqs,
         max_model_len=args.max_model_len,

@@ -3,7 +3,9 @@
 import pytest
 
 from sonar.config.speculative import SpeculativeConfig
-from sonar.v1.spec_decode.utils import unconditional_to_conditional_rates
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler import (
+    unconditional_to_conditional_rates,
+)
 
 
 def test_unconditional_to_conditional_rates_basic():

@@ -318,7 +318,7 @@ class EagleMiniCPMForCausalLM(nn.Module, SupportsLoRA, _EagleMiniCPMSupportsPP, 
         self.cache_config = cache_config
         self.quant_config = quant_config
 
-        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
 
         self.model = self._init_model(
             sonar_config=sonar_config,

@@ -3,6 +3,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 from typing import Any, cast
 
+from transformers import PreTrainedTokenizerBase
+
 from sonar.config import SonarConfig
 from sonar.exceptions import SonarValidationError
 from sonar.multimodal.media.connector import merge_media_io_kwargs
@@ -12,7 +14,7 @@ from sonar.renderers.chat_utils import (
     parse_chat_messages,
     parse_chat_messages_async,
 )
-from sonar.tokenizers.hf import HfTokenizer
+from sonar.tokenizers.hf import HfTokenizer, ThreadSafeHFTokenizerMixin
 from sonar.utils.async_utils import make_async
 
 from .base import BaseRenderer
@@ -71,8 +73,8 @@ def _normalize_k3_tool_messages(
 ) -> list[dict[str, Any]]:
     """Reorder tool-result messages to match assistant tool_call order.
 
-    Supports matching by ``tool_call_id`` or by the synthetic
-    ``"{tool}:{zero_based_index}"`` alias. When any tool message in a
+    Supports matching by `tool_call_id` or by the synthetic
+    `"{tool}:{zero_based_index}"` alias. When any tool message in a
     block cannot be resolved, the whole block is left in its original
     order (graceful fallback).
 
@@ -142,7 +144,7 @@ class KimiK3Renderer(BaseRenderer[HfTokenizer]):
     """Render chat prompts with Kimi K3's Python XTML encoding.
 
     K3 ships no Jinja chat template; its tokenizer renders messages through
-    ``encoding_k3`` instead. We tokenize eagerly so the structural markers keep
+    `encoding_k3` instead. We tokenize eagerly so the structural markers keep
     their special-token ids while user- and tool-supplied text stays ordinary.
     """
 
@@ -159,6 +161,18 @@ class KimiK3Renderer(BaseRenderer[HfTokenizer]):
         conversation: list[dict[str, Any]],
         params: ChatParams,
     ) -> list[int]:
+        tokenizer = self.get_tokenizer()
+        tokenizer_cls: type[PreTrainedTokenizerBase] = type(tokenizer)
+        if issubclass(tokenizer_cls, ThreadSafeHFTokenizerMixin):
+            # The pool overrides apply_chat_template to route calls to its
+            # copies; check the class it wraps.
+            tokenizer_cls = cast(type[PreTrainedTokenizerBase], tokenizer_cls.__bases__[0])
+        if tokenizer_cls.apply_chat_template is PreTrainedTokenizerBase.apply_chat_template:
+            raise SonarValidationError(
+                "The kimi_k3 tokenizer mode requires native chat encoding.",
+                parameter="tokenizer_mode",
+            )
+
         # Tokenize eagerly: K3 encodes structural markers as special tokens and
         # user/tool text as ordinary tokens, so we cannot defer to a plain
         # re-tokenization of the rendered string downstream.
@@ -169,7 +183,7 @@ class KimiK3Renderer(BaseRenderer[HfTokenizer]):
         if params.response_format is not None:
             kwargs["response_format"] = _dump_k3_template_value(params.response_format)
         kwargs["tokenize"] = True
-        return self.get_tokenizer().apply_chat_template(conversation, **kwargs)
+        return tokenizer.apply_chat_template(conversation, **kwargs)
 
     def render_messages(
         self,

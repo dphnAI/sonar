@@ -143,7 +143,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ## Deployment Configurations
@@ -152,7 +152,7 @@ guide: |
 
   ### Basic Multi-GPU (BF16)
   ```bash
-  sonar serve Qwen/Qwen3-Next-80B-A3B-Instruct \
+  sonar run Qwen/Qwen3-Next-80B-A3B-Instruct \
     --tensor-parallel-size 4 \
     --served-model-name qwen3-next \
     --enable-prefix-caching
@@ -162,7 +162,7 @@ guide: |
 
   ### FP8 (SM90/SM100)
   ```bash
-  sonar serve Qwen/Qwen3-Next-80B-A3B-Instruct-FP8 \
+  sonar run Qwen/Qwen3-Next-80B-A3B-Instruct-FP8 \
     --tensor-parallel-size 4 \
     --enable-prefix-caching
   ```
@@ -170,7 +170,7 @@ guide: |
   On SM100, accelerate with the FlashInfer TRTLLM MoE kernel:
   ```bash
   SONAR_USE_DEEP_GEMM=0 \
-  sonar serve Qwen/Qwen3-Next-80B-A3B-Instruct-FP8 \
+  sonar run Qwen/Qwen3-Next-80B-A3B-Instruct-FP8 \
     --tensor-parallel-size 4 \
     --moe-backend flashinfer_trtllm \
     --attention-backend FLASH_ATTN
@@ -178,15 +178,15 @@ guide: |
 
   ### MTP (Multi-Token Prediction)
   ```bash
-  sonar serve Qwen/Qwen3-Next-80B-A3B-Instruct \
-    --tokenizer-mode auto --gpu-memory-utilization 0.8 \
+  sonar run Qwen/Qwen3-Next-80B-A3B-Instruct \
+    --tokenizer-mode auto \
     --speculative-config '{"method": "qwen3_next_mtp", "num_speculative_tokens": 2}' \
     --tensor-parallel-size 4 --no-enable-chunked-prefill
   ```
 
   ### Tool / Function Calling
   ```bash
-  sonar serve ... --tool-call-parser hermes --enable-auto-tool-choice
+  sonar run ... --tool-call-parser hermes --enable-auto-tool-choice
   ```
 
   ### AMD (MI300X/MI325X/MI355X)
@@ -196,7 +196,7 @@ guide: |
   ```bash
   SAFETENSORS_FAST_GPU=1 \
   SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
-  sonar serve Qwen/Qwen3-Next-80B-A3B-Instruct \
+  sonar run Qwen/Qwen3-Next-80B-A3B-Instruct \
     --tensor-parallel-size 4 \
     --max-model-len 32768 \
     --no-enable-prefix-caching \
@@ -207,7 +207,7 @@ guide: |
 
   Benchmark:
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --backend sonar \
     --model Qwen/Qwen3-Next-80B-A3B-Instruct \
     --served-model-name qwen3-next \

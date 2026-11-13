@@ -80,12 +80,12 @@ def bench(
         fp8_attention._fp8_dynamic_scale = False
 
         bf16_ms = triton.testing.do_bench(
-            lambda q=q, k=k, v=v, cu=cu_seqlens, ms=max_seqlen: (bf16_attention._forward_fa(q, k, v, cu, ms)),
+            lambda q=q, k=k, v=v, cu=cu_seqlens, ms=max_seqlen: bf16_attention._forward_fa(q, k, v, cu, ms),
             warmup=warmup_ms,
             rep=repeat_ms,
         )
         fp8_ms = triton.testing.do_bench(
-            lambda q=q, k=k, v=v, cu=cu_seqlens, ms=max_seqlen: (fp8_attention._forward_aiter_fp8(q, k, v, cu, ms)),
+            lambda q=q, k=k, v=v, cu=cu_seqlens, ms=max_seqlen: fp8_attention._forward_aiter_fp8(q, k, v, cu, ms),
             warmup=warmup_ms,
             rep=repeat_ms,
         )

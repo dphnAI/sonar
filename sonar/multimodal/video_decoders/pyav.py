@@ -23,7 +23,7 @@ class PyAVVideoBackendMixin:
     """PyAV (in-process FFmpeg bindings) codec utilities.
 
     Reads stream metadata and decodes target frames via per-frame
-    ``container.seek()``. The seek releases the GIL between frames and
+    `container.seek()`. The seek releases the GIL between frames and
     scales with the number of sampled frames rather than the video
     length, enabling concurrent decoding under serving load.
     """

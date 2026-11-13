@@ -21,9 +21,11 @@ use sonar_engine_core_client::protocol::output::{
     EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs, StopReason,
 };
 use sonar_engine_core_client::protocol::request::EngineCoreRequest;
-use sonar_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
+use sonar_engine_core_client::test_utils::{
+    IpcNamespace, decode_prompt_token_ids, spawn_mock_engine_task,
+};
 use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
-use sonar_llm::Llm;
+use sonar_llm::EngineCoreLlm;
 use sonar_text::tokenizer::DynTokenizer;
 use sonar_text::{
     DecodedLogprobs, DecodedPositionLogprobs, DecodedPromptLogprobs, DecodedTokenLogprob, Prompt,
@@ -148,7 +150,7 @@ async fn connect_chat_llm_with_ipc(
     .await
     .unwrap();
     ChatLlm::from_shared_backend(
-        Llm::new(client).with_request_id_randomization(false),
+        EngineCoreLlm::new(client).with_request_id_randomization(false),
         backend,
     )
 }
@@ -338,9 +340,7 @@ async fn chat_streams_text_events() {
                 // more fields here in the future
                 assert_eq!(
                     String::from_utf8(
-                        request
-                            .prompt_token_ids
-                            .clone()
+                        decode_prompt_token_ids(&request)
                             .unwrap()
                             .into_iter()
                             .map(|id| id as u8)
@@ -1651,7 +1651,7 @@ async fn processor_excludes_request_tools_for_tool_choice_none_when_configured()
             true,
         )
         .unwrap();
-        let processor = ChatRequestProcessor::render_only(Arc::new(FakeChatBackend::new()))
+        let processor = ChatRequestProcessor::new(Arc::new(FakeChatBackend::new()), None, None)
             .with_exclude_tools_when_tool_choice_none(exclude);
         let text_request = processor.prepare_for_tokenization(request).await.unwrap();
         let Prompt::Text(prompt) = text_request.prompt else {

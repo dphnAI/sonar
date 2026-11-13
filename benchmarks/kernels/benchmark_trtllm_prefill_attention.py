@@ -135,9 +135,9 @@ def benchmark_prefill(
         start = torch.cuda.Event(enable_timing=True)
         end = torch.cuda.Event(enable_timing=True)
         times = []
-        for i in range(warmup):
+        for _ in range(warmup):
             fn()
-        for i in range(trials):
+        for _ in range(trials):
             start.record()
             fn()
             end.record()

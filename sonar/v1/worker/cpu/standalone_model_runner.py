@@ -41,10 +41,10 @@ from sonar.v1.kv_cache_interface import (
     KVCacheSpec,
     SlidingWindowSpec,
     UniformTypeKVCacheSpecs,
+    get_block_table_width,
 )
 from sonar.v1.outputs import ECConnectorOutput, ModelRunnerOutput
 from sonar.v1.watermarking import create_watermarker
-from sonar.v1.worker.block_table import get_block_table_width
 from sonar.v1.worker.cpu.attn_utils import (
     FastPrefillHelper,
     build_slot_mappings_by_layer,
@@ -319,6 +319,9 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
     def get_draft_model(self) -> torch.nn.Module | None:
         return None
 
+    def on_target_weights_replaced(self) -> None:
+        """Called by the worker after a weight transfer; nothing derives from them."""
+
     def reload_weights(
         self,
         weights_iterator: Iterable[tuple[str, torch.Tensor]] | None = None,
@@ -329,7 +332,6 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         sonar_config = self.sonar_config
         model = self.get_model()
         reload_weights(sonar_config, model, weights_iterator, weights_path, is_checkpoint_format)
-        self.reset_lora_state()
         self.reset_encoder_cache()
         self.reset_mm_cache()
 
@@ -436,6 +438,7 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         uniform_decode: bool = False,
         is_profile: bool = False,
         randomize_inputs: bool = False,
+        num_active_loras: int | None = None,
     ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         if skip_attn and not is_profile:
             raise ValueError("skip_attn must only be True for initial memory profiling.")
@@ -443,7 +446,6 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         # Create a dummy scheduler output.
         num_reqs = min(num_tokens, self.max_num_reqs)
         if uniform_decode:
-            num_tokens = max(num_tokens, self.decode_query_len)
             num_reqs = num_tokens // self.decode_query_len
             assert num_tokens % self.decode_query_len == 0
 
@@ -472,13 +474,14 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
             assert self.intermediate_tensors is not None
             intermediate_tensors = self.intermediate_tensors[:num_tokens]
 
-        max_loras = self.lora_config.max_loras if self.lora_config is not None else 0
+        if num_active_loras is None:
+            num_active_loras = self.lora_config.max_loras if self.lora_config is not None else 0
         with self.maybe_dummy_run_with_lora(
             self.lora_config,
             num_scheduled_tokens=np.array(num_tokens_per_request, dtype=np.int32),
             num_sampled_tokens=None,
             remove_lora=True,
-            num_active_loras=max_loras,
+            num_active_loras=num_active_loras,
         ):
             # Execute the model.
             self.execute_model(
@@ -615,7 +618,6 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
 
     def add_requests(self, scheduler_output: SchedulerOutput) -> None:
         for new_req_data in scheduler_output.scheduled_new_reqs:
-            assert new_req_data.prefill_token_ids is not None
             req_id = new_req_data.req_id
 
             # Streaming input update: request already exists from a prior
@@ -1068,7 +1070,6 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         skip_compiled = bool(self.is_encoder_decoder and scheduler_output.scheduled_encoder_inputs)
         batch_descriptor = BatchDescriptor(
             num_tokens=input_batch.num_tokens_after_padding,
-            has_lora=self.lora_config is not None,
             num_active_loras=num_active_loras,
         )
         with set_forward_context(
@@ -1159,7 +1160,6 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
 
         model_runner_output = ModelRunnerOutput(
             req_ids=input_batch.req_ids,
-            req_id_to_index={req_id: i for i, req_id in enumerate(input_batch.req_ids)},
             sampled_token_ids=sampled_token_ids,
             prompt_logprobs_dict=prompt_logprobs_dict,  # type: ignore[arg-type]
             prompt_token_id_logprobs_dict=prompt_token_id_logprobs_dict,
@@ -1216,7 +1216,6 @@ class StandaloneCPUModelRunner(LoRAModelRunnerMixin):
         outputs = pooler_output.unbind() if isinstance(pooler_output, torch.Tensor) else pooler_output
         model_runner_output = ModelRunnerOutput(
             req_ids=input_batch.req_ids,
-            req_id_to_index={req_id: i for i, req_id in enumerate(input_batch.req_ids)},
             pooler_output=[
                 None if output is None or not is_finished else output
                 for output, is_finished in zip(outputs, finished_mask, strict=True)

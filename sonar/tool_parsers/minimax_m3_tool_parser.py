@@ -12,9 +12,9 @@ class MinimaxM3ToolParser(MinimaxM3ParserToolAdapter):  # type: ignore[valid-typ
 
 
 class MinimaxM3RustToolParser(RustToolParser):
-    """Select with ``--tool-call-parser minimax_m3_rust``.
+    """Select with `--tool-call-parser minimax_m3_rust`.
 
-    This uses Sonar's optional PyO3 parser extension; ``minimax_m3`` selects
+    This uses Sonar's optional PyO3 parser extension; `minimax_m3` selects
     the Python parser engine.
     """
 

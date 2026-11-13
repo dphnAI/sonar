@@ -3,7 +3,7 @@
 """MLX-backed paged KV cache for native Metal paged attention.
 
 Stores per-layer key/value caches as MLX arrays in the layout expected by
-``reshape_and_cache`` and ``paged_attention_v1``:
+`reshape_and_cache` and `paged_attention_v1`:
 
 - key_cache:   [num_blocks, block_size, num_kv_heads, head_dim]
 - value_cache: [num_blocks, block_size, num_kv_heads, head_dim]
@@ -34,10 +34,10 @@ logger = init_logger(__name__)
 class MetalPagedKVCache:
     """Per-layer MLX arrays for native Metal paged attention.
 
-    Supports heterogeneous per-layer shapes: when ``kv_heads_per_layer``
-    and ``head_dim_per_layer`` are provided, each cache layer is allocated
-    with its own ``(num_kv_heads, head_dim)`` pair.  When omitted, all
-    layers share the scalar ``num_kv_heads`` / ``head_dim`` (backward
+    Supports heterogeneous per-layer shapes: when `kv_heads_per_layer`
+    and `head_dim_per_layer` are provided, each cache layer is allocated
+    with its own `(num_kv_heads, head_dim)` pair.  When omitted, all
+    layers share the scalar `num_kv_heads` / `head_dim` (backward
     compat for MLA, Hybrid, and uniform MHA models).
     """
 

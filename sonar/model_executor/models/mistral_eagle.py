@@ -141,7 +141,7 @@ class EagleMistralForCausalLM(_EagleMistralForCausalLMBase, SupportsMultiModalEm
         speculative_config = sonar_config.speculative_config
         assert speculative_config is not None
         self.config = speculative_config.draft_model_config.hf_config
-        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
         self.model = EagleMistralModel(
             sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),

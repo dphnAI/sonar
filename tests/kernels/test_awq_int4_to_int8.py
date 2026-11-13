@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 import torch
 
-from sonar._custom_ops import (
+from sonar._cpu_ops import (
     CPUQuantAlgo,
     convert_weight_packed_scale_zp,
     int4_scaled_mm_cpu,

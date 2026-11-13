@@ -44,6 +44,7 @@ from sonar.utils.import_utils import (
     has_deep_ep_v2,
     has_deep_gemm,
     has_mori,
+    mori_epv2_unavailable_reason,
 )
 
 
@@ -87,6 +88,7 @@ MK_SINGLE_GPU_PREPARE_FINALIZE_TYPES: list[type[mk.FusedMoEPrepareAndFinalizeMod
 MK_FUSED_EXPERT_TYPES: list[type[mk.FusedMoEExpertsModular]] = []
 
 standard_format = mk.FusedMoEActivationFormat.Standard
+padded_standard_format = mk.FusedMoEActivationFormat.PaddedStandard
 batched_format = mk.FusedMoEActivationFormat.BatchedExperts
 common_float_types: list[torch.dtype | str] = [
     current_platform.fp8_dtype(),
@@ -231,7 +233,7 @@ if has_deep_ep_v2() and current_platform.has_device_capability(100):
 
     register_prepare_and_finalize(
         DeepEPV2PrepareAndFinalize,
-        standard_format,
+        padded_standard_format,
         common_float_types,
         blocked_quantization_support=True,
         backend="deepep_v2",
@@ -241,6 +243,7 @@ if has_mori():
     from sonar.model_executor.layers.fused_moe.prepare_finalize.mori import (
         MoriPrepareAndFinalize,
     )
+    from sonar.platforms.rocm import get_cdna_version
 
     register_prepare_and_finalize(
         MoriPrepareAndFinalize,
@@ -251,18 +254,21 @@ if has_mori():
         supports_apply_weight_on_input=False,
     )
 
-    from sonar.model_executor.layers.fused_moe.prepare_finalize.mori_epv2 import (
-        MoriEPv2PrepareAndFinalize,
-    )
+    # Config.make_env_data pins mori_ep_v2=True, which skips the EPv1 fallback
+    # in RocmPlatform.check_and_update_config, so apply its EPv2 gate here.
+    if get_cdna_version() >= 4 and mori_epv2_unavailable_reason() is None:
+        from sonar.model_executor.layers.fused_moe.prepare_finalize.mori_epv2 import (
+            MoriEPv2PrepareAndFinalize,
+        )
 
-    register_prepare_and_finalize(
-        MoriEPv2PrepareAndFinalize,
-        standard_format,
-        [torch.bfloat16],
-        blocked_quantization_support=False,
-        backend="mori",
-        supports_apply_weight_on_input=False,
-    )
+        register_prepare_and_finalize(
+            MoriEPv2PrepareAndFinalize,
+            standard_format,
+            [torch.bfloat16],
+            blocked_quantization_support=False,
+            backend="mori",
+            supports_apply_weight_on_input=False,
+        )
 
 if has_flashinfer_cutlass_fused_moe() and current_platform.has_device_capability(100):
     from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
@@ -331,7 +337,7 @@ if has_flashinfer_trtllm_fused_moe() and current_platform.has_device_capability(
 
     register_experts(
         TrtLlmFp8ExpertsModular,
-        standard_format,
+        padded_standard_format,
         fp8_types,
         blocked_quantization_support=True,
     )
@@ -515,7 +521,7 @@ def make_fused_experts(
     num_dispatchers: int,
     N: int,
 ) -> mk.FusedMoEExpertsModular:
-    if fused_experts_type.activation_format() == mk.FusedMoEActivationFormat.BatchedExperts:
+    if fused_experts_type.activation_format().is_batched:
         kwargs = {
             "moe_config": moe,
             "quant_config": quant_config,

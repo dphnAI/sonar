@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -11,181 +11,137 @@ import torch
 from sonar.platforms import current_platform
 from sonar.sampling_params import SamplingParams
 from sonar.v1.sample.ops import SamplingOps
-from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
-from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.v1.worker.gpu.sample.fork import GPUForkSamplingState
 
 
-def make_batch(prompts, outputs):
-    batch = object.__new__(InputBatch)
+def make_state(prompts, outputs):
     req_ids = [f"req{i}" for i in range(len(prompts))]
-    batch._req_ids = list(req_ids)
-    batch.req_id_to_index = {req_id: i for i, req_id in enumerate(req_ids)}
-    batch.dry_reqs = set(req_ids)
-    batch.req_output_token_ids = outputs
-    batch.num_prompt_tokens = np.array(list(map(len, prompts)), dtype=np.int32)
-    batch.token_ids_cpu_tensor = torch.full((len(prompts), 64), -1, dtype=torch.int32)
-    batch.token_ids_cpu = batch.token_ids_cpu_tensor.numpy()
+    tokens = torch.full((len(prompts), 64), -1, dtype=torch.int32)
     for row, (prompt, output) in enumerate(zip(prompts, outputs)):
-        batch.token_ids_cpu[row, : len(prompt) + len(output)] = prompt + output
-    batch.num_tokens_no_spec = batch.num_prompt_tokens + np.array(list(map(len, outputs)), dtype=np.int32)
-    batch.sampled_token_ids_cpu = None
-    batch.prev_req_id_to_index = None
-    batch.async_copy_ready_event = Mock()
-    metadata = SimpleNamespace(
-        output_token_ids=outputs,
-        prompt_token_ids=torch.tensor(prompts),
-        persistent_data={},
-        token_history_ids_cpu=None,
-        token_history_lens_cpu=None,
+        tokens[row, : len(prompt) + len(output)] = torch.tensor(prompt + output)
+    requests = SimpleNamespace(
+        device=torch.device("cpu"),
+        vocab_size=16,
+        index_to_req_id=dict(enumerate(req_ids)),
+        req_id_to_index={req_id: i for i, req_id in enumerate(req_ids)},
+        prompt_len=SimpleNamespace(np=np.array(list(map(len, prompts)))),
+        prefill_len=SimpleNamespace(np=np.array(list(map(len, prompts)))),
+        all_token_ids=SimpleNamespace(gpu=tokens),
     )
-    for name, value in dict(
-        multiplier=5.0,
-        base=1.75,
-        allowed_length=1,
-        ranges=0,
-        max_ngram=12,
-        max_occurrences=8,
-        early_exit_match_len=8,
-    ).items():
-        tensor = torch.full((len(prompts),), value, dtype=torch.float32 if isinstance(value, float) else torch.int32)
-        setattr(metadata, "dry_" + name, tensor)
-        setattr(metadata, "dry_" + name + "_cpu", tensor)
-    metadata.dry_sequence_breaker_ids = torch.empty((len(prompts), 0), dtype=torch.long)
-    metadata.dry_sequence_breaker_ids_cpu = metadata.dry_sequence_breaker_ids
-    batch.sampling_metadata = metadata
-    return batch
+    state = GPUForkSamplingState(requests)
+    for slot in range(len(prompts)):
+        state.add_request(slot, dry_params(), seed=0)
+    return state
 
 
-def assert_native_matches_reference(batch):
+def dry_params():
+    return SamplingParams(temperature=1, dry_multiplier=5, dry_allowed_length=1, dry_sequence_breaker_ids=[])
+
+
+def apply_history(state, slots, lengths):
+    tokens = state.req_states.all_token_ids.gpu
+    context = SimpleNamespace(
+        expanded_idx_mapping=torch.tensor(slots),
+        pos=torch.tensor(lengths) - 1,
+        input_ids=torch.tensor([tokens[slot, length - 1] for slot, length in zip(slots, lengths)]),
+    )
+    return state.apply(torch.zeros((len(slots), 16)), context)
+
+
+def assert_native_matches_reference(state, slots, lengths):
     current_platform.import_kernels()
     if not hasattr(torch.ops._C, "dry_scan_penalties"):
         pytest.skip("Native DRY scanner is not built on this platform")
-    metadata = batch.sampling_metadata
-    logits = torch.zeros((batch.num_reqs, 16))
-    # Fail if the native path accidentally falls back to Python.
     with patch("sonar.v1.sample.ops._compute_dry_penalties", side_effect=AssertionError("Python fallback")):
-        native = SamplingOps().apply_dry(logits.clone(), metadata)
-    with patch.object(metadata, "token_history_ids_cpu", None):
-        reference = SamplingOps().apply_dry(logits.clone(), metadata)
-    torch.testing.assert_close(native, reference, rtol=0, atol=0)
+        native = apply_history(state, slots, lengths)
+    for row, slot in enumerate(slots):
+        metadata = state.requests[slot].metadata
+        with patch.object(metadata, "token_history_ids_cpu", None):
+            reference = SamplingOps().apply_dry(torch.zeros((1, 16)), metadata)
+        torch.testing.assert_close(native[row : row + 1], reference, rtol=0, atol=0)
     return native
 
 
 def test_dry_history_grows_without_batch_changes():
-    batch = make_batch([[1, 2]], [[]])
-    batch.refresh_dry_token_history()
-    metadata = batch.sampling_metadata
-    assert metadata.token_history_ids_cpu.shape == (1, 2)
-
-    for token in [1, 2, 1, 2]:
-        end = batch.num_tokens_no_spec[0]
-        batch.token_ids_cpu[0, end] = token
-        batch.num_tokens_no_spec[0] += 1
-        batch.req_output_token_ids[0].append(token)
-        batch.refresh_dry_token_history()
-        assert batch.sampling_metadata is metadata
-        assert metadata.token_history_ids_cpu.shape[1] == end + 1
-        result = assert_native_matches_reference(batch)
+    state = make_state([[1, 2]], [[]])
+    metadata = state.requests[0].metadata
+    apply_history(state, [0], [2])
+    assert metadata.token_history_ids_cpu.tolist() == [[1, 2]]
+    for end, token in enumerate([1, 2, 1, 2], start=2):
+        state.req_states.all_token_ids.gpu[0, end] = token
+        result = assert_native_matches_reference(state, [0], [end + 1])
+        assert state.requests[0].metadata is metadata
+        assert metadata.token_history_ids_cpu.shape == (1, end + 1)
     assert result[0, 1] < 0
 
 
 @pytest.mark.parametrize("accepted", [0, 1, 2, 3])
-def test_dry_async_reordering_and_partial_acceptance(accepted):
-    batch = make_batch([[1, 2], [3, 4]], [[-1, -1, -1], [-1, -1, -1]])
-    batch.prev_req_id_to_index = {"req0": 1, "req1": 0}
-    batch.sampled_token_ids_cpu = torch.tensor(
-        [[3, 4, 3][:accepted] + [-1] * (3 - accepted), [1, 2, 1][:accepted] + [-1] * (3 - accepted)]
-    )
-    optimistic_counts = batch.num_tokens_no_spec.copy()
-    batch.update_async_output_token_ids()
-    batch.refresh_dry_token_history()
-    batch.async_copy_ready_event.synchronize.assert_called_once()
-    metadata = batch.sampling_metadata
-    assert metadata.token_history_lens_cpu.tolist() == [2 + accepted] * 2
-    assert metadata.token_history_ids_cpu.tolist() == [
-        [1, 2] + [1, 2, 1][:accepted],
-        [3, 4] + [3, 4, 3][:accepted],
+def test_dry_reordering_and_partial_acceptance(accepted):
+    state = make_state([[1, 2], [3, 4]], [[1, 2, 1], [3, 4, 3]])
+    tokens = state.req_states.all_token_ids.gpu.clone()
+    # Rejected/optimistic suffixes remain in storage, but the current positions
+    # bound the history. Batch order is independent of the persistent slot.
+    assert_native_matches_reference(state, [1, 0], [2 + accepted] * 2)
+    for slot, pair in enumerate(([1, 2], [3, 4])):
+        metadata = state.requests[slot].metadata
+        assert metadata.token_history_lens_cpu.tolist() == [2 + accepted]
+        assert metadata.token_history_ids_cpu.tolist() == [pair + (pair + pair[:1])[:accepted]]
+    assert torch.equal(state.req_states.all_token_ids.gpu, tokens)
+
+
+def test_dry_discarded_outputs_do_not_enter_history():
+    state = make_state([[1, 2]], [[1, 2, 9, 9]])
+    result = assert_native_matches_reference(state, [0], [4])
+    assert state.requests[0].metadata.token_history_ids_cpu.tolist() == [[1, 2, 1, 2]]
+    assert result[0, 1] == -8.75
+    assert state.req_states.all_token_ids.gpu[0, 4:].tolist() == [9, 9] + [-1] * 58
+
+
+def test_dry_history_skipped_when_disabled():
+    state = make_state([[1, 2]], [[]])
+    with patch.object(state, "_token_history", side_effect=AssertionError("Unnecessary history work")):
+        assert not state.add_request(0, SamplingParams(), seed=0)
+        assert not state.any(np.array([0]))
+
+
+def test_dry_history_survives_slot_reuse_and_readmission():
+    state = make_state([[1, 2], [3, 4], [5, 6]], [[1, 2], [3, 4], [5, 6]])
+    requests = state.req_states
+    state.remove_request(1)
+    state.finish_request("req1")
+    requests.index_to_req_id[1] = "new"
+    del requests.req_id_to_index["req1"]
+    requests.req_id_to_index["new"] = 1
+    requests.all_token_ids.gpu[1, :4] = torch.tensor([7, 8, 7, 8])
+    state.add_request(1, dry_params(), seed=0)
+    state.remove_request(2)
+    requests.prefill_len.np[2] = 4
+    state.add_request(2, dry_params(), seed=0)
+    assert_native_matches_reference(state, [0, 2, 1], [4, 4, 4])
+    assert [state.requests[i].metadata.token_history_ids_cpu.tolist()[0] for i in [0, 2, 1]] == [
+        [1, 2, 1, 2],
+        [5, 6, 5, 6],
+        [7, 8, 7, 8],
     ]
-    np.testing.assert_array_equal(batch.num_tokens_no_spec, optimistic_counts)
-    assert_native_matches_reference(batch)
-
-
-def test_dry_async_discarded_outputs_limit_copy():
-    batch = make_batch([[1, 2]], [[1, -1]])
-    batch.prev_req_id_to_index = {"req0": 0}
-    batch.sampled_token_ids_cpu = torch.tensor([[2, 9, 9]])
-    batch.update_async_output_token_ids()
-    batch.refresh_dry_token_history()
-    assert batch.sampling_metadata.token_history_ids_cpu.tolist() == [[1, 2, 1, 2]]
-    assert batch.token_ids_cpu[0, 4] == -1
-    assert assert_native_matches_reference(batch)[0, 1] == -8.75
-
-
-def test_dry_refresh_skipped_when_disabled():
-    batch = make_batch([[1, 2]], [[]])
-    batch.dry_reqs.clear()
-    with patch.object(batch, "_get_token_history_cpu_views", side_effect=AssertionError("Unnecessary history work")):
-        batch.refresh_dry_token_history()
-
-
-def test_dry_history_survives_compaction_and_slot_reuse():
-    batch = InputBatch(
-        max_num_reqs=3,
-        max_model_len=64,
-        max_num_batched_tokens=64,
-        device=torch.device("cpu"),
-        vocab_size=16,
-        block_sizes=[16],
-        max_num_blocks_per_req=[4],
-    )
-
-    def add(req_id, pair):
-        batch.add_request(
-            CachedRequestState(
-                req_id=req_id,
-                prompt_token_ids=pair,
-                mm_features=[],
-                sampling_params=SamplingParams(dry_multiplier=5, dry_allowed_length=1, dry_sequence_breaker_ids=[]),
-                pooling_params=None,
-                block_ids=([],),
-                generator=None,
-                num_computed_tokens=2,
-                output_token_ids=pair.copy(),
-            )
-        )
-
-    add("a", [1, 2])
-    add("b", [3, 4])
-    add("c", [5, 6])
-    batch.refresh_metadata()
-    batch.remove_request("b")
-    batch.condense()
-    batch.refresh_metadata()
-    add("d", [7, 8])
-    batch.refresh_metadata()
-    batch.refresh_dry_token_history()
-    assert batch.req_ids == ["a", "c", "d"]
-    token_history_ids = batch.sampling_metadata.token_history_ids_cpu
-    assert token_history_ids is not None
-    assert token_history_ids.tolist() == [[1, 2, 1, 2], [5, 6, 5, 6], [7, 8, 7, 8]]
-    assert_native_matches_reference(batch)
+    assert not state.retained
 
 
 @pytest.mark.parametrize("speculative", [False, True])
-def test_runner_refreshes_dry_after_resolving_async_tokens(speculative, monkeypatch):
-    batch = make_batch([[1, 2]], [[1, -1]])
-    batch.prev_req_id_to_index = {"req0": 0}
-    batch.sampled_token_ids_cpu = torch.tensor([[2]])
-    runner = object.__new__(GPUModelRunner)
-    runner.input_batch = batch
-    runner.use_async_scheduling = True
-    runner._draft_token_req_ids = None
-    monkeypatch.setattr(runner, "_get_spec_decode_draft_probs", Mock(return_value=None))
-
-    def sample(*args, **kwargs):
-        assert batch.sampling_metadata.token_history_ids_cpu.tolist() == [[1, 2, 1, 2]]
-        return "sampled"
-
-    runner.sampler = Mock(side_effect=sample)
-    runner.rejection_sampler = Mock(side_effect=sample)
-    assert runner._sample(torch.zeros((1, 16)), Mock() if speculative else None) == "sampled"
+def test_dry_refresh_uses_committed_tokens_before_each_sampling_call(speculative):
+    state = make_state([[1, 2]], [[1]])
+    if speculative:
+        # Verification extends a call-local prefix, never the committed buffer.
+        context = SimpleNamespace(
+            expanded_idx_mapping=torch.tensor([0, 0]),
+            pos=torch.tensor([2, 3]),
+            input_ids=torch.tensor([1, 9]),
+        )
+        state.apply(torch.zeros((2, 16)), context)
+        assert state.requests[0].metadata.token_history_ids_cpu.tolist() == [[1, 2, 1, 9]]
+        assert state.req_states.all_token_ids.gpu[0, 3] == -1
+    else:
+        apply_history(state, [0], [3])
+    # The next decode consumes the accepted output, not the prior draft prefix.
+    state.req_states.all_token_ids.gpu[0, 3] = 2
+    assert_native_matches_reference(state, [0], [4])
+    assert state.requests[0].metadata.token_history_ids_cpu.tolist() == [[1, 2, 1, 2]]

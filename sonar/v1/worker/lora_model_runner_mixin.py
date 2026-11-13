@@ -3,7 +3,7 @@
 """Define LoRA functionality mixin for model runners."""
 
 from collections.abc import Callable
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 
 import numpy as np
 import torch
@@ -11,14 +11,11 @@ import torch.nn as nn
 
 from sonar.config import SonarConfig
 from sonar.config.lora import LoRAConfig
-from sonar.device_allocator import get_mem_allocator_instance
 from sonar.logger import init_logger
 from sonar.lora.layers import LoRAMapping, LoRAMappingType
 from sonar.lora.request import LoRARequest
 from sonar.lora.worker_manager import LRUCacheWorkerLoRAManager
 from sonar.model_executor.models import supports_lora
-from sonar.platforms import current_platform
-from sonar.v1.worker.gpu_input_batch import InputBatch
 
 logger = init_logger(__name__)
 
@@ -27,18 +24,6 @@ logger = init_logger(__name__)
 class LoRAModelRunnerMixin:
     lora_config: LoRAConfig | None
     get_model: Callable[[], nn.Module]
-
-    def reset_lora_state(self) -> None:
-        """Invalidate LoRA state after base weights are replaced."""
-        if not self.lora_config:
-            return
-
-        from sonar.lora.layers.logits_processor import LogitsProcessorWithLoRA
-
-        self.lora_manager.remove_all_adapters()
-        for module in self.get_model().modules():
-            if isinstance(module, LogitsProcessorWithLoRA):
-                module.reset_sharded_to_full_mapping()
 
     def load_lora_model(
         self,
@@ -55,14 +40,7 @@ class LoRAModelRunnerMixin:
             device,
             model.embedding_modules,
         )
-        # Keep LoRA state out of the weights pool, which level-2 sleep discards.
-        pool = (
-            get_mem_allocator_instance().use_memory_pool(tag="runtime")
-            if sonar_config.model_config.enable_sleep_mode and current_platform.is_cuda_alike()
-            else nullcontext()
-        )
-        with pool:
-            return self.lora_manager.create_lora_manager(model, sonar_config)
+        return self.lora_manager.create_lora_manager(model, sonar_config)
 
     def _set_active_loras(
         self,
@@ -88,24 +66,6 @@ class LoRAModelRunnerMixin:
     def _ensure_lora_enabled(self) -> None:
         if not hasattr(self, "lora_manager"):
             raise RuntimeError("LoRA is not enabled. Use --enable-lora to enable LoRA.")
-
-    def set_active_loras(
-        self,
-        input_batch: InputBatch,
-        num_scheduled_tokens: np.ndarray,
-        num_sampled_tokens: np.ndarray | None = None,
-        mapping_type: LoRAMappingType = LoRAMappingType.LANGUAGE,
-    ) -> None:
-        if num_sampled_tokens is None:
-            num_sampled_tokens = np.ones_like(num_scheduled_tokens, dtype=np.int32)
-
-        prompt_lora_mapping: tuple[int, ...]  # of size np.sum(num_sampled_tokens)
-        token_lora_mapping: tuple[int, ...]  # of size np.sum(num_scheduled_tokens)
-        lora_requests: set[LoRARequest]
-        prompt_lora_mapping, token_lora_mapping, lora_requests = input_batch.make_lora_inputs(
-            num_scheduled_tokens, num_sampled_tokens
-        )
-        return self._set_active_loras(prompt_lora_mapping, token_lora_mapping, lora_requests, mapping_type)
 
     @contextmanager
     def maybe_setup_dummy_loras(self, lora_config: LoRAConfig | None, remove_lora: bool = True):
@@ -259,12 +219,13 @@ class LoRAModelRunnerMixin:
             num_sampled_tokens: Array of sampled token counts per request.
             remove_lora: Whether to remove LoRAs after the context exits.
             num_active_loras: Number of distinct active LoRAs to use.
-                LoRA is activated when num_active_loras > 0.
+                LoRA is activated when num_active_loras > 0. When it is 0, no
+                dummy LoRAs are added or removed, so loaded adapters are kept.
             mapping_type: Which LoRA mapping to build (language or encoder).
 
         """
         with (
-            self.maybe_setup_dummy_loras(lora_config, remove_lora),
+            self.maybe_setup_dummy_loras(lora_config if num_active_loras > 0 else None, remove_lora),
             self.maybe_select_dummy_loras(
                 lora_config,
                 num_scheduled_tokens,

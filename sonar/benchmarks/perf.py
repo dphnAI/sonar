@@ -4,7 +4,7 @@
 """Single-request model performance benchmark.
 
 This intentionally mirrors the compact output style of exllamav3's
-``eval/perf.py`` while running through Sonar's normal offline engine.
+`eval/perf.py` while running through Sonar's normal offline engine.
 """
 
 import argparse

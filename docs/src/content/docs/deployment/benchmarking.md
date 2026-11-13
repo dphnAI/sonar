@@ -13,7 +13,7 @@ sonar bench --help
 ```
 
 The available commands include `latency`, `throughput`, `serve`, `startup`,
-`perf`, `mm-processor`, and `sweep`.
+`forward`, `perf`, `mm-processor`, and `sweep`.
 
 ## Measure one offline batch
 
@@ -36,6 +36,18 @@ otherwise reuse cached blocks across iterations.
 
 Use it to compare kernels or engine settings with one controlled batch. It does
 not model queueing or arrival rate.
+
+### Measure exact forward shapes
+
+`sonar bench forward` measures fixed batches in one-shot CUDA graphs. Timing
+includes target sampling by default; use `--exclude-sampling` to omit it.
+It excludes CPU overhead and serving capture-bucket padding, so use serving
+benchmarks to measure those costs.
+
+With speculative decoding, timing includes rejection sampling and draft
+proposal. `--exclude-drafter` omits the proposal. The drafter assumes all draft
+tokens were accepted, independently of rejection results, so this benchmark
+does not predict end-to-end acceptance-dependent latency.
 
 ## Measure offline throughput
 
@@ -115,6 +127,9 @@ the model revision and workload fixed while the sweep changes engine settings.
 Useful sweep variables include `max_num_seqs`, `max_num_batched_tokens`,
 `gpu_memory_utilization`, and speculative depth. Reject combinations that
 change the accepted workload.
+
+Sweep shutdown terminates workers in the server's process group. Workers that
+detach into a different process group need separate cleanup.
 
 ## Interpret results
 

@@ -16,7 +16,6 @@ def test_full_prompt_hit_restores_kv_before_graph_replay(sonar_runner, monkeypat
     if importlib.util.find_spec("lmcache") is None:
         pytest.skip("LMCache is not installed")
 
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     monkeypatch.setenv("PYTHONHASHSEED", "0")
     monkeypatch.delenv("LMCACHE_CONFIG_FILE", raising=False)
     monkeypatch.setenv("LMCACHE_CHUNK_SIZE", "256")

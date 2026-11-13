@@ -164,12 +164,12 @@ class Platform:
     device_type: str
 
     # available dispatch keys:
-    # check https://github.com/pytorch/pytorch/blob/313dac6c1ca0fa0cde32477509cce32089f8532a/torchgen/model.py#L134 # noqa
+    # check https://github.com/pytorch/pytorch/blob/313dac6c1ca0fa0cde32477509cce32089f8532a/torchgen/model.py#L134
     # use "CPU" as a fallback for platforms not registered in PyTorch
     dispatch_key: str = "CPU"
 
     # available ray device keys:
-    # https://github.com/ray-project/ray/blob/10ba5adadcc49c60af2c358a33bb943fb491a171/python/ray/_private/ray_constants.py#L438 # noqa
+    # https://github.com/ray-project/ray/blob/10ba5adadcc49c60af2c358a33bb943fb491a171/python/ray/_private/ray_constants.py#L438
     # empty string means the device does not support ray
     ray_device_key: str = ""
 
@@ -180,7 +180,7 @@ class Platform:
     # platform-agnostic way to specify the device control environment variable,
     # .e.g. CUDA_VISIBLE_DEVICES for CUDA.
     # hint: search for "get_visible_accelerator_ids_env_var" in
-    # https://github.com/ray-project/ray/tree/master/python/ray/_private/accelerators # noqa
+    # https://github.com/ray-project/ray/tree/master/python/ray/_private/accelerators
     device_control_env_var: str = "SONAR_DEVICE_CONTROL_ENV_VAR_PLACEHOLDER"
 
     # environment variables that need to be set to 1 to prevent ray from
@@ -276,6 +276,12 @@ class Platform:
         return cumem_available
 
     @classmethod
+    def is_confidential_compute(cls) -> bool:
+        """Whether the device runs in a confidential-computing mode that makes
+        host<->device copies host-synchronous and host mappings incoherent."""
+        return False
+
+    @classmethod
     def get_pass_manager_cls(cls) -> str:
         """Get the pass manager class for this platform.
         It will be registered as a custom pass under the current_platform.pass_key.
@@ -284,7 +290,7 @@ class Platform:
 
     @classmethod
     def seed_everything(cls, seed: int | None = None) -> None:
-        """Seed the Python, NumPy, and torch RNGs. ``torch.manual_seed``
+        """Seed the Python, NumPy, and torch RNGs. `torch.manual_seed`
         seeds all devices; a None seed is a no-op."""
         if seed is not None:
             import random
@@ -302,7 +308,7 @@ class Platform:
 
     @classmethod
     def import_ir_kernels(cls) -> None:
-        """The default implementation imports ``sonar.kernels``, which registers
+        """The default implementation imports `sonar.kernels`, which registers
         the built-in IR op implementations. Out-of-tree (OOT) platforms should
         override this method to import their own kernel modules.
         """
@@ -350,7 +356,7 @@ class Platform:
 
         Sonar internals use logical local IDs. Physical IDs are used only
         at platform/topology boundaries. This helper performs the final
-        translation needed by APIs such as ``torch.device("cuda:N")``.
+        translation needed by APIs such as `torch.device("cuda:N")`.
         """
         physical_device_id = cls.device_id_to_physical_device_id(device_id)
         device_control_env = os.environ.get(cls.device_control_env_var, "")
@@ -370,7 +376,7 @@ class Platform:
 
     @classmethod
     def visible_device_id_to_physical_device_id(cls, device_id: int) -> int:
-        """Map a visible accelerator ordinal (e.g. ``torch.device.index``)
+        """Map a visible accelerator ordinal (e.g. `torch.device.index`)
         to a physical device ID.
 
         This is the inverse of the env-var translation performed by
@@ -403,9 +409,8 @@ class Platform:
         """Override core Triton kernels with platform implementations.
 
         Platforms whose Triton kernels need replacement implementations
-        (e.g. CPU fallbacks when the Triton-CPU backend is unavailable)
         override this method and call
-        :func:`sonar.triton_utils.dispatcher.register_kernels`
+        `sonar.triton_utils.dispatcher.register_kernels`
         with their overrides. It runs during model runner init, before any
         kernel launch. The default implementation does nothing.
         """
@@ -620,7 +625,7 @@ class Platform:
     def get_all_gpu_pci_bus_ids(cls) -> dict[int, str]:
         """Return a mapping of device index to PCI bus ID string.
 
-        Used by ``SONAR_GPU_NIC_PCIE_MAPPING`` for RDMA NIC selection.
+        Used by `SONAR_GPU_NIC_PCIE_MAPPING` for RDMA NIC selection.
         Subclasses should override with platform-specific discovery
         (e.g. pynvml for CUDA).
         """
@@ -714,7 +719,7 @@ class Platform:
     ) -> int:
         """Smallest block size every backend accepts.
 
-        ``supports_block_size`` may be overridden to accept exact sizes only
+        `supports_block_size` may be overridden to accept exact sizes only
         (CPU_MLA takes 16 and no multiple of it), so candidates are the LCMs of
         one supported size per backend, each checked against every backend.
 
@@ -912,6 +917,7 @@ class Platform:
         from sonar.model_executor.layers.mamba.abstract import (
             get_mamba_prefill_checkpoint_alignment,
         )
+        from sonar.model_executor.layers.mamba.mamba_utils import mamba_state_alignment
         from sonar.model_executor.models import ModelRegistry
         from sonar.utils.math_utils import cdiv
         from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
@@ -937,6 +943,8 @@ class Platform:
 
         # Compute attention page size for 1 token
         if model_config.use_mla:
+            from sonar.v1.attention.ops.mxfp4_mla import row_bytes as mxfp4_row_bytes
+
             attn_page_size_1_token = MLAAttentionSpec(
                 block_size=1,
                 num_kv_heads=model_config.get_num_kv_heads(parallel_config),
@@ -944,7 +952,14 @@ class Platform:
                 dtype=kv_cache_dtype,
                 cache_dtype_str=cache_config.cache_dtype,
                 kv_quant_mode=kv_quant_mode,
-                state_content_bytes=DS_MLA_STATE_CONTENT_BYTES.get(cache_config.cache_dtype),
+                # Must match MLAAttention.get_kv_cache_spec, else the mamba
+                # state no longer fits the real (smaller) MLA page.
+                # test_hybrid_block_size_matches_the_layer_page checks both.
+                state_content_bytes=(
+                    mxfp4_row_bytes(model_config.get_head_size())
+                    if cache_config.cache_dtype == "mxfp4_mla"
+                    else DS_MLA_STATE_CONTENT_BYTES.get(cache_config.cache_dtype)
+                ),
             ).page_size_bytes
         elif cache_config.cache_dtype.startswith("turboquant_") or cache_config.cache_dtype == "ultraquant_4bit":
             # TurboQuant and UltraQuant have packed K|V layouts; the standard
@@ -1017,6 +1032,7 @@ class Platform:
             mamba_page_size = MambaSpec(
                 shapes=model_cls.get_mamba_state_shape_from_config(sonar_config),
                 dtypes=model_cls.get_mamba_state_dtype_from_config(sonar_config),
+                state_alignment=mamba_state_alignment(sonar_config),
                 block_size=-1,
             ).page_size_bytes
 
@@ -1159,6 +1175,15 @@ class Platform:
         raise NotImplementedError
 
     @classmethod
+    def free_device_memory(cls, device: torch.device | None = None) -> int:
+        """Free bytes on device (None: the current one) to size memory from.
+        Platforms whose reported free memory is too low override this.
+        """
+        from sonar.utils.mem_utils import device_memory_info
+
+        return device_memory_info(device)[0]
+
+    @classmethod
     def get_punica_wrapper(cls) -> str:
         """Return the punica wrapper for current platform."""
         raise NotImplementedError
@@ -1179,9 +1204,9 @@ class Platform:
         return "sonar.distributed.device_communicators.base_device_communicator.DeviceCommunicatorBase"  # noqa
 
     @classmethod
-    def is_integrated_gpu(cls, device_id: int = 0) -> bool:
+    def is_integrated_gpu(cls, device_id: int | None = 0) -> bool:
         """Returns whether the GPU is an integrated (UMA) device that shares
-        system memory with the CPU.
+        system memory with the CPU. device_id None means the current device.
 
         On UMA systems (e.g. NVIDIA GH200, DGX Spark, Jetson Orin),
         cudaMemGetInfo may underreport free memory because it does not
@@ -1284,6 +1309,15 @@ class Platform:
         return cls._global_graph_pool
 
     @classmethod
+    def reset_global_graph_pool(cls) -> None:
+        """Make the next `get_global_graph_pool` call create a new pool.
+
+        Call this once all graphs in the pool are destroyed. Their outputs can
+        keep the old pool allocated, and capturing into it would fail.
+        """
+        cls._global_graph_pool = None
+
+    @classmethod
     def get_static_graph_wrapper_cls(cls) -> str:
         """Get static graph wrapper class for static graph."""
         return "sonar.compilation.base_static_graph.AbstractStaticGraphWrapper"
@@ -1328,9 +1362,9 @@ class Platform:
         attention in the same decoder block of an encoder-decoder model such as
         BART).
 
-        Platforms that have verified that their ``runner_kv_caches`` is not
+        Platforms that have verified that their `runner_kv_caches` is not
         impacted by this case should override this to a no-op. Otherwise the
-        default implementation raises ``NotImplementedError``.
+        default implementation raises `NotImplementedError`.
         """
         raise NotImplementedError(
             "Multiple attention layers with the same layer index are not supported on the current platform."
@@ -1415,7 +1449,19 @@ class Platform:
         """Validate environment variables for the current platform."""
         from sonar import envs
 
-        for env in os.environ:
+        for env, value in os.environ.items():
+            if env == "SONAR_USE_V2_MODEL_RUNNER":
+                if value != "1":
+                    raise ValueError(
+                        f"SONAR_USE_V2_MODEL_RUNNER={value} is no longer supported: "
+                        "Model Runner V1 has been removed. Unset this variable."
+                    )
+                logger.warning(
+                    "SONAR_USE_V2_MODEL_RUNNER=1 is redundant and can be unset: Model Runner V1 has been removed."
+                )
+                continue
+            if hint := envs.removed_environment_variables.get(env):
+                raise ValueError(f"{env} has been removed. {hint}")
             if env.startswith("SONAR_") and env not in envs.environment_variables:
                 if hard_fail:
                     raise ValueError(f"Unknown Sonar environment variable detected: {env}")
@@ -1427,19 +1473,19 @@ class Platform:
         """Resolve the fully-qualified class path of the platform's KV cache
         config builder.
 
-        .. note::
-            Experimental, like the ``KVCacheConfigBuilder`` interface it selects.
+        !!! note
+            Experimental, like the `KVCacheConfigBuilder` interface it selects.
 
-        The builder supplies grouping (``get_kv_cache_groups``) and tensor
-        placement (``get_kv_cache_config_from_groups``). Vendors may override
+        The builder supplies grouping (`get_kv_cache_groups`) and tensor
+        placement (`get_kv_cache_config_from_groups`). Vendors may override
         this to return a platform-specific builder. The default builder honors a
         model implementing
-        :class:`~sonar.model_executor.models.interfaces.SupportsKVCacheGrouping`;
-        a builder that overrides ``get_kv_cache_groups`` owns grouping and
-        bypasses that model hook unless it calls ``super()``.
+        `SupportsKVCacheGrouping`;
+        a builder that overrides `get_kv_cache_groups` owns grouping and
+        bypasses that model hook unless it calls `super()`.
 
         Returns:
-            Fully-qualified class path of a ``KVCacheConfigBuilder`` subclass.
+            Fully-qualified class path of a `KVCacheConfigBuilder` subclass.
 
         """
         return "sonar.v1.core.kv_cache_planning.DefaultKVCacheConfigBuilder"

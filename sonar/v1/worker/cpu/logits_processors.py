@@ -11,7 +11,7 @@ import numpy as np
 import torch
 
 import sonar.envs as envs
-from sonar import _custom_ops as ops
+from sonar import _cpu_ops as ops
 from sonar.sampling_params import SamplingParams
 
 if TYPE_CHECKING:

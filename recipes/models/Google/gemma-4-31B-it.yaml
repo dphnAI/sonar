@@ -32,7 +32,7 @@ model:
 
 dependencies:
   - note: "Audio extras — only needed when serving the audio modality"
-    command: 'uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130'
+    command: 'uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132'
     optional: true
 
 features:
@@ -193,9 +193,9 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --torch-backend cu130 --pre \
+  uv pip install -U sonar --torch-backend cu132 --pre \
     --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
-    --extra-index-url https://download.pytorch.org/whl/cu129 \
+    --extra-index-url https://download.pytorch.org/whl/cu132 \
     --index-strategy first-index
   ```
 
@@ -221,32 +221,29 @@ guide: |
 
   ### Quick Start (Single GPU)
   ```bash
-  sonar serve google/gemma-4-E4B-it \
+  sonar run google/gemma-4-E4B-it \
     --max-model-len <n_of_tokens>   # up to 131072
   ```
 
   ### 31B Dense on 2xA100/H100 (TP=2, BF16)
   ```bash
-  sonar serve google/gemma-4-31B-it \
+  sonar run google/gemma-4-31B-it \
     --tensor-parallel-size 2 \
-    --max-model-len 32768 \
-    --gpu-memory-utilization 0.90
+    --max-model-len 32768
   ```
 
   ### 26B MoE on 1xA100/H100 (BF16)
   ```bash
-  sonar serve google/gemma-4-26B-A4B-it \
-    --max-model-len 32768 \
-    --gpu-memory-utilization 0.90
+  sonar run google/gemma-4-26B-A4B-it \
+    --max-model-len 32768
   ```
 
   ### Full-Featured Server Launch
   Enables text, image, audio, thinking, and tool calling:
   ```bash
-  sonar serve google/gemma-4-31B-it \
+  sonar run google/gemma-4-31B-it \
     --tensor-parallel-size 2 \
     --max-model-len 16384 \
-    --gpu-memory-utilization 0.90 \
     --enable-auto-tool-choice \
     --reasoning-parser gemma4 \
     --tool-call-parser gemma4 \
@@ -266,7 +263,6 @@ guide: |
       --model google/gemma-4-31B-it \
       --tensor-parallel-size 2 \
       --max-model-len 32768 \
-      --gpu-memory-utilization 0.90 \
       --host 0.0.0.0 --port 8000
   ```
   Swap `vllm/vllm-openai:gemma4-0505-cu129` for `vllm/vllm-openai:gemma4-0505-cu130` on Blackwell (B200/B300).
@@ -286,7 +282,7 @@ guide: |
 
   ### Docker (Intel XPU B60 / B70, TP=4, Full-Featured)
 
-  Validated on 4× Intel Arc Pro B60 / B70 with the official Sonar XPU image.
+  Validated on 4× Intel Arc Pro B60 / B70 with the upstream vLLM XPU image.
 
   ```bash
   docker run --device /dev/dri \
@@ -356,21 +352,21 @@ guide: |
   ### Dynamic Vision Resolution
   Supported values: 70, 140, 280 (default), 560, 1120 tokens/image.
   ```bash
-  sonar serve google/gemma-4-31B-it \
+  sonar run google/gemma-4-31B-it \
     --mm-processor-kwargs '{"max_soft_tokens": 560}'
   ```
 
   ### Audio (E2B / E4B)
-  Requires `uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130`.
+  Requires `uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132`.
   ```bash
-  sonar serve google/gemma-4-E2B-it \
+  sonar run google/gemma-4-E2B-it \
     --max-model-len 8192 \
     --limit-mm-per-prompt '{"image": 4, "audio": 1}'
   ```
 
   ### Thinking Mode
   ```bash
-  sonar serve google/gemma-4-31B-it \
+  sonar run google/gemma-4-31B-it \
     --max-model-len 16384 \
     --enable-auto-tool-choice \
     --reasoning-parser gemma4 \
@@ -385,7 +381,7 @@ guide: |
   ## Configuration Tips
 
   - Set `--max-model-len` to match your workload.
-  - `--gpu-memory-utilization 0.90–0.95` maximizes KV cache.
+  - With extensible KV caching, leave `--gpu-memory-utilization` unset to use the 1.0 default and memory measured after warmup. Other cache paths retain their platform default. Set an explicit limit when sharing the GPU ([details](https://docs.vllm.ai/en/latest/configuration/optimization/#gpu-memory-utilization)).
   - Image-only workloads: pass `--limit-mm-per-prompt.audio 0`.
   - Text-only workloads: pass `--limit-mm-per-prompt '{"image": 0, "audio": 0}'` to skip MM profiling.
   - `--async-scheduling` improves throughput.
@@ -398,7 +394,7 @@ guide: |
   - [`RedHatAI/gemma-4-31B-it-FP8-dynamic`](https://huggingface.co/RedHatAI/gemma-4-31B-it-FP8-dynamic) — FP8 (E4M3) linear weights with dynamic per-token activation quantization (vision tower stays BF16); runs on Hopper and Blackwell.
   - [`nvidia/gemma-4-31B-it-NVFP4`](https://huggingface.co/nvidia/gemma-4-31B-it-NVFP4) — NVFP4 (4-bit) weights; requires Blackwell (B200/B300).
 
-  Pick them from the **Variant** dropdown above, or pass the repo id directly to `sonar serve`.
+  Pick them from the **Variant** dropdown above, or pass the repo id directly to `sonar run`.
 
   ## Throughput vs Latency
 
@@ -412,7 +408,7 @@ guide: |
 
   Enable the **Spec Decoding** feature toggle (above) or add `--speculative-config` manually to use MTP drafting with the [assistant model](https://huggingface.co/google/gemma-4-31B-it-assistant). Recommended `num_speculative_tokens`: 4–8 for this model. See the [Gemma 4 usage guide](../../Google/Gemma4) for details and benchmarks.
 
-  > **Note:** MTP speculative decoding for Gemma 4 is only available on the Sonar nightly build — it has not yet landed in a stable release. Install via the nightly wheel (`uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple …`) or use the `vllm/vllm-openai:gemma4-0505-cu129` / `vllm/vllm-openai:gemma4-0505-cu130` images above; the standard `:latest` stable tag does not include this feature.
+  > **Note:** MTP speculative decoding for Gemma 4 is only available on the Sonar nightly build — it has not yet landed in a stable release. Install via the nightly wheel (`uv pip install -U sonar --index-strategy first-index --torch-backend cu132 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple …`) or use the `vllm/vllm-openai:gemma4-0505-cu129` / `vllm/vllm-openai:gemma4-0505-cu130` images above; the standard `:latest` stable tag does not include this feature.
 
   ## References
 

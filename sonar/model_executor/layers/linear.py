@@ -8,7 +8,6 @@ from typing import Any
 
 import torch
 from torch.nn.parameter import Parameter
-from typing_extensions import TypeIs
 
 import sonar.envs as envs
 from sonar.config import get_current_sonar_config, get_current_sonar_config_or_none
@@ -45,7 +44,7 @@ from sonar.model_executor.parameter import (
     PerTensorScaleParameter,
     RowSonarParameter,
 )
-from sonar.model_executor.utils import set_weight_attrs
+from sonar.model_executor.utils import copy_weight_, set_weight_attrs
 from sonar.platforms import current_platform
 
 logger = init_logger(__name__)
@@ -54,7 +53,7 @@ WEIGHT_LOADER_V2_SUPPORTED = [
     "UnquantizedLinearMethod",
     "CompressedTensorsLinearMethod",
     "CompressedTensorsLinearTransformMethod",
-    "QutlassNvFP4LinearMethod",
+    "HummingNvFP4HadamardLinearMethod",
     "AutoAWQMarlinLinearMethod",
     "AutoAWQLinearMethod",
     "AutoGPTQLinearMethod",
@@ -416,7 +415,7 @@ class ReplicatedLinear(LinearBase):
         assert param.size() == loaded_weight.size(), (
             f"Tried to load weights of size {loaded_weight.size()}to a parameter of size {param.size()}"
         )
-        param.data.copy_(loaded_weight)
+        copy_weight_(param.data, loaded_weight)
 
     def forward(
         self,
@@ -464,7 +463,7 @@ class ColumnParallelLinear(LinearBase):
         disable_tp: If true, weights matrix won't be sharded through tp rank.
         tp_rank: Override the tensor-parallel rank used for sharding. Defaults to
             the global TP rank. Used to shard at a coarser granularity than one
-            shard per rank (see ``DCPGroupColumnParallelLinear``).
+            shard per rank (see `DCPGroupColumnParallelLinear`).
         tp_size: Override the tensor-parallel world size used for sharding.
             Defaults to the global TP world size.
 
@@ -599,7 +598,7 @@ class ColumnParallelLinear(LinearBase):
             loaded_weight = loaded_weight.reshape(1)
 
         assert param_data.shape == loaded_weight.shape
-        param_data.copy_(loaded_weight)
+        copy_weight_(param_data, loaded_weight)
 
     def weight_loader_v2(self, param: BaseSonarParameter, loaded_weight: torch.Tensor):
         # Special case for loading scales off disk, which often do not
@@ -643,11 +642,11 @@ class DCPGroupColumnParallelLinear(ColumnParallelLinear):
 
     With Decode Context Parallelism (DCP) the KV cache is sharded across a DCP
     group, so MLA decode must attend the group's full head set. This layer shards
-    its output across DCP groups (effective tp size ``tp_size //
-    dcp_world_size``) rather than across every rank, so each rank in a group
+    its output across DCP *groups* (effective tp size `tp_size //
+    dcp_world_size`) rather than across every rank, so each rank in a group
     holds the whole group's heads, letting decode skip the query all-gather.
 
-    :meth:`forward` returns the group's full head set. :meth:`_local_view`
+    `forward` returns the group's full head set. `_local_view`
     extracts this rank's TP shard for prefill.
     """
 
@@ -668,7 +667,7 @@ class DCPGroupColumnParallelLinear(ColumnParallelLinear):
     def _local_view(self, out: torch.Tensor) -> torch.Tensor:
         """Slice this rank's TP head shard from a group-heads output.
 
-        ``out`` is head-shaped, i.e. ``(..., group_heads, head_dim)``.
+        `out` is head-shaped, i.e. `(..., group_heads, head_dim)`.
         """
         if self.group_size == 1:
             return out
@@ -677,7 +676,62 @@ class DCPGroupColumnParallelLinear(ColumnParallelLinear):
         return out[..., start : start + n, :].contiguous()
 
 
-class MergedColumnParallelLinear(ColumnParallelLinear):
+class StackedColumnParallelLinear(ColumnParallelLinear):
+    """Column-parallel linear whose weight is several checkpoint tensors stacked
+    along the output dimension, each addressed by a shard id.
+
+    Keeps track of which shards a load delivered to each parameter so the loader
+    can reject a parameter that was only partly filled.
+    """
+
+    shard_ids: tuple[str | int, ...]
+    """Every shard this layer can receive."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.loaded_shard_ids: dict[str, set[str | int]] = {}
+
+    def _get_shard_size_mapping(self, loaded_shard_id: Any) -> int | None:
+        """Rows of this rank's parameter that belong to the shard."""
+        raise NotImplementedError
+
+    def validate_shard_id(self, shard_id: Any, param: Parameter | None = None) -> bool:
+        """Check `shard_id` names shards of this layer and, if `param` is given,
+        record them as loaded into it."""
+        if shard_id is None:
+            # Already stacked on disk, so one tensor fills every shard.
+            shards = self.shard_ids
+        elif isinstance(shard_id, tuple):
+            shards = shard_id
+        else:
+            shards = (shard_id,)
+        if any(shard not in self.shard_ids for shard in shards):
+            raise ValueError(
+                f"Shard id for {type(self).__name__} should be one of {self.shard_ids}, got shard id {shard_id}."
+            )
+        if param is not None:
+            name = next((n for n, p in self.named_parameters() if p is param), None)
+            if name is not None:
+                self.loaded_shard_ids.setdefault(name, set()).update(shards)
+        return True
+
+    def pop_missing_shards(self) -> list[str]:
+        """`<param>.<shard>` for each shard this load never filled, then forget
+        the record so the next load starts fresh.
+
+        A shard with no rows on this rank is never expected, and a parameter
+        nothing was loaded into is left to the loader's parameter-level check.
+        """
+        loaded, self.loaded_shard_ids = self.loaded_shard_ids, {}
+        return [
+            f"{name}.{shard}"
+            for name, shards in loaded.items()
+            for shard in self.shard_ids
+            if shard not in shards and self._get_shard_size_mapping(shard)
+        ]
+
+
+class MergedColumnParallelLinear(StackedColumnParallelLinear):
     """Packed linear layers with column parallelism.
 
     Similar to ColumnParallelLinear, but the weight matrix is concatenated
@@ -719,6 +773,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         disable_tp: bool = False,
     ):
         self.output_sizes = output_sizes
+        self.shard_ids = tuple(range(len(output_sizes)))
         self.tp_size = get_tensor_model_parallel_world_size() if not disable_tp else 1
         self.tp_rank = get_tensor_model_parallel_rank() if not disable_tp else 0
 
@@ -736,26 +791,13 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
             disable_tp=disable_tp,
         )
 
-    def validate_shard_id(self, shard_id: Any) -> TypeIs[int | tuple[int, ...] | None]:
-        if isinstance(shard_id, int):
-            if shard_id < 0 or shard_id >= len(self.output_sizes):
-                raise ValueError(
-                    f"Shard id should be between 0 and {len(self.output_sizes) - 1}. Got shard id {shard_id}."
-                )
-            return True
-        if shard_id is None:
-            return True
-        if isinstance(shard_id, tuple):
-            for idx in shard_id:
-                if not (0 <= idx < len(self.output_sizes)):
-                    raise ValueError(
-                        f"Shard id index {idx} should be between 0 and "
-                        f"{len(self.output_sizes) - 1}. Got shard id {shard_id}."
-                    )
-            if len(shard_id) > 1 and any(b - a != 1 for a, b in zip(shard_id[:-1], shard_id[1:])):
-                raise ValueError(f"Shard id with multiple indices should be consecutive. Got shard id {shard_id}.")
-            return True
-        raise ValueError("This line should not be reached")
+    def _get_shard_size_mapping(self, loaded_shard_id: int) -> int:
+        return self.output_sizes[loaded_shard_id] // self.tp_size
+
+    def validate_shard_id(self, shard_id: Any, param: Parameter | None = None) -> bool:
+        if isinstance(shard_id, tuple) and any(b - a != 1 for a, b in zip(shard_id[:-1], shard_id[1:])):
+            raise ValueError(f"Shard id with multiple indices should be consecutive. Got shard id {shard_id}.")
+        return super().validate_shard_id(shard_id, param)
 
     def weight_loader(
         self,
@@ -763,7 +805,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         loaded_weight: torch.Tensor,
         loaded_shard_id: tuple[int, ...] | int | None = None,
     ):
-        self.validate_shard_id(loaded_shard_id)
+        self.validate_shard_id(loaded_shard_id, param)
 
         param_data = param.data
         output_dim = getattr(param, "output_dim", None)
@@ -778,7 +820,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                     param_data, loaded_weight = adjust_scalar_to_fused_array(param_data, loaded_weight, 0)
 
                 assert param_data.shape == loaded_weight.shape
-                param_data.copy_(loaded_weight)
+                copy_weight_(param_data, loaded_weight)
                 return
 
             output_sizes = (
@@ -872,7 +914,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                 )
 
         assert param_data.shape == loaded_weight.shape
-        param_data.copy_(loaded_weight)
+        copy_weight_(param_data, loaded_weight)
 
     def _load_fused_module_from_checkpoint(
         self,
@@ -916,7 +958,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         loaded_weight: torch.Tensor,
         loaded_shard_id: tuple[int, ...] | int | None = None,
     ):
-        self.validate_shard_id(loaded_shard_id)
+        self.validate_shard_id(loaded_shard_id, param)
         if loaded_shard_id is None or isinstance(loaded_shard_id, tuple):
             if isinstance(param, PerTensorScaleParameter):
                 if isinstance(loaded_shard_id, tuple):
@@ -987,7 +1029,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
             yield name
 
 
-class QKVParallelLinear(ColumnParallelLinear):
+class QKVParallelLinear(StackedColumnParallelLinear):
     """Linear layers for the attention's QKV transformation.
 
     Linear layers for the linear transformation of the query, key, and value
@@ -1015,6 +1057,8 @@ class QKVParallelLinear(ColumnParallelLinear):
         disable_tp: If true, weights matrix won't be sharded through tp rank.
 
     """
+
+    shard_ids: tuple[str, ...] = ("q", "k", "v")
 
     def __init__(
         self,
@@ -1068,11 +1112,6 @@ class QKVParallelLinear(ColumnParallelLinear):
             return_bias=return_bias,
             disable_tp=disable_tp,
         )
-
-    def validate_shard_id(self, shard_id: Any) -> TypeIs[str | None]:
-        if shard_id in {"q", "k", "v"} or shard_id is None:
-            return True
-        raise ValueError(f"Shard id for QKVParallelLinear should be 'q', 'k', or 'v', got shard id {shard_id}.")
 
     def _get_shard_offset_mapping(self, loaded_shard_id: str):
         shard_offset_mapping = {
@@ -1139,7 +1178,7 @@ class QKVParallelLinear(ColumnParallelLinear):
         loaded_weight: torch.Tensor,
         loaded_shard_id: str | None = None,
     ):
-        self.validate_shard_id(loaded_shard_id)
+        self.validate_shard_id(loaded_shard_id, param)
         if loaded_shard_id is None:  # special case for certain models
             if isinstance(param, PerTensorScaleParameter):
                 # When weights are already fused on disk (e.g. Phi-3's
@@ -1157,7 +1196,7 @@ class QKVParallelLinear(ColumnParallelLinear):
             self._load_fused_module_from_checkpoint(param, loaded_weight)
             return
 
-        assert loaded_shard_id in ["q", "k", "v"]
+        assert loaded_shard_id in self.shard_ids
 
         shard_offset = self._get_shard_offset_mapping(loaded_shard_id)
         shard_size = self._get_shard_size_mapping(loaded_shard_id)
@@ -1181,7 +1220,7 @@ class QKVParallelLinear(ColumnParallelLinear):
         loaded_weight: torch.Tensor,
         loaded_shard_id: str | None = None,
     ):
-        self.validate_shard_id(loaded_shard_id)
+        self.validate_shard_id(loaded_shard_id, param)
 
         param_data = param.data
         output_dim = getattr(param, "output_dim", None)
@@ -1197,7 +1236,7 @@ class QKVParallelLinear(ColumnParallelLinear):
                     param_data, loaded_weight = adjust_scalar_to_fused_array(param_data, loaded_weight, 0)
 
                 assert param_data.shape == loaded_weight.shape
-                param_data.copy_(loaded_weight)
+                copy_weight_(param_data, loaded_weight)
                 return
             shard_offsets = [
                 # (shard_id, shard_offset, shard_size)
@@ -1256,7 +1295,7 @@ class QKVParallelLinear(ColumnParallelLinear):
                 self.weight_loader(param, loaded_weight_shard, shard_id)
             return
 
-        assert loaded_shard_id in ["q", "k", "v"]
+        assert loaded_shard_id in self.shard_ids
 
         # If output dim is defined, use the default loading process.
         if output_dim is not None:
@@ -1332,7 +1371,7 @@ class QKVParallelLinear(ColumnParallelLinear):
                 )
 
         assert param_data.shape == loaded_weight.shape
-        param_data.copy_(loaded_weight)
+        copy_weight_(param_data, loaded_weight)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> Iterable[str]:
         for name, loaded_weight in weights:
@@ -1371,18 +1410,20 @@ class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):
 
         [q | k | v | index_q | index_k]
 
-    ``index_q`` must have the same head count as the KV heads
-    (``total_num_index_heads == total_num_kv_heads``) and ``index_head_size ==
-    head_size``, so it shards exactly like K/V -- including the KV-head
-    *replication* path when ``tp_size > total_num_kv_heads`` (this is what makes
-    a TP size greater than the KV-head count work). ``index_k`` is a single
+    `index_q` must have the same head count as the KV heads
+    (`total_num_index_heads == total_num_kv_heads`) and `index_head_size ==
+    head_size`, so it shards exactly like K/V -- including the KV-head
+    *replication* path when `tp_size > total_num_kv_heads` (this is what makes
+    a TP size greater than the KV-head count work). `index_k` is a single
     shared head, replicated to every rank.
 
-    ``replicate_index_q`` moves ``index_q`` onto that replicated path too, so
+    `replicate_index_q` moves `index_q` onto that replicated path too, so
     every rank projects all the index heads rather than its own. That is what
     indexer context parallelism needs: it inverts the split, scoring every head
     against a shard of the blocks instead of one head against all of them.
     """
+
+    shard_ids = ("q", "k", "v", "index_q", "index_k")
 
     def __init__(
         self,
@@ -1439,7 +1480,7 @@ class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):
 
         # Skip QKVParallelLinear.__init__ (3-group layout); build the 5-group
         # column-parallel weight directly.
-        ColumnParallelLinear.__init__(
+        StackedColumnParallelLinear.__init__(
             self,
             input_size=self.hidden_size,
             output_size=sum(self.output_sizes),
@@ -1447,15 +1488,6 @@ class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):
             gather_output=False,
             quant_config=quant_config,
             prefix=prefix,
-        )
-
-    def validate_shard_id(self, shard_id: Any) -> TypeIs[str | None]:
-        if shard_id in {"q", "k", "v", "index_q", "index_k"} or shard_id is None:
-            return True
-        raise ValueError(
-            "Shard id for MinimaxM3QKVParallelLinearWithIndexer must be one of "
-            "'q', 'k', 'v', 'index_q', 'index_k'; got "
-            f"{shard_id}."
         )
 
     def _get_shard_offset_mapping(self, loaded_shard_id: str) -> int | None:
@@ -1485,9 +1517,9 @@ class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):
         loaded_weight: torch.Tensor,
         loaded_shard_id: str | None = None,
     ) -> None:
-        self.validate_shard_id(loaded_shard_id)
+        self.validate_shard_id(loaded_shard_id, param)
         # Index checkpoints are never pre-fused on disk; a shard id is always given.
-        assert loaded_shard_id in ("q", "k", "v", "index_q", "index_k")
+        assert loaded_shard_id in self.shard_ids
 
         shard_offset = self._get_shard_offset_mapping(loaded_shard_id)
         shard_size = self._get_shard_size_mapping(loaded_shard_id)
@@ -1518,8 +1550,8 @@ class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):
     ) -> None:
         # Unquantized (bf16) path. MXFP8 checkpoints use weight_loader_v2; this
         # keeps an unquantized load correct too.
-        self.validate_shard_id(loaded_shard_id)
-        assert loaded_shard_id in ("q", "k", "v", "index_q", "index_k")
+        self.validate_shard_id(loaded_shard_id, param)
+        assert loaded_shard_id in self.shard_ids
         output_dim = getattr(param, "output_dim", None)
         assert output_dim is not None
 
@@ -1539,7 +1571,7 @@ class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):
             shard_rank = self.tp_rank // self.num_kv_head_replicas
         loaded_weight = loaded_weight.narrow(output_dim, shard_rank * shard_size, shard_size)
         assert param_data.shape == loaded_weight.shape
-        param_data.copy_(loaded_weight)
+        copy_weight_(param_data, loaded_weight)
 
 
 class KimiK3MergedQKVGateLinear(MergedColumnParallelLinear):
@@ -1547,10 +1579,10 @@ class KimiK3MergedQKVGateLinear(MergedColumnParallelLinear):
 
     NOTE: Kimi-K3-specific. This is tailored to its replicated Q/KV latent
     projections and tensor-parallel output gate; it is not a general-purpose
-    linear layer. It lives here alongside ``MergedColumnParallelLinear``, whose
+    linear layer. It lives here alongside `MergedColumnParallelLinear`, whose
     sharding and weight-loading machinery it reuses.
 
-    The per-rank shard layout is ``[q_a | kv_a | gate]``. The latent shards
+    The per-rank shard layout is `[q_a | kv_a | gate]`. The latent shards
     stay replicated across tensor-parallel ranks while the gate shard is
     tensor-parallel, matching the standalone projections they replace.
     """
@@ -1762,7 +1794,7 @@ class RowParallelLinear(LinearBase):
             loaded_weight = loaded_weight.reshape(1)
 
         assert param_data.shape == loaded_weight.shape
-        param_data.copy_(loaded_weight)
+        copy_weight_(param_data, loaded_weight)
 
     def weight_loader_v2(self, param: BaseSonarParameter, loaded_weight: torch.Tensor):
         # Special case for loading scales off disk, which often do not

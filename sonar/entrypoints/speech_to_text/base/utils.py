@@ -9,6 +9,7 @@ from sonar.exceptions import SonarValidationError
 from sonar.utils.mem_constants import KiB_bytes, MiB_bytes
 
 _READ_CHUNK_SIZE = 64 * KiB_bytes
+_MAX_SIZE_MESSAGE = "Maximum file size exceeded. Set SONAR_MAX_AUDIO_CLIP_FILESIZE_MB to increase this limit."
 
 
 async def read_upload_with_limit(
@@ -18,18 +19,18 @@ async def read_upload_with_limit(
     """Read an uploaded file enforcing a size limit *before* full
     materialization.
 
-    The function first checks the Content-Length header (``file.size``) when
+    The function first checks the Content-Length header (`file.size`) when
     available.  Regardless, it then performs a chunked read that stops as soon
     as the accumulated bytes exceed the limit, ensuring that an oversized
     upload never fully materializes in memory.
 
     Args:
-        file: The FastAPI/Starlette ``UploadFile`` object.
+        file: The FastAPI/Starlette `UploadFile` object.
         max_size_mb: Maximum allowed compressed file size in megabytes.
-            Defaults to ``envs.SONAR_MAX_AUDIO_CLIP_FILESIZE_MB``.
+            Defaults to `envs.SONAR_MAX_AUDIO_CLIP_FILESIZE_MB`.
 
     Returns:
-        The file content as ``bytes``.
+        The file content as `bytes`.
 
     Raises:
         SonarValidationError: If the file exceeds the configured size limit.
@@ -42,7 +43,7 @@ async def read_upload_with_limit(
 
     if file.size is not None and file.size > max_bytes:
         raise SonarValidationError(
-            "Maximum file size exceeded",
+            _MAX_SIZE_MESSAGE,
             parameter="audio_filesize_mb",
             value=file.size / MiB_bytes,
         )
@@ -56,7 +57,7 @@ async def read_upload_with_limit(
         total += len(chunk)
         if total > max_bytes:
             raise SonarValidationError(
-                "Maximum file size exceeded",
+                _MAX_SIZE_MESSAGE,
                 parameter="audio_filesize_mb",
                 value=total / MiB_bytes,
             )

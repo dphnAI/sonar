@@ -19,7 +19,7 @@ class WhisperConfig:
     """Whisper model configuration.
 
     Supports construction from both HuggingFace and MLX config formats
-    via :meth:`from_dict`.
+    via `from_dict`.
     """
 
     n_mels: int = 80
@@ -37,14 +37,14 @@ class WhisperConfig:
     def from_dict(cls, config: dict) -> WhisperConfig:
         """Create config from a dictionary.
 
-        Automatically detects HuggingFace format (``d_model``,
-        ``encoder_layers``, etc.) and maps to MLX field names.
+        Automatically detects HuggingFace format (`d_model`,
+        `encoder_layers`, etc.) and maps to MLX field names.
 
         Args:
-            config: Raw config dictionary from ``config.json``.
+            config: Raw config dictionary from `config.json`.
 
         Returns:
-            Populated :class:`WhisperConfig` instance.
+            Populated `WhisperConfig` instance.
         """
         config = config.copy()
 

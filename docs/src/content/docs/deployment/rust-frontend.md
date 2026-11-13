@@ -93,6 +93,20 @@ The Rust frontend supports streaming chat and completion responses. It also
 supports API-key authentication, CORS, request-ID headers, TLS, chat
 templates, reasoning parsers, and tool parsers.
 
+### gRPC health probes
+
+Add `--grpc-port 50051` to expose the Rust frontend's gRPC listener. Use its
+`grpc.health.v1.Health` service with `liveness` for startup/liveness probes and
+`readiness` for readiness probes.
+
+`readiness` and `sonar.Inference` report not-serving during pause, sleep, partial
+wake, unfinished weight updates, shutdown, or engine failure. `liveness`
+reports engine failure without treating an intentional pause as a crash.
+Using readiness for a liveness probe can restart a deliberately paused engine.
+
+The gRPC interface is for trusted callers. Its `media_io_kwargs` supports
+`video.fps` without the HTTP per-request override flag; frame limits still apply.
+
 ## Check option compatibility
 
 Run this command from a source checkout:

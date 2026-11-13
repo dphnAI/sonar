@@ -94,7 +94,7 @@ class _FakeTokenizer(TokenizerLike):
 
 
 class TestGetSamplingParams:
-    """Tests for ``get_sampling_params`` in ``sonar.benchmarks.datasets.shared``."""
+    """Tests for `get_sampling_params` in `sonar.benchmarks.datasets.shared`."""
 
     # -- helpers --
 

@@ -29,7 +29,7 @@ from sonar.entrypoints.pooling.token_embed.protocol import (
     TokenEmbeddingResponse,
 )
 from sonar.entrypoints.pooling.token_embed.serving import ServingTokenEmbedding
-from sonar.entrypoints.pooling.typing import (
+from sonar.entrypoints.pooling.types import (
     OfflineEncodeInputsContext,
     OfflineOutputsContext,
     PoolingServeContext,

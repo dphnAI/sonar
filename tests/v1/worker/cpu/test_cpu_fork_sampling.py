@@ -121,7 +121,7 @@ def test_cpu_xtc_removes_top_choices_above_threshold() -> None:
 def test_cpu_phrase_retry_blocks_rejected_token_at_retry_position(fork_sampling: bool) -> None:
     params = SamplingParams(
         temperature=0.0,
-        top_a=0.01 if fork_sampling else 0.0,
+        temperature_last=fork_sampling,
         extra_args={"_sonar_phrase_retry": (1, [3])},
     )
     sampler, idx_mapping = _make_sampler(params, [1], prompt_len=1)

@@ -63,7 +63,10 @@ class OMPProcessManager:
 
         self._parse_omp_threads_bind_env()
 
-        assert not self.simulate_multi_node or self.auto_setup
+        assert not self.simulate_multi_node or self.auto_setup, (
+            "SONAR_CPU_SIM_MULTI_NUMA requires SONAR_CPU_OMP_THREADS_BIND=auto, "
+            f"got {envs.SONAR_CPU_OMP_THREADS_BIND!r}."
+        )
 
     @contextmanager
     def configure_omp_envs(self, rank: int, local_rank: int):

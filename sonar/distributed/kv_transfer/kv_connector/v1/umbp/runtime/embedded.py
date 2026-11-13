@@ -11,7 +11,7 @@ import socket
 import threading
 import time
 from collections.abc import Iterable, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
+from concurrent.futures import Executor, Future, ThreadPoolExecutor, TimeoutError
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
@@ -203,7 +203,7 @@ class _MoriSchedulerHandle(UMBPSchedulerHandle):
                 response += chunk
             return msgspec.json.decode(response or b"[]")
 
-    def lookup(self, keys: Sequence[str]) -> Sequence[bool]:
+    def lookup(self, keys: Sequence[str]) -> Sequence[bool | None]:
         unavailable: list[tuple[int, int, int, int]]
         if len(self._paths) == 1:
             rank, path = next(iter(self._paths.items()))
@@ -218,8 +218,8 @@ class _MoriSchedulerHandle(UMBPSchedulerHandle):
                     if any(_rank_namespace_from_key_prefix(key.rpartition(":")[0] + ":") == rank for key in keys)
                     else []
                 )
-                return self._lookup_result(keys, [False] * len(keys), unavailable)
-        result = [False] * len(keys)
+                return self._lookup_result(keys, [None] * len(keys), unavailable)
+        result: list[bool | None] = [False] * len(keys)
         keys_by_rank: dict[tuple[int, int, int, int], list[tuple[int, str]]] = {}
         unrouted: list[tuple[int, str]] = []
         for index, key in enumerate(keys):
@@ -239,6 +239,8 @@ class _MoriSchedulerHandle(UMBPSchedulerHandle):
                     result[index] = bool(value)
             except (OSError, ValueError, IndexError):
                 unavailable.append(rank)
+                for index, _ in indexed_keys:
+                    result[index] = None
         for path in self._paths.values():
             if not unrouted:
                 break
@@ -253,10 +255,10 @@ class _MoriSchedulerHandle(UMBPSchedulerHandle):
     def _lookup_result(
         self,
         keys: Sequence[str],
-        result: list[bool],
+        result: list[bool | None],
         unavailable: list[tuple[int, int, int, int]],
-    ) -> list[bool]:
-        missing = tuple(key for key, exists in zip(keys, result, strict=True) if not exists)
+    ) -> list[bool | None]:
+        missing = tuple(key for key, exists in zip(keys, result, strict=True) if exists is False)
         self.last_lookup_diagnostics = {
             "unavailable_ranks": tuple(unavailable),
             "missing_keys": missing,
@@ -307,19 +309,18 @@ class _MoriWorkerHandle(UMBPWorkerHandle):
         timeout_s: float,
         layout: KVLayoutDescriptor | None = None,
         lookup_instance: str = "",
+        serve_lookups: bool = True,
     ) -> None:
         self.client = client
         self._namespace = namespace
         self._topology = topology
         self._lookup_dir = lookup_dir
         self._lookup_instance = lookup_instance
+        self._serve_lookups = serve_lookups
         self._lookup_server: _MoriLookupServer | None = None
         self._registered_storages: set[int] = set()
         self._gpu_devices: set[int] = set()
-        self._executor = ThreadPoolExecutor(
-            max_workers=max_workers,
-            thread_name_prefix="umbp-embedded-transfer",
-        )
+        self._executor = self._create_executor(max_workers)
         self._job_lock = threading.Lock()
         self._futures: dict[int, Future[TransferJobState]] = {}
         self._store_deadlines: dict[int, float] = {}
@@ -327,6 +328,12 @@ class _MoriWorkerHandle(UMBPWorkerHandle):
         self._timeout_s = timeout_s
         self._layout = layout
         self._load_layouts: dict[int, _BlockLoadLayout] = {}
+
+    def _create_executor(self, max_workers: int) -> Executor:
+        return ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="umbp-embedded-transfer",
+        )
 
     def register_buffers(self, kv_caches: dict[str, torch.Tensor]) -> None:
         try:
@@ -348,7 +355,7 @@ class _MoriWorkerHandle(UMBPWorkerHandle):
                 self._gpu_devices.add(device)
 
         self._register_load_layouts(kv_caches)
-        if self._lookup_server is None:
+        if self._serve_lookups and self._lookup_server is None:
             self._lookup_server = _MoriLookupServer(
                 _lookup_socket_path(
                     self._namespace,
@@ -377,6 +384,16 @@ class _MoriWorkerHandle(UMBPWorkerHandle):
                 if cache is None or cache.ndim == 0:
                     break
                 stride = cache.stride(0) * cache.element_size()
+                if region.segments:
+                    if stride != region.block_stride:
+                        break
+                    for segment_offset, length in region.segments:
+                        bases.append(cache.data_ptr() + segment_offset)
+                        strides.append(stride)
+                        offsets.append(sum(sizes))
+                        sizes.append(length)
+                    counts.append(cache.shape[0])
+                    continue
                 if (
                     stride <= 0
                     or stride > region.block_stride

@@ -42,6 +42,28 @@ List current parser names:
 sonar serve --help=tool-call-parser
 ```
 
+### Model-specific choices
+
+| Model | Tool parser | Reasoning parser |
+| --- | --- | --- |
+| Ripple-65B Preview | `ripple` | `ripple` |
+| ZAYA1 | `zaya` | `zaya` |
+| Granite 4.2 | `granite_toolcall_parser` | Follow the checkpoint's instructions |
+
+Ripple chooses whether to reason per turn. Structured output applies from the
+first token, so constrained responses answer without reasoning.
+
+### Anthropic thinking controls
+
+The `/v1/messages` API maps `thinking.type` to these controls:
+
+- `disabled` requests no thinking where the template supports it, otherwise low effort.
+- `enabled` uses `budget_tokens`, which must be at least `1024` and less than `max_tokens`.
+- `adaptive` lets the model choose depth under `output_config.effort`.
+- `between_tools` currently behaves like `disabled`, including tool continuations.
+
+These settings cannot force a model to emit progress notes between tool calls.
+
 ## Validate a model pair
 
 Use the parser recommended by the checkpoint publisher. Check the chat template

@@ -27,13 +27,15 @@ class TensorSpec:
 
 
 def build_embedding_namespace(sonar_config: SonarConfig) -> str:
+    from sonar.config.utils import hash_config
+
     model_config = sonar_config.model_config
     ec_config = sonar_config.ec_transfer_config
     assert ec_config is not None
     extra_config = ec_config.ec_connector_extra_config
 
     multimodal_config = model_config.multimodal_config
-    encoder_hash = multimodal_config.compute_hash() if multimodal_config is not None else "encoder:default"
+    encoder_hash = hash_config(multimodal_config) if multimodal_config is not None else "encoder:default"
     cache_prefix = str(extra_config.get("embedding_cache_prefix", ""))
     model_name = str(extra_config.get("embedding_model_identity", model_config.model))
     prefix = f"{cache_prefix}@" if cache_prefix else ""

@@ -15,10 +15,9 @@ import torch.fx as fx
 import sonar.envs as envs
 from sonar.compilation.counter import compilation_counter
 from sonar.config import SonarConfig
-from sonar.config.utils import Range
+from sonar.config.utils import CompileFactors, Range, normalize_value
 from sonar.env_override import _apply_constrain_to_fx_strides_patch
 from sonar.logger import init_logger
-from sonar.utils.hashing import safe_hash
 from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 logger = init_logger(__name__)
@@ -49,6 +48,14 @@ class CompilerInterface:
     # This is a class-level attribute.
     name: str
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if "compute_hash" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__qualname__} defines `compute_hash`, which is no longer "
+                "called. Implement `compile_factors` instead."
+            )
+
     def initialize_cache(self, cache_dir: str, disable_cache: bool = False, prefix: str = "") -> None:
         """When the Sonar process uses `cache_dir` as the cache directory,
         the compiler should initialize itself with the cache directory,
@@ -64,16 +71,14 @@ class CompilerInterface:
         """
         pass
 
-    def compute_hash(self, sonar_config: SonarConfig) -> str:
-        """Gather all the relevant information from the Sonar config,
-        to compute a hash so that we can cache the compiled model.
+    def compile_factors(self, sonar_config: SonarConfig) -> CompileFactors:
+        """Gather compiler-specific factors for the compilation cache key.
 
-        See [`SonarConfig.compute_hash`][sonar.config.SonarConfig.compute_hash]
-        to check what information
-        is already considered by default. This function should only
-        consider the information that is specific to the compiler.
+        See [`SonarConfig.compile_factors`][sonar.config.SonarConfig.compile_factors]
+        for what is already considered by default. This method should only
+        return the information that is specific to the compiler.
         """
-        return ""
+        return {}
 
     def compile(
         self,
@@ -176,7 +181,7 @@ def _get_sonar_functorch_config(use_aot_compile: bool = True) -> dict[str, Any]:
     return cfg
 
 
-def get_inductor_factors(use_aot_compile: bool = True) -> list[Any]:
+def get_inductor_factors(use_aot_compile: bool = True) -> Any:
     factors: list[Any] = []
     # summarize system state
     from torch._inductor.codecache import CacheBase
@@ -196,7 +201,7 @@ def get_inductor_factors(use_aot_compile: bool = True) -> list[Any]:
     factors.append(inductor_config.save_config_portable())
     with functorch_config.patch(_get_sonar_functorch_config(use_aot_compile)):
         factors.append(functorch_config.save_config_portable())
-    return factors
+    return normalize_value(factors)
 
 
 def is_compile_cache_enabled(
@@ -270,10 +275,8 @@ class InductorStandaloneAdaptor(CompilerInterface):
         self.save_format = save_format
         self.use_aot_compile = use_aot_compile
 
-    def compute_hash(self, sonar_config: SonarConfig) -> str:
-        factors = get_inductor_factors(self.use_aot_compile)
-        hash_str: str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
-        return hash_str
+    def compile_factors(self, sonar_config: SonarConfig) -> CompileFactors:
+        return {"inductor": get_inductor_factors(self.use_aot_compile)}
 
     def initialize_cache(self, cache_dir: str, disable_cache: bool = False, prefix: str = "") -> None:
         self.cache_dir = cache_dir
@@ -325,7 +328,7 @@ class InductorStandaloneAdaptor(CompilerInterface):
         use_aot: bool = supports_aot and self.use_aot_compile and envs.SONAR_USE_MEGA_AOT_ARTIFACT
         # only add 'aot' parameter if both supported and enabled...
         # this will set bundled_autograd_cache
-        # https://github.com/pytorch/pytorch/blob/9bbc5b2905c260adf41bc866a732f9c121a2828a/torch/_inductor/standalone_compile.py#L359 # noqa
+        # https://github.com/pytorch/pytorch/blob/9bbc5b2905c260adf41bc866a732f9c121a2828a/torch/_inductor/standalone_compile.py#L359
         if use_aot:
             compile_kwargs["aot"] = True  # type: ignore[assignment]
 
@@ -462,10 +465,8 @@ class InductorAdaptor(CompilerInterface):
     def __init__(self, *, use_aot_compile: bool) -> None:
         self.use_aot_compile = use_aot_compile
 
-    def compute_hash(self, sonar_config: SonarConfig) -> str:
-        factors = get_inductor_factors(self.use_aot_compile)
-        hash_str: str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
-        return hash_str
+    def compile_factors(self, sonar_config: SonarConfig) -> CompileFactors:
+        return {"inductor": get_inductor_factors(self.use_aot_compile)}
 
     def initialize_cache(self, cache_dir: str, disable_cache: bool = False, prefix: str = "") -> None:
         self.cache_dir = cache_dir
@@ -544,7 +545,7 @@ class InductorAdaptor(CompilerInterface):
             # tracing context, and also disables caching for graphs
             # with high-order ops.
             # For Sonar, in either case, we want to cache the graph.
-            # see https://github.com/pytorch/pytorch/blob/9f5ebf3fc609105a74eab4ccc24932d6353ff566/torch/_inductor/codecache.py#L1221 # noqa
+            # see https://github.com/pytorch/pytorch/blob/9f5ebf3fc609105a74eab4ccc24932d6353ff566/torch/_inductor/codecache.py#L1221
             return
 
         def _get_shape_env() -> AlwaysHitShapeEnv:

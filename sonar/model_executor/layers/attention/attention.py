@@ -98,14 +98,18 @@ def _largest_kernel_block_within(
     page_budget: int,
     fallback: int,
     kv_cache_spec: KVCacheSpec | None = None,
+    divisor_of: int | None = None,
 ) -> int:
-    """Largest supported kernel block size whose page fits in ``page_budget``.
+    """Largest supported kernel block size whose page fits in `page_budget`.
 
     A padded spec (e.g. skip-quant layer) that pads its page up to a large shared page
-    wastes ``page_budget - block*per_token`` bytes per block. Picking the largest kernel
-    block whose natural page still fits under ``page_budget`` minimizes that waste.
-    ``MultipleOf`` declarations are expanded to the largest aligned block that fits.
+    wastes `page_budget - block*per_token` bytes per block. Picking the largest kernel
+    block whose natural page still fits under `page_budget` minimizes that waste.
+    `MultipleOf` declarations are expanded to the largest aligned block that fits.
     Falls back to the smallest supported block when nothing fits.
+
+    With `divisor_of`, prefer the largest fitting block that divides it, so the
+    page can be scaled to `divisor_of` by an integer ratio instead of padded.
     """
     from sonar.v1.attention.backend import MultipleOf
 
@@ -117,6 +121,17 @@ def _largest_kernel_block_within(
         return fallback
     smallest = min(candidates)
     fitting = [b for b in candidates if b * per_token_bytes <= page_budget]
+    if divisor_of is not None:
+        dividing = [b for b in fitting if divisor_of % b == 0]
+        dividing.extend(
+            b
+            for s in sizes
+            if isinstance(s, MultipleOf)
+            for b in range(s.base, max_block_size + 1, s.base)
+            if divisor_of % b == 0
+        )
+        if dividing:
+            return max(dividing)
     return max(fitting) if fitting else smallest
 
 
@@ -246,7 +261,7 @@ class Attention(nn.Module, AttentionLayerBase):
         """The KV cache is stored inside this class and is accessed via
         `self.kv_cache`.
 
-        ``cache_num_kv_heads`` can increase the number of KV heads stored in
+        `cache_num_kv_heads` can increase the number of KV heads stored in
         each cache block without changing the number projected by the
         attention implementation. DFlash and DSpark use this under DCP to
         replicate the draft KV heads needed by gathered query heads.
@@ -337,6 +352,7 @@ class Attention(nn.Module, AttentionLayerBase):
         # During model initialization, the default dtype is set as the model
         # weight and activation dtype.
         dtype = torch.get_default_dtype()
+        self.act_dtype = dtype
         if attn_backend is None:
             self.attn_backend = get_attn_backend(
                 head_size,
@@ -562,8 +578,8 @@ class Attention(nn.Module, AttentionLayerBase):
         s += f", backend={self.impl.__class__.__name__}"
         return s
 
-    def process_weights_after_loading(self, act_dtype: torch.dtype):
-        self.impl.process_weights_after_loading(act_dtype)
+    def process_weights_after_loading(self) -> None:
+        self.impl.process_weights_after_loading(self.act_dtype)
 
         # If we should not load quant weights, we initialize the scales to 1.0
         # as the default value. See [Note: Register q/k/v/prob scales in state dict]
@@ -609,12 +625,16 @@ class Attention(nn.Module, AttentionLayerBase):
             )
             sw_per_token = kv_cache_spec.real_page_size_bytes
             page_budget = shared_page or sw_per_token * block_size
+            # Without a shared page, prefer a block that divides the primary
+            # block: ``unify`` pads any other block's page, and a padded page
+            # disables fine-grained prefix-cache hits on this group.
             sw_block_size = _largest_kernel_block_within(
                 self.attn_backend,
                 sw_per_token,
                 page_budget,
                 block_size,
                 kv_cache_spec,
+                divisor_of=None if shared_page else block_size,
             )
             return SlidingWindowSpec(
                 block_size=sw_block_size,

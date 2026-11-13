@@ -49,7 +49,7 @@ def _num_captured_graphs(_worker):
     return compilation_counter.num_cudagraph_captured
 
 
-def _piecewise_compile_state(worker):
+def _graph_execution_state(worker):
     from sonar.compilation.counter import compilation_counter
 
     # `cudagraph_mode` is returned by name: the enum does not survive the
@@ -57,6 +57,7 @@ def _piecewise_compile_state(worker):
     return (
         compilation_counter.num_models_seen,
         compilation_counter.num_cudagraph_captured,
+        worker.sonar_config.compilation_config.mode.name,
         worker.sonar_config.compilation_config.cudagraph_mode.name,
     )
 
@@ -139,13 +140,9 @@ def test_hyv4_dummy_generation(
             ), "MTP drafter did not run"
 
 
-def test_hyv4_backbone_reaches_the_compiler(sonar_runner, enable_pickle) -> None:
-    """Guard against the backbone losing `@support_torch_compile`.
-
-    An undecorated backbone is not a hard failure: Sonar downgrades
-    `cudagraph_mode` to NONE and serves the whole model eager, which on TP8
-    gfx942 cost ~4x decode latency.
-    """
+def test_hyv4_defaults_to_breakable_graphs(sonar_runner, enable_pickle, monkeypatch) -> None:
+    """Keep prefill/decode graph capture when the backbone is not compiled."""
+    monkeypatch.delenv("SONAR_USE_BREAKABLE_CUDAGRAPH", raising=False)
     with sonar_runner(
         "tencent/Hy4-preview",
         trust_remote_code=True,
@@ -162,12 +159,26 @@ def test_hyv4_backbone_reaches_the_compiler(sonar_runner, enable_pickle) -> None
         enforce_eager=False,
         seed=17,
         compilation_config=CompilationConfig(
-            mode=CompilationMode.SONAR_COMPILE,
-            cudagraph_mode=CUDAGraphMode.PIECEWISE,
+            cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
             cudagraph_capture_sizes=[1, 2, 4],
         ),
     ) as model:
-        for models_seen, captured, mode in model.collective_rpc(_piecewise_compile_state):
-            assert models_seen > 0, "backbone was never handed to the compiler"
-            assert mode == CUDAGraphMode.PIECEWISE.name
+        for models_seen, captured, compile_mode, graph_mode in model.collective_rpc(_graph_execution_state):
+            assert models_seen == 0, "backbone should not enter torch.compile"
+            assert compile_mode == CompilationMode.NONE.name
+            assert graph_mode == CUDAGraphMode.FULL_AND_PIECEWISE.name
             assert captured > 0
+
+        outputs = model.llm.generate(
+            [
+                {"prompt_token_ids": [11, 12, 13, 14]},
+                {"prompt_token_ids": list(range(20, 84))},
+            ],
+            SamplingParams(temperature=0, max_tokens=4, ignore_eos=True, logprobs=1),
+        )
+        assert len(outputs) == 2
+        for output in outputs:
+            completion = output.outputs[0]
+            assert len(completion.token_ids) == 4
+            assert completion.cumulative_logprob is not None
+            assert math.isfinite(completion.cumulative_logprob)

@@ -34,7 +34,7 @@ from tests.entrypoints.openai.completion.test_completion_error import (
     _build_serving_completion,
 )
 
-MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
+MODEL_NAME = "vllm-project/tiny-random-LlamaForCausalLM"
 
 
 @pytest.fixture(scope="module")

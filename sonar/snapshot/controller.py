@@ -24,8 +24,8 @@ from sonar.snapshot.types import Oracle, oracles_match
 def _child_engine_argv(args: argparse.Namespace, engine_argv: tuple[str, ...] | None) -> tuple[str, ...]:
     """Build the child argv from the first argv source that is present.
 
-    In order: an explicit ``engine_argv`` from the caller, the process argv
-    tail when invoked as ``sonar snapshot create ...``, then the bare model from
+    In order: an explicit `engine_argv` from the caller, the process argv
+    tail when invoked as `sonar snapshot create ...`, then the bare model from
     the parsed args. Whichever source wins, snapshot options are stripped and
     sleep mode is appended.
     """

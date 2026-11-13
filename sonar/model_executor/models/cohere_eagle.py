@@ -147,7 +147,7 @@ class EagleCohereForCausalLM(CohereForCausalLM):
             self.hf_to_sonar_mapper = self.hf_to_sonar_mapper | WeightsMapper(
                 orig_to_new_prefix={"model.embed_tokens.": None}
             )
-        target_layer_num = sonar_config.model_config.get_num_layers(sonar_config.parallel_config)
+        target_layer_num = sonar_config.model_config.get_total_num_hidden_layers()
         self.model = CohereEagleModel(
             sonar_config=sonar_config,
             prefix=maybe_prefix(prefix, "model"),

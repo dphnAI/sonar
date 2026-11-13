@@ -109,7 +109,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   ### ROCm (MI300X, MI325X, MI355X)
@@ -124,7 +124,7 @@ guide: |
 
   ### 8xH200 / 8xH20 BF16
   ```bash
-  sonar serve Qwen/Qwen3-Coder-480B-A35B-Instruct \
+  sonar run Qwen/Qwen3-Coder-480B-A35B-Instruct \
     --max-model-len 32000 \
     --enable-expert-parallel \
     --tensor-parallel-size 8 \
@@ -134,7 +134,7 @@ guide: |
 
   ### 8xH200 / 8xH20 FP8 (DP=8, recommended)
   ```bash
-  SONAR_USE_DEEP_GEMM=1 sonar serve Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
+  SONAR_USE_DEEP_GEMM=1 sonar run Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
     --max-model-len 131072 \
     --enable-expert-parallel \
     --data-parallel-size 8 \
@@ -144,7 +144,7 @@ guide: |
 
   ### 8xMI300X/MI325X/MI355X BF16
   ```bash
-  SONAR_ROCM_USE_AITER=1 sonar serve Qwen/Qwen3-Coder-480B-A35B-Instruct \
+  SONAR_ROCM_USE_AITER=1 sonar run Qwen/Qwen3-Coder-480B-A35B-Instruct \
     --max-model-len 32000 \
     --attention-backend rocm_aiter_fa \
     --moe-backend aiter \
@@ -156,7 +156,7 @@ guide: |
 
   ### 8xMI300X/MI325X/MI355X FP8
   ```bash
-  SONAR_ROCM_USE_AITER=1 sonar serve Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
+  SONAR_ROCM_USE_AITER=1 sonar run Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
     --trust-remote-code \
     --max-model-len 131072 \
     --attention-backend rocm_aiter_fa \
@@ -170,7 +170,7 @@ guide: |
   ## Client Usage
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --backend sonar \
     --model Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
     --endpoint /v1/completions \
@@ -183,7 +183,7 @@ guide: |
 
   ## Troubleshooting
 
-  - **Context-length OOM**: A single H20 node cannot serve the native 262144 context. Reduce `--max-model-len` or raise `--gpu-memory-utilization`.
+  - **Context-length OOM**: A single H20 node cannot serve the native 262144 context. Reduce `--max-model-len`.
   - **TP=8 failure on FP8**: Expect `ValueError: The output_size of gate's and up's weight = 320 is not divisible by weight quantization block_n = 128.` on FP8 with TP=8. Switch to `--data-parallel-size 8` instead.
   - **DeepGEMM**: set `SONAR_USE_DEEP_GEMM=1` for faster FP8 matmul. Follow the [setup instructions](https://github.com/vllm-project/vllm/blob/main/benchmarks/kernels/deepgemm/README.md#setup) to install it.
   - **Tool calling**: add `--tool-call-parser qwen3_coder` as shown above.

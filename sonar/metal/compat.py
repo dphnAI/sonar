@@ -130,14 +130,14 @@ def _dequantize_qwen35_fp8_weights(weights: Mapping[str, Any], mx: Any) -> Mappi
 def _stack_qwen36_moe_per_expert_weights(weights: Mapping[str, Any], mx: Any) -> Mapping[str, Any]:
     """Combine per-expert MoE tensors into the stacked layout mlx_lm expects.
 
-    ``Qwen/Qwen3.6-35B-A3B-FP8`` ships expert MLPs as one tensor per expert
-    per projection: ``...mlp.experts.{E}.{gate,up,down}_proj.weight``. The
-    bf16 master ``Qwen/Qwen3.6-35B-A3B`` is already pre-stacked and falls
+    `Qwen/Qwen3.6-35B-A3B-FP8` ships expert MLPs as one tensor per expert
+    per projection: `...mlp.experts.{E}.{gate,up,down}_proj.weight`. The
+    bf16 master `Qwen/Qwen3.6-35B-A3B` is already pre-stacked and falls
     through to the existing combined-format branch in
-    ``mlx_lm.qwen3_5_moe.sanitize`` unchanged. ``mlx_lm.qwen3_5_moe``'s
-    ``sanitize`` expects experts concatenated as
-    ``...mlp.experts.gate_up_proj`` (gate then up along the intermediate axis)
-    and ``...mlp.experts.down_proj``, both stacked along axis 0 over experts.
+    `mlx_lm.qwen3_5_moe.sanitize` unchanged. `mlx_lm.qwen3_5_moe`'s
+    `sanitize` expects experts concatenated as
+    `...mlp.experts.gate_up_proj` (gate then up along the intermediate axis)
+    and `...mlp.experts.down_proj`, both stacked along axis 0 over experts.
 
     Mirrors the (scan -> validate -> walk) structure of upstream
     ml-explore/mlx-lm#1224.
@@ -215,15 +215,15 @@ def _stack_qwen36_moe_per_expert_weights(weights: Mapping[str, Any], mx: Any) ->
 
 
 def _patch_mlx_lm_qwen35_fp8_sanitize() -> None:
-    """Teach mlx_lm's Qwen3.5 loaders to consume local FP8 ``weight_scale_inv``.
+    """Teach mlx_lm's Qwen3.5 loaders to consume local FP8 `weight_scale_inv`.
 
     Some Qwen3.5/Qwen3.6 local checkpoints store FP8 weights plus
-    ``*_weight_scale_inv`` tensors in HuggingFace-style shards. The installed
-    mlx_lm ``qwen3_5`` loaders do not currently dequantize those tensors during
-    ``sanitize()``, so ``model.load_weights()`` aborts with hundreds of
-    unexpected ``weight_scale_inv`` parameters.
+    `*_weight_scale_inv` tensors in HuggingFace-style shards. The installed
+    mlx_lm `qwen3_5` loaders do not currently dequantize those tensors during
+    `sanitize()`, so `model.load_weights()` aborts with hundreds of
+    unexpected `weight_scale_inv` parameters.
 
-    Patch the top-level model ``sanitize()`` methods to dequantize those FP8
+    Patch the top-level model `sanitize()` methods to dequantize those FP8
     tensors before the upstream remapping logic runs. This keeps the workaround
     narrow to the affected architectures and leaves upstream control flow intact.
     """
@@ -313,16 +313,16 @@ def _wrap_model_sanitize(
     sentinel_attr: str,
     transform: Callable[[Any, Mapping[str, Any]], Mapping[str, Any]],
 ) -> bool:
-    """Wrap an existing ``model_cls.sanitize`` with a pre-step ``transform``.
+    """Wrap an existing `model_cls.sanitize` with a pre-step `transform`.
 
-    Trusts upstream's ``Model.sanitize`` contract: if the class does not
-    already define ``sanitize``, returns False instead of synthesizing a
+    Trusts upstream's `Model.sanitize` contract: if the class does not
+    already define `sanitize`, returns False instead of synthesizing a
     new method. All current targets (qwen3_5, qwen3_5_moe, gemma4_text)
-    define ``sanitize`` upstream, so synthesizing one would be a
+    define `sanitize` upstream, so synthesizing one would be a
     speculative API rather than a real compatibility shim.
 
-    Idempotent via ``sentinel_attr``. Returns True on first patch, False
-    if there is no ``sanitize`` to wrap or the sentinel says we already
+    Idempotent via `sentinel_attr`. Returns True on first patch, False
+    if there is no `sanitize` to wrap or the sentinel says we already
     patched this class.
     """
     sanitize = getattr(model_cls, "sanitize", None)
@@ -348,8 +348,8 @@ def _drop_gemma4_kv_shared_phantom_weights(
 ) -> dict[str, Any]:
     """Strip K/V/k_norm safetensors keys for KV-shared Gemma 4 layers.
 
-    Layers with index ``>= num_hidden_layers - num_kv_shared_layers`` reuse
-    K/V from earlier same-type layers (see ``Gemma4TextModel.previous_kvs``)
+    Layers with index `>= num_hidden_layers - num_kv_shared_layers` reuse
+    K/V from earlier same-type layers (see `Gemma4TextModel.previous_kvs`)
     and have no destination for those tensors after mlx-lm PR #1158.
     """
     if not num_kv_shared_layers:
@@ -371,14 +371,14 @@ def _drop_gemma4_kv_shared_phantom_weights(
 def _patch_mlx_lm_gemma4_kv_shared_sanitize() -> None:
     """Drop phantom K/V/k_norm safetensors keys for KV-shared Gemma 4 layers.
 
-    mlx-lm PR #1158 gated ``k_proj``/``v_proj``/``k_norm`` allocation in
-    ``gemma4_text.Attention.__init__`` behind ``has_kv``, but the matching
-    drop step in ``Model.sanitize`` was not added. Checkpoints that still
-    serialize those tensors (e.g. ``google/gemma-4-E4B-it``) crash strict
-    weight load with ``Received N parameters not in model``.
+    mlx-lm PR #1158 gated `k_proj`/`v_proj`/`k_norm` allocation in
+    `gemma4_text.Attention.__init__` behind `has_kv`, but the matching
+    drop step in `Model.sanitize` was not added. Checkpoints that still
+    serialize those tensors (e.g. `google/gemma-4-E4B-it`) crash strict
+    weight load with `Received N parameters not in model`.
 
-    Remove this patch once upstream lands the matching ``sanitize`` change
-    and the mlx-lm pin in ``pyproject.toml`` is bumped past it.
+    Remove this patch once upstream lands the matching `sanitize` change
+    and the mlx-lm pin in `pyproject.toml` is bumped past it.
     """
     from importlib import import_module
     from importlib.util import find_spec

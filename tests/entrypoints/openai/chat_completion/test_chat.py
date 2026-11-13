@@ -13,12 +13,13 @@ import regex as re
 import requests
 import torch
 from openai import BadRequestError
-from pydantic import ValidationError
 
+import sonar.envs as envs
 from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
 )
+from sonar.exceptions import SonarValidationError
 from sonar.sampling_params import SamplingParams
 from tests.utils import RemoteOpenAIServer
 
@@ -31,7 +32,7 @@ def zephyr_lora_files():
     """Download zephyr LoRA files once per test session."""
     from sonar.transformers_utils.repo_utils import hf_api
 
-    return hf_api().snapshot_download(repo_id="typeof/zephyr-7b-beta-lora")
+    return hf_api().snapshot_download(repo_id="vllm-project/zephyr-7b-beta-lora")
 
 
 @pytest.fixture(scope="module")
@@ -163,7 +164,7 @@ async def test_too_many_chat_logprobs(client: openai.AsyncOpenAI, model_name: st
             top_logprobs=21,
             stream=True,
         )
-        async for chunk in stream:
+        async for _ in stream:
             ...
 
     with pytest.raises(openai.BadRequestError):
@@ -332,7 +333,8 @@ async def test_chat_streaming(client: openai.AsyncOpenAI, model_name: str):
     # finish reason should only return in last block
     assert finish_reason_count == 1
     assert chunk.choices[0].finish_reason == stop_reason
-    assert delta.content
+    # The last chunk may carry only the finish_reason (Rust); the joined text is
+    # checked against the non-streaming output.
     assert "".join(chunks) == output
 
 
@@ -384,16 +386,18 @@ async def test_chat_completion_stream_options(client: openai.AsyncOpenAI, model_
             )
             assert final_chunk.choices == []
 
-    # Test stream=False, stream_options={"include_usage": None}
-    with pytest.raises(BadRequestError):
-        await client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            max_completion_tokens=10,
-            temperature=0.0,
-            stream=False,
-            stream_options={"include_usage": None},
-        )
+    # Test stream=False, stream_options={"include_usage": None}. The Rust frontend
+    # treats an all-null stream_options like an omitted one.
+    if not envs.SONAR_USE_RUST_FRONTEND:
+        with pytest.raises(BadRequestError):
+            await client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                max_completion_tokens=10,
+                temperature=0.0,
+                stream=False,
+                stream_options={"include_usage": None},
+            )
 
     # Test stream=False, stream_options={"include_usage": True}
     with pytest.raises(BadRequestError):
@@ -426,7 +430,15 @@ async def test_chat_completion_stream_options(client: openai.AsyncOpenAI, model_
         assert (
             last_completion_tokens == 0
             or chunk.usage.completion_tokens > last_completion_tokens
-            or (not chunk.choices and chunk.usage.completion_tokens == last_completion_tokens)
+            or (
+                # The usage-only chunk, or a chunk that carries only the
+                # finish_reason (Rust), adds no tokens.
+                (
+                    not chunk.choices
+                    or (chunk.choices[0].finish_reason is not None and not chunk.choices[0].delta.content)
+                )
+                and chunk.usage.completion_tokens == last_completion_tokens
+            )
         )
         assert chunk.usage.total_tokens == (chunk.usage.prompt_tokens + chunk.usage.completion_tokens)
         last_completion_tokens = chunk.usage.completion_tokens
@@ -762,7 +774,12 @@ async def test_long_seed(client: openai.AsyncOpenAI):
                 seed=seed,
             )
 
-        assert "greater_than_equal" in exc_info.value.message or "less_than_equal" in exc_info.value.message
+        # Rust rejects the out-of-range integer while deserializing the body.
+        assert (
+            "greater_than_equal" in exc_info.value.message
+            or "less_than_equal" in exc_info.value.message
+            or "expected i64" in exc_info.value.message
+        )
 
 
 @pytest.mark.asyncio
@@ -1025,7 +1042,7 @@ def test_chat_completion_request_logprob_token_ids_to_sampling_params():
 
 
 def test_chat_completion_request_rejects_logprob_token_ids_without_logprobs():
-    with pytest.raises(ValidationError, match="logprobs"):
+    with pytest.raises(SonarValidationError, match="logprobs"):
         ChatCompletionRequest(
             model="test-model",
             messages=[{"role": "user", "content": "Hello"}],
@@ -1034,7 +1051,7 @@ def test_chat_completion_request_rejects_logprob_token_ids_without_logprobs():
 
 
 def test_chat_completion_request_rejects_logprob_token_ids_with_beam_search():
-    with pytest.raises(ValidationError, match="beam search"):
+    with pytest.raises(SonarValidationError, match="beam search"):
         ChatCompletionRequest(
             model="test-model",
             messages=[{"role": "user", "content": "Hello"}],
@@ -1089,7 +1106,7 @@ def test_chat_completion_request_n_parameter_exceeds_default_limit(
         max_tokens=10,
     )
 
-    with pytest.raises(ValueError, match="n must be at most"):
+    with pytest.raises(SonarValidationError, match="n must be at most"):
         request.to_sampling_params(
             max_tokens=10,
             default_sampling_params={},
@@ -1151,7 +1168,7 @@ def test_chat_completion_request_n_parameter_custom_limit(
         max_tokens=10,
     )
 
-    with pytest.raises(ValueError, match="n must be at most 128"):
+    with pytest.raises(SonarValidationError, match="n must be at most 128"):
         request_over.to_sampling_params(
             max_tokens=10,
             default_sampling_params={},
@@ -1175,7 +1192,7 @@ def test_chat_completion_request_n_parameter_massive_value(
         max_tokens=1,
     )
 
-    with pytest.raises(ValueError, match="n must be at most"):
+    with pytest.raises(SonarValidationError, match="n must be at most"):
         request.to_sampling_params(
             max_tokens=1,
             default_sampling_params={},

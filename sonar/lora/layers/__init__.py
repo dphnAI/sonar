@@ -18,6 +18,8 @@ from sonar.lora.layers.column_parallel_linear import (
     QKVParallelLinearWithShardedLoRA,
 )
 from sonar.lora.layers.custom_layer import (
+    DeepseekV4CompressorKVScoreWithLoRA,
+    DeepseekV4GroupedWoAWithLoRA,
     Step5FusedQKVIndexerWithLoRA,
     Step5SparseIndexerWWithLoRA,
 )
@@ -33,6 +35,8 @@ from sonar.lora.layers.vocab_parallel_embedding import VocabParallelEmbeddingWit
 
 __all__ = [
     "BaseLayerWithLoRA",
+    "DeepseekV4CompressorKVScoreWithLoRA",
+    "DeepseekV4GroupedWoAWithLoRA",
     "Step5FusedQKVIndexerWithLoRA",
     "Step5SparseIndexerWWithLoRA",
     "VocabParallelEmbeddingWithLoRA",

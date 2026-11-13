@@ -7,26 +7,11 @@ import torch
 
 from sonar.config import SonarConfig
 from sonar.utils.torch_utils import supports_xpu_graph
-from sonar.v1.worker.gpu.model_runner import (
-    GPUModelRunner as GPUModelRunnerV2,
-)
-from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner
 from sonar.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
 
 
 class XPUModelRunner(GPUModelRunner):
-    """A model runner for XPU devices."""
-
-    def __init__(
-        self,
-        sonar_config: SonarConfig,
-        device: torch.device,
-    ):
-        with _torch_cuda_wrapper():
-            super().__init__(sonar_config, device)
-
-
-class XPUModelRunnerV2(GPUModelRunnerV2):
     """A model runner for XPU devices."""
 
     def __init__(

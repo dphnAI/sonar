@@ -3,14 +3,17 @@
 """Kimi-K3.1 DSA indexer cache, shared by the NVIDIA and ROCm stacks."""
 
 import math
-from dataclasses import replace
+from dataclasses import dataclass, fields, replace
+from typing import Self
 
 import torch
 
-from sonar.config import SonarConfig, get_current_sonar_config
+from sonar.config import SonarConfig
 from sonar.model_executor.layers.sparse_attn_indexer import MXFP4_BLOCK_SIZE
 from sonar.model_executor.models.deepseek_v2 import DeepseekV32IndexerCache
+from sonar.platforms import current_platform
 from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import kv_cache_dtype_str_to_dtype
 from sonar.v1.attention.backend import AttentionBackend, CommonAttentionMetadata
 from sonar.v1.attention.backends.mla.compressor_utils import (
     get_compressed_slot_mapping,
@@ -21,14 +24,20 @@ from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadataBuilder,
     dsa_indexer_uses_fp4,
 )
+from sonar.v1.kv_cache_interface import (
+    DS_MLA_STATE_CONTENT_BYTES,
+    KVCacheSpec,
+    MLAAttentionSpec,
+    get_kv_quant_mode,
+)
 from sonar.v1.kv_cache_layout import KVCacheLayout
 
 
 def kimi_k3_indexer_uses_fp4(sonar_config: SonarConfig) -> bool:
-    """FP8 (132 B/token) indexer keys by default (``indexer_kv_dtype='auto'``);
-    MXFP4 (68 B/token) only when requested with ``--attention-config
-    '{"indexer_kv_dtype": "mxfp4"}'``. MXFP4 needs SM10x (checked by
-    ``dsa_indexer_uses_fp4``), the fused key insert (layernorm k-norm, no indexer
+    """FP8 (132 B/token) indexer keys by default (`indexer_kv_dtype='auto'`);
+    MXFP4 (68 B/token) only when requested with `--attention-config
+    '{"indexer_kv_dtype": "mxfp4"}'`. MXFP4 needs SM10x (checked by
+    `dsa_indexer_uses_fp4`), the fused key insert (layernorm k-norm, no indexer
     RoPE) and no PCP; anything else raises instead of writing another format."""
     if not dsa_indexer_uses_fp4(sonar_config):
         return False
@@ -65,8 +74,13 @@ class KimiK3IndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
         super().__init__(*args, **kwargs)
         if self.use_pcp:
             raise NotImplementedError("Kimi-K3.1 packed DSA caches with PCP")
-        # Validate the K3.1 key format, as KimiK3DSAIndexer selects it.
-        kimi_k3_indexer_uses_fp4(self.sonar_config)
+        # The K3.1 key format, validated as KimiK3DSAIndexer selects it.
+        self.indexer_uses_fp4 = kimi_k3_indexer_uses_fp4(self.sonar_config)
+        if self.indexer_uses_fp4 and current_platform.is_rocm():
+            self._needs_global_row_bounds = self.dcp_world_size > 1
+            # The FP4 prefill op always splits a chunk's query rows over the
+            # DCP ranks, so the chunk planner gets the same per-rank budget.
+            self._rowshard_dcp_prefill = self._needs_global_row_bounds
         self.slot_mapping_buffer = torch.zeros(
             self.sonar_config.scheduler_config.max_num_batched_tokens,
             dtype=torch.int64,
@@ -91,21 +105,31 @@ class KimiK3IndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
             dcp_world_size=self.dcp_world_size,
             cp_interleave=self.cp_kv_cache_interleave_size,
         )
-        return super().build(
+        metadata = super().build(
             common_prefix_len,
             replace(common_attn_metadata, slot_mapping=slot_mapping),
             fast_build,
         )
+        if self.indexer_uses_fp4 and current_platform.is_rocm() and metadata.prefill:
+            from sonar.models.kimi_k3.amd.ops.fp4_indexer_prefill import (
+                prepare_prefill_metadata,
+            )
+
+            metadata.prefill = prepare_prefill_metadata(
+                metadata.prefill,
+                self.dcp_world_size,
+                self.dcp_rank,
+                self.cp_kv_cache_interleave_size,
+            )
+        return metadata
 
 
 class KimiK3IndexerBackend(DeepseekV32IndexerBackend):
     @staticmethod
     def get_supported_kernel_block_sizes(kv_cache_spec=None):
-        if kv_cache_spec is not None:
-            fp4 = kv_cache_spec.head_size == 68
-        else:
-            fp4 = get_current_sonar_config().attention_config.resolve_indexer_kv_dtype("fp8") == "mxfp4"
-        return [64] if fp4 else DeepseekV32IndexerBackend.get_supported_kernel_block_sizes(kv_cache_spec)
+        # The packed indexer cache is block-flat; the FP4 and ROCm FP8 kernels
+        # tile it by 64 tokens.
+        return [64]
 
     @classmethod
     def supported_kv_cache_layouts(cls) -> tuple[KVCacheLayout, ...]:
@@ -113,16 +137,28 @@ class KimiK3IndexerBackend(DeepseekV32IndexerBackend):
         # KDA state page sizes the whole block row rather than one MLA page.
         return (KVCacheLayout.BLHNC,)
 
-    @classmethod
-    def writes_kv_cache_from_block_table(cls) -> bool:
-        return True
-
     @staticmethod
     def get_builder_cls() -> type[KimiK3IndexerMetadataBuilder]:
         return KimiK3IndexerMetadataBuilder
 
 
+@dataclass(frozen=True, kw_only=True)
+class SelfAddressedMLASpec(MLAAttentionSpec):
+    """An MLA cache written at slots that already address its kernel blocks."""
+
+    @property
+    def uses_slot_mapping(self) -> bool:
+        return False
+
+    @classmethod
+    def from_spec(cls, spec: KVCacheSpec) -> Self:
+        return cls(**{f.name: getattr(spec, f.name) for f in fields(spec) if f.init})
+
+
 class KimiK3IndexerCache(DeepseekV32IndexerCache):
+    def get_kv_cache_spec(self, sonar_config: SonarConfig) -> SelfAddressedMLASpec:
+        return SelfAddressedMLASpec.from_spec(super().get_kv_cache_spec(sonar_config))
+
     def get_attn_backend(self) -> type[AttentionBackend]:
         return KimiK3IndexerBackend
 
@@ -130,6 +166,31 @@ class KimiK3IndexerCache(DeepseekV32IndexerCache):
 # Block sizes stay divisible across TP sizes up to this one, so P/D can pair
 # blocks of different TP sizes.
 _PD_REFERENCE_TP = 16
+
+
+def dense_mla_draft_bytes_per_token(sonar_config: SonarConfig) -> int:
+    """Per-token bytes of a dense MLA draft's caches, which share the DSA row:
+    their full-attention MLA specs group with the target's (see
+    `configure_dense_draft`)."""
+    spec_config = sonar_config.speculative_config
+    if spec_config is None or spec_config.method not in ("eagle3", "dspark"):
+        return 0
+    draft_model_config = spec_config.draft_model_config
+    draft_config = draft_model_config.hf_text_config
+    kv_lora_rank = getattr(draft_config, "kv_lora_rank", None)
+    if kv_lora_rank is None:
+        return 0
+    cache_dtype = spec_config.kv_cache_dtype or sonar_config.cache_config.cache_dtype
+    page = MLAAttentionSpec(
+        block_size=1,
+        num_kv_heads=1,
+        head_size=kv_lora_rank + draft_config.qk_rope_head_dim,
+        dtype=kv_cache_dtype_str_to_dtype(cache_dtype, draft_model_config),
+        cache_dtype_str=cache_dtype,
+        kv_quant_mode=get_kv_quant_mode(cache_dtype),
+        state_content_bytes=DS_MLA_STATE_CONTENT_BYTES.get(cache_dtype),
+    ).page_size_bytes
+    return draft_config.num_hidden_layers * page
 
 
 def packed_dsa_block_size(
@@ -140,10 +201,10 @@ def packed_dsa_block_size(
 ) -> int | None:
     """Block size of the packed cache of a KDA-hybrid DSA model, else None.
 
-    A block row holds every DSA layer's MLA and indexer pages; size it to fit
-    as many KDA states as there are DSA layers. The KDA state shards with TP
-    and the row does not, so the block is
-    rounded at ``_PD_REFERENCE_TP`` and scaled by ``_PD_REFERENCE_TP / tp``.
+    A block row holds every DSA layer's MLA and indexer pages, plus a dense
+    MLA draft's pages; size it to fit as many KDA states as there are DSA
+    layers. The KDA state shards with TP and the row does not, so the block is
+    rounded at `_PD_REFERENCE_TP` and scaled by `_PD_REFERENCE_TP / tp`.
     Block sizes of different TP sizes stay divisible, and the rounding stays
     fine: a power of two would leave up to half the row empty once spec
     decoding grows the conv state past one.
@@ -158,7 +219,7 @@ def packed_dsa_block_size(
     states_per_row = cdiv(num_states, cdiv(num_states, num_dsa))
     # The indexer keeps fp8 values plus one fp32 scale per token, or MXFP4.
     index_bytes = indexer_cache_entry_bytes(dsa_config.index_head_dim, kimi_k3_indexer_uses_fp4(sonar_config))
-    row_bytes_per_token = num_dsa * (mla_bytes_per_token + index_bytes)
+    row_bytes_per_token = num_dsa * (mla_bytes_per_token + index_bytes) + dense_mla_draft_bytes_per_token(sonar_config)
     tp_size = sonar_config.parallel_config.tensor_parallel_size
     reference_tp = math.lcm(_PD_REFERENCE_TP, tp_size)
     # TP-invariant: the unsharded state bytes, in reference-TP block units.

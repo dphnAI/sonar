@@ -79,6 +79,9 @@ pub fn default_ready_response() -> EngineCoreReadyResponse {
         sonar_config: None,
         prefix_hash_config: None,
         dphn_network_enabled: false,
+        cache_config_info: None,
+        config_hash: None,
+        enable_expert_parallel: false,
     }
 }
 

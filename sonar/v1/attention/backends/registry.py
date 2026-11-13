@@ -45,6 +45,7 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     TRITON_FLASH_ATTN = "sonar.v1.attention.backends.triton_flash_attn.TritonFlashAttentionBackend"
     ROCM_ATTN = "sonar.v1.attention.backends.rocm_attn.RocmAttentionBackend"
     ROCM_SEGMENTED_ATTN = "sonar.v1.attention.backends.rocm_segmented_attn.RocmSegmentedAttentionBackend"
+    ROCM_RDNA_ATTN = "sonar.v1.attention.backends.rocm_rdna_attn.RocmRdnaAttentionBackend"
     ROCM_AITER_MLA = "sonar.v1.attention.backends.mla.rocm_aiter_mla.AiterMLABackend"
     ROCM_AITER_TRITON_MLA = "sonar.v1.attention.backends.mla.aiter_triton_mla.AiterTritonMLABackend"
     ROCM_AITER_FA = "sonar.v1.attention.backends.rocm_aiter_fa.AiterFlashAttentionBackend"

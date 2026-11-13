@@ -16,7 +16,7 @@ import torch
 from torch import nn
 
 from sonar import LLM, SamplingParams
-from sonar.models.beam.nvidia import model as beam
+from sonar.models.beam import model as beam
 from sonar.platforms import current_platform
 from sonar.transformers_utils.configs.beam import BeamConfig
 from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
@@ -28,12 +28,12 @@ TINY_CONFIG = {
     "architectures": ["BeamForCausalLM"],
     "model_type": "beam",
     "vocab_size": 1024,
-    "hidden_size": 128,
+    "hidden_size": 512,
     "intermediate_size": 256,
     "num_hidden_layers": 2,
     "num_attention_heads": 8,
     "num_key_value_heads": 2,
-    "head_dim": 16,
+    "head_dim": 64,
     "max_position_embeddings": 512,
     "rms_norm_eps": 1e-6,
     "sliding_window": 128,
@@ -59,7 +59,7 @@ TINY_CONFIG = {
 }
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="Beam targets CUDA")
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Beam targets CUDA and ROCm")
 @pytest.mark.usefixtures("enable_pickle")
 @pytest.mark.parametrize(
     "enforce_eager,tp_size,num_experts,enable_ep",

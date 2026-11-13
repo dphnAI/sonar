@@ -72,7 +72,7 @@ def inkling_fa4_num_splits(
 
     The ROCm Triton implementation performs online softmax in one program and
     does not consume the result.  Keeping this function unchanged avoids
-    platform-specific scheduling branches in :mod:`inkling.amd.attention`.
+    platform-specific scheduling branches in `inkling.amd.attention`.
     """
     if is_local:
         return 1
@@ -99,7 +99,7 @@ def inkling_fa4_num_splits(
     {
         "BLOCK_D": lambda args: triton.next_power_of_2(args["head_dim"]),
         "BLOCK_H": lambda args: triton.next_power_of_2(args["gqa_group_size"]),
-        "BLOCK_QH": lambda args: (args["BLOCK_Q"] * triton.next_power_of_2(args["gqa_group_size"])),
+        "BLOCK_QH": lambda args: args["BLOCK_Q"] * triton.next_power_of_2(args["gqa_group_size"]),
     }
 )
 @triton.jit(do_not_specialize_on_alignment=["cache_seqlens", "cu_seqlens_q"])

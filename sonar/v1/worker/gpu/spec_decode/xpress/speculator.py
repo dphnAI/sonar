@@ -5,9 +5,8 @@ from typing import Any
 
 import torch
 
-from sonar.config import SonarConfig
+from sonar.config import CUDAGraphMode, SonarConfig
 from sonar.logger import init_logger
-from sonar.v1.cudagraph_dispatcher import CUDAGraphMode
 from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
 from sonar.v1.worker.gpu.spec_decode.dspark.utils import load_dspark_model
 
@@ -87,5 +86,20 @@ class XPressSpeculator(DFlashSpeculator):
         # speculator can reach, so the anchor id stands in for it (see __init__).
         tok_am1 = anchor_ids
         head = self.model.model.xpress_head
-        draft = head.jacobi_refine_greedy(base_full, h_full, anchor_ids, tok_am1, self.num_jacobi_passes)
+        draft, logits = head.jacobi_refine_greedy(
+            base_full,
+            h_full,
+            anchor_ids,
+            tok_am1,
+            self.num_jacobi_passes,
+            return_logits=self.acceptance_estimator is not None,
+        )
         self.draft_tokens[:num_reqs, : self.num_speculative_steps] = draft
+        if logits is not None:
+            # Rows are ordered (req, draft slot), like the sampling rows.
+            num_sample = num_reqs * self.num_speculative_steps
+            self._maybe_predict_acceptance(
+                logits,
+                self.sample_idx_mapping[:num_sample],
+                self.sample_col[:num_sample],
+            )

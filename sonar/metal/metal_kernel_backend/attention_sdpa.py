@@ -3,22 +3,22 @@
 """Scaled dot-product attention (SDPA) on Metal.
 
 Supports MHA, GQA, and MQA as variants of the same kernel — the head ratio
-between ``n_heads`` (queries) and ``n_kv_heads`` (keys/values) is handled
+between `n_heads` (queries) and `n_kv_heads` (keys/values) is handled
 transparently by the Metal paged attention kernel.
 
 Handles models whose attention module exposes:
-- ``q_proj``, ``k_proj``, ``o_proj`` linear projections (``v_proj`` optional —
+- `q_proj`, `k_proj`, `o_proj` linear projections (`v_proj` optional —
   see K-eq-V variant below)
-- ``rope`` or ``rotary_emb`` for rotary position embeddings
-- ``n_heads``, ``n_kv_heads`` head counts
-- Optionally ``q_norm``, ``k_norm``, ``v_norm`` per-head RMSNorms
+- `rope` or `rotary_emb` for rotary position embeddings
+- `n_heads`, `n_kv_heads` head counts
+- Optionally `q_norm`, `k_norm`, `v_norm` per-head RMSNorms
 
-Gemma4 variants (see :func:`prepare_sdpa_qkv`):
-- **YOCO**: later layers reuse K/V from a reference layer via ``shared_kv``.
-- **K-eq-V**: 26B/31B drop ``v_proj`` and reuse ``keys`` as ``values``.
+Gemma4 variants (see `prepare_sdpa_qkv`):
+- **YOCO**: later layers reuse K/V from a reference layer via `shared_kv`.
+- **K-eq-V**: 26B/31B drop `v_proj` and reuse `keys` as `values`.
 - **Variable head_dim**: sliding vs. full-attention layers use different
   head_dim; Q/K/V are zero-padded up to the cache's allocated head_dim
-  via :func:`pad_qkv_to_cache_head_dim`.
+  via `pad_qkv_to_cache_head_dim`.
 
 Covers: Qwen3, Qwen3.5, Llama, Mistral, Gemma, Gemma4, and other
 RoPE-based transformer architectures.
@@ -64,17 +64,17 @@ def is_sdpa(module: nn.Module) -> bool:
 
     Accepts two contracts:
 
-    - Split-projection SDPA: ``q_proj`` / ``k_proj`` / ``o_proj``, plus
-      EITHER ``v_proj`` OR the explicit ``use_k_eq_v = True`` opt-in.
+    - Split-projection SDPA: `q_proj` / `k_proj` / `o_proj`, plus
+      EITHER `v_proj` OR the explicit `use_k_eq_v = True` opt-in.
       The latter admits Gemma4 26B / 31B full-attention layers which
-      share the K projection for values and never define ``v_proj``
-      (``prepare_sdpa_qkv`` handles that branch symmetrically).
-    - Packed Phi-style SDPA: ``qkv_proj`` / ``o_proj`` plus the runtime
-      metadata ``n_heads`` / ``n_kv_heads`` / ``head_dim`` / ``scale``
-      and RoPE exposure via ``rope`` or ``rotary_emb``.
+      share the K projection for values and never define `v_proj`
+      (`prepare_sdpa_qkv` handles that branch symmetrically).
+    - Packed Phi-style SDPA: `qkv_proj` / `o_proj` plus the runtime
+      metadata `n_heads` / `n_kv_heads` / `head_dim` / `scale`
+      and RoPE exposure via `rope` or `rotary_emb`.
 
     Keeping this classifier tight matters because
-    :meth:`HybridPagedAttentionBackend.patch_model` uses ``is_sdpa`` as
+    `HybridPagedAttentionBackend.patch_model` uses `is_sdpa` as
     the dispatch predicate — loose matching would send arbitrary Q/K/O
     modules through the SDPA path.
     """
@@ -110,9 +110,9 @@ def _build_block_tables(
 ) -> tuple[mx.array, int]:
     """Build kernel-compatible block tables, translating if necessary.
 
-    When ``cache_block_size`` exceeds the kernel's compiled block sizes,
-    each Sonar block ``b`` is expanded into ``ratio`` kernel blocks
-    ``[b*ratio, b*ratio+ratio)``.  The cache is reshaped later to
+    When `cache_block_size` exceeds the kernel's compiled block sizes,
+    each Sonar block `b` is expanded into `ratio` kernel blocks
+    `[b*ratio, b*ratio+ratio)`.  The cache is reshaped later to
     match (zero-copy).
 
     Returns:
@@ -163,40 +163,40 @@ def prepare_sdpa_qkv(
     n_kv_heads: int,
     shared_kv: tuple[mx.array, mx.array] | None = None,
 ) -> tuple[mx.array, mx.array, mx.array, mx.array | None, tuple[mx.array, mx.array]]:
-    """Project ``x`` into Q/K/V with norms, RoPE and Gemma4 variants.
+    """Project `x` into Q/K/V with norms, RoPE and Gemma4 variants.
 
     Handles three Gemma4-specific branches:
 
-    - **YOCO** (``shared_kv`` given): reuse K/V from a prior layer; skip
+    - **YOCO** (`shared_kv` given): reuse K/V from a prior layer; skip
       projection and only apply Q norm + RoPE.
-    - **K-eq-V** (no ``inner.v_proj``): 26B/31B checkpoints share the
-      projection so ``values`` references the same tensor as ``keys``.
-    - **v_norm** (``inner.v_norm`` present): apply per-head RMSNorm to
+    - **K-eq-V** (no `inner.v_proj`): 26B/31B checkpoints share the
+      projection so `values` references the same tensor as `keys`.
+    - **v_norm** (`inner.v_norm` present): apply per-head RMSNorm to
       values alongside q_norm and k_norm.
 
     Args:
         inner: mlx_lm Attention module (or compatible).
-        x: Input hidden states shaped ``(B, L, D)``.
-        ctx: Paged attention context (supplies ``cu_seqlens`` / offsets
+        x: Input hidden states shaped `(B, L, D)`.
+        ctx: Paged attention context (supplies `cu_seqlens` / offsets
             for per-request RoPE).
         n_heads: Query head count.
         n_kv_heads: K/V head count.
-        shared_kv: Optional ``(keys, values)`` from a reference layer,
-            already normed and RoPE'd, in ``(B, H, L, head_dim)`` layout.
+        shared_kv: Optional `(keys, values)` from a reference layer,
+            already normed and RoPE'd, in `(B, H, L, head_dim)` layout.
 
     Returns:
-        Tuple ``(queries, keys, values, gate, kv_for_sharing)``:
+        Tuple `(queries, keys, values, gate, kv_for_sharing)`:
 
-        - ``queries``, ``keys``, ``values``: ``(B, H, L, head_dim)`` tensors
+        - `queries`, `keys`, `values`: `(B, H, L, head_dim)` tensors
           ready for the Metal kernel.
-        - ``gate``: optional gate tensor for gated attention (Qwen3.5
-          Qwen3Next style), else ``None``.
-        - ``kv_for_sharing``: the post-norm+RoPE ``(keys, values)`` pair so
+        - `gate`: optional gate tensor for gated attention (Qwen3.5
+          Qwen3Next style), else `None`.
+        - `kv_for_sharing`: the post-norm+RoPE `(keys, values)` pair so
           the caller can forward them to the next YOCO layer.
 
     Raises:
-        NotImplementedError: If ``inner`` has neither ``rope`` nor
-            ``rotary_emb`` (only RoPE-based models are supported).
+        NotImplementedError: If `inner` has neither `rope` nor
+            `rotary_emb` (only RoPE-based models are supported).
     """
     B, L, _ = x.shape  # noqa: N806
 
@@ -305,25 +305,25 @@ def pad_qkv_to_cache_head_dim(
     head_dim: int,
     cache_head_dim: int,
 ) -> tuple[mx.array, mx.array, mx.array]:
-    """Zero-pad Q/K/V on the last axis up to ``cache_head_dim``.
+    """Zero-pad Q/K/V on the last axis up to `cache_head_dim`.
 
     Variable head_dim models (e.g. Gemma4 sliding=256, full=512) allocate
     the paged KV cache at the max head_dim.  Layers with smaller head_dim
     are padded so scatter writes and the kernel both operate at the cache's
     native head_dim.  Zero-padded positions do not affect QK dot products
-    or V aggregation.  No-op when ``head_dim == cache_head_dim``.
+    or V aggregation.  No-op when `head_dim == cache_head_dim`.
 
     Args:
-        queries, keys, values: Tensors shaped ``(B, H, L, head_dim)``.
+        queries, keys, values: Tensors shaped `(B, H, L, head_dim)`.
         head_dim: Current layer's head_dim.
         cache_head_dim: Cache's allocated head_dim (the target).
 
     Returns:
-        Padded ``(queries, keys, values)``.
+        Padded `(queries, keys, values)`.
 
     Raises:
-        ValueError: If ``head_dim > cache_head_dim`` (unsupported), or if
-            ``queries`` / ``keys`` / ``values`` do not share the same last
+        ValueError: If `head_dim > cache_head_dim` (unsupported), or if
+            `queries` / `keys` / `values` do not share the same last
             dimension (caller invariant).
     """
     if not (queries.shape[-1] == keys.shape[-1] == values.shape[-1] == head_dim):
@@ -355,15 +355,15 @@ def truncate_padded_output(
     cache_head_dim: int,
     actual_head_dim: int,
 ) -> mx.array:
-    """Reshape kernel output and strip padding back to ``actual_head_dim``.
+    """Reshape kernel output and strip padding back to `actual_head_dim`.
 
-    Inverse of :func:`pad_qkv_to_cache_head_dim`: before the output goes to
-    ``o_proj``, we slice off the zero-padded tail so the trailing
+    Inverse of `pad_qkv_to_cache_head_dim`: before the output goes to
+    `o_proj`, we slice off the zero-padded tail so the trailing
     projection sees the layer's real head_dim.  No-op when the layer was
-    never padded (``actual_head_dim == cache_head_dim``).
+    never padded (`actual_head_dim == cache_head_dim`).
 
     Args:
-        out: Kernel output shaped ``(seq_len, n_heads, cache_head_dim)``.
+        out: Kernel output shaped `(seq_len, n_heads, cache_head_dim)`.
         batch_size: Batch size (typically 1 for packed sequences).
         seq_len: Total tokens in the packed sequence.
         n_heads: Number of query heads.
@@ -371,7 +371,7 @@ def truncate_padded_output(
         actual_head_dim: Layer's original head_dim before padding.
 
     Returns:
-        Flat output shaped ``(batch_size, seq_len, n_heads * actual_head_dim)``.
+        Flat output shaped `(batch_size, seq_len, n_heads * actual_head_dim)`.
     """
     if actual_head_dim == cache_head_dim:
         return out.reshape(batch_size, seq_len, n_heads * cache_head_dim)

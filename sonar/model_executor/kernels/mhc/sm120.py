@@ -8,7 +8,7 @@ from sonar.tilelang_utils import T, tilelang_jit
 def mhc_warp_partials_sm120(x, fn, out, sqrsum, source_threads: int):
     """Preserve each source lane's FP32 FMA chain and warp reduction.
 
-    ``source_threads`` is the original projection's 512 or 1024 threads.
+    `source_threads` is the original projection's 512 or 1024 threads.
     The unchanged delayed epilogue adds these partials in source warp order.
     """
     m = T.dynamic("num_tokens")

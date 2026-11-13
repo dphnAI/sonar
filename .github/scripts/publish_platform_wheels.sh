@@ -73,7 +73,7 @@ package_dir="${index_dir}/simple/sonar"
 mkdir -p "$package_dir"
 install_command="uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/${channel}/${backend}/${architecture}/simple --index-strategy first-index"
 case "$backend" in
-  cuda) install_command+=" --torch-backend cu130" ;;
+  cuda) install_command+=" --torch-backend cu132" ;;
   cpu) install_command="curl -LsSf https://sonar.dphn.ai/install.sh | sh -s -- --backend cpu --channel ${channel}" ;;
 esac
 

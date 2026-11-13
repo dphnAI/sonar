@@ -216,7 +216,6 @@ def _make_dplb_client(num_engines: int = 3, client_count: int = 1) -> DPLBAsyncM
     client.eng_start_index = 0
     client._kv_event_sources = {}
     client.sonar_config = SimpleNamespace(
-        use_v2_model_runner=True,
         parallel_config=SimpleNamespace(all2all_backend="allgather_reducescatter"),
     )
     return client
@@ -1111,7 +1110,7 @@ async def test_engine_core_client_util_method_nested_structures(
             result = await core_client.call_utility_async("echo_dc_nested", "nested2", "dict_of_lists")
             assert isinstance(result, dict) and len(result) == 2
             assert "list1" in result and "list2" in result
-            for key, lst in result.items():
+            for lst in result.values():
                 assert isinstance(lst, list) and len(lst) == 2
                 for item in lst:
                     assert isinstance(item, TestMessage) and item.message == "nested2"
@@ -1320,7 +1319,7 @@ async def test_kv_cache_events_dp(
 
         # Create and add 25 requests
         # NOTE: attempts to force routing to both dp groups but can be flaky
-        for i in range(25):
+        for _ in range(25):
             await asyncio.sleep(0.01)
             request = make_request(sampling_params, custom_tokens)
             await client.add_request_async(request)

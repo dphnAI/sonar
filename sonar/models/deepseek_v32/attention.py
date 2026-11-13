@@ -37,12 +37,14 @@ from sonar.model_executor.models.utils import (
     compute_skip_topk_layers,
     extract_layer_index,
 )
+from sonar.models.common.ops.sequence_parallel import sp_all_gather
 from sonar.models.deepseek_v32.common.kernels import fused_norm_rope, fused_q
 from sonar.platforms import current_platform
 from sonar.v1.attention.ops.pcp import (
     finalize_mla_pcp_decode,
     maybe_gather_mla_latent_cache_inputs,
 )
+from sonar.v1.attention.ops.shardq import shard_q, unshard_out
 from sonar.v1.kv_cache_interface import is_quantized_kv_cache
 
 if TYPE_CHECKING:
@@ -225,6 +227,9 @@ class DeepseekV32Attention(MLAAttention):
             topk_indices_buffer=topk_indices_buffer,
             index_group_builder=index_group_builder,
             attn_backend=attn_backend,
+            # MTP draft steps reuse each token slot's top-k, which ShardQ's
+            # compact per-rank layout would break.
+            shardq_eligible=not is_mtp_layer,
         )
 
         self.num_local_heads = num_local_heads
@@ -232,12 +237,19 @@ class DeepseekV32Attention(MLAAttention):
         self.indexer = indexer
         self.topk_indices_buffer = topk_indices_buffer
 
+        parallel_config = sonar_config.parallel_config
+        self.sequence_parallel_moe = (
+            current_platform.is_cuda()
+            and parallel_config.use_sequence_parallel_moe
+            and parallel_config.pipeline_parallel_size == 1
+        )
+
         self.skip_topk = False
         enable_short_prefill_scoring_skip = (
             not is_mtp_layer
             and not skip_topk
             and not self.use_pcp
-            and current_platform.is_cuda()
+            and current_platform.is_cuda_alike()
             and self.supports_dense_mha_prefill
         )
         self._dense_mha_metadata_layer_name = self.layer_name if enable_short_prefill_scoring_skip else ""
@@ -309,17 +321,31 @@ class DeepseekV32Attention(MLAAttention):
     ) -> torch.Tensor:
         # Captured: A-projections (+ indexer A-GEMM on indexer layers).
         qkv_lora = self.fused_qkv_a_proj(hidden_states)[0]
-        q_c, kv_c, k_pe = qkv_lora.split([self.q_lora_rank, self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
         if self.indexer is not None and not self.skip_topk:
             kw = self.indexer.wk_weights_proj(hidden_states)[0]
+        else:
+            kw = None
+
+        # SP-MoE also shards one-token batches, whose row counts are equal.
+        if self.sequence_parallel_moe or hidden_states.shape[0] < positions.shape[0]:
+            # Gather the smaller replicated projections, keeping TP weights intact.
+            projected = qkv_lora if kw is None else torch.cat((qkv_lora, kw), dim=-1)
+            projected = sp_all_gather(projected.contiguous())[: positions.shape[0]]
+            if kw is None:
+                qkv_lora = projected
+            else:
+                qkv_lora, kw = projected.split([qkv_lora.shape[-1], kw.shape[-1]], dim=-1)
+
+        q_c, kv_c, k_pe = qkv_lora.split([self.q_lora_rank, self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        if kw is not None:
+            assert self.indexer is not None
             index_k = kw[:, : self.indexer.head_dim]
             index_weights = kw[:, self.indexer.head_dim :]
         else:
             index_k = None
             index_weights = None
 
-        num_tokens = hidden_states.shape[0]
+        num_tokens = qkv_lora.shape[0]
         output = torch.empty(
             (num_tokens, self.num_local_heads * self.v_head_dim),
             dtype=hidden_states.dtype,
@@ -368,12 +394,8 @@ class DeepseekV32Attention(MLAAttention):
             mla_kv_cache = None if hisparse_cache is not None else self.kv_cache
             mla_k_scale = self._k_scale
 
-        if self.use_pcp or hisparse_cache is None:
-            kv_c_out = torch.empty_like(kv_c)
-            k_pe_out = torch.empty_like(k_pe)
-        else:
-            kv_c_out = torch.empty_like(kv_c)
-            k_pe_out = torch.empty_like(k_pe)
+        kv_c_out = torch.empty_like(kv_c)
+        k_pe_out = torch.empty_like(k_pe)
         q_c = fused_norm_rope(
             positions,
             q_c,
@@ -406,7 +428,6 @@ class DeepseekV32Attention(MLAAttention):
         )
 
         if hisparse_cache is not None and mla_slot is not None:
-            assert kv_c_out is not None and k_pe_out is not None
             self.update_kv_cache(
                 kv_c_out,
                 k_pe_out,
@@ -509,6 +530,7 @@ class DeepseekV32Attention(MLAAttention):
                 cp_kv_cache_interleave_size=(self._sonar_config.parallel_config.cp_kv_cache_interleave_size),
                 skip_topk_buffer_clear=True,
                 topk_backend=self.indexer.indexer_op.topk_backend,
+                logits_dtype=self.indexer.indexer_op.logits_dtype,
             )
         self.impl.record_logical_topk_ready()  # type: ignore[attr-defined]
 
@@ -608,6 +630,8 @@ class DeepseekV32Attention(MLAAttention):
                 self._v_up_proj(decode_out, out=output[:num_decode_tokens])
             return
 
+        shardq = getattr(attn_metadata, "shardq", None)
+        mqa_metadata = attn_metadata
         if self.use_pcp and self.impl.dcp_world_size > self.impl.pcp_world_size:
             if isinstance(mqa_q_arg, tuple):
                 mqa_q_arg = torch.cat(mqa_q_arg, dim=-1)
@@ -618,9 +642,20 @@ class DeepseekV32Attention(MLAAttention):
                 mqa_q_arg = torch.cat(mqa_q_arg, dim=-1)
             assert self.dcp_manager.query_gather is not None
             mqa_q_arg = self.dcp_manager.query_gather(mqa_q_arg)
+        if shardq is not None:
+            decode_q, mqa_q_arg = shard_q(mqa_q_arg, shardq)
+            decode_out = None
+            if decode_q.shape[0]:
+                # Decode tokens attend head-sharded.
+                decode_out, _ = self.impl.forward_mqa(  # type: ignore[attr-defined]
+                    decode_q, kv_cache, attn_metadata, self
+                )
+            mqa_metadata = shardq.attn_metadata
         attn_out, lse = self.impl.forward_mqa(  # type: ignore[attr-defined]
-            mqa_q_arg, kv_cache, attn_metadata, self
+            mqa_q_arg, kv_cache, mqa_metadata, self
         )
+        if shardq is not None:
+            attn_out = unshard_out(attn_out, shardq, decode_out)
 
         if self.impl.dcp_world_size > 1:
             assert lse is not None and self.dcp_manager is not None

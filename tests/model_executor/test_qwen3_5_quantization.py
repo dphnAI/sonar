@@ -59,17 +59,10 @@ def test_qwen3_5_mtp_lm_head_receives_quant_config():
     mock_sonar_config.compilation_config.mode = CompilationMode.NONE
     mock_sonar_config.quant_config = mock_quant_config
 
-    mock_pp_group = Mock()
-    mock_pp_group.is_last_rank = True
-
     with (
         patch("sonar.model_executor.models.qwen3_5_mtp.Qwen3_5MultiTokenPredictor"),
         patch("sonar.model_executor.models.qwen3_5_mtp.ParallelLMHead") as MockLMHead,
         patch("sonar.model_executor.models.qwen3_5_mtp.LogitsProcessor"),
-        patch(
-            "sonar.model_executor.models.qwen3_5_mtp.get_pp_group",
-            return_value=mock_pp_group,
-        ),
     ):
         Qwen3_5MTP(sonar_config=mock_sonar_config)
 

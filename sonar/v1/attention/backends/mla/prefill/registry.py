@@ -39,6 +39,7 @@ class MLAPrefillBackendEnum(Enum, metaclass=_MLAPrefillBackendEnumMeta):
     TRTLLM_RAGGED = "sonar.v1.attention.backends.mla.prefill.trtllm_ragged.TrtllmRaggedPrefillBackend"
     TOKENSPEED_MLA = "sonar.v1.attention.backends.mla.prefill.tokenspeed_mla.TokenspeedMLAPrefillBackend"
     ROCM_AITER_FA = "sonar.v1.attention.backends.mla.prefill.aiter_flash_attn.AiterFlashAttnPrefillBackend"
+    ROCM_AITER_FLYDSL_FP8 = "sonar.v1.attention.backends.mla.prefill.aiter_flydsl_fp8.AiterFlyDSLFP8PrefillBackend"
     CPU = "sonar.v1.attention.backends.mla.prefill.cpu_sdpa.CPUSDPAMLAPrefillBackend"
     ZEN_CPU = "sonar.v1.attention.backends.mla.prefill.zen_cpu_sdpa.ZenCPUSDPAMLAPrefillBackend"
     # Placeholder for third-party/custom backends - must be registered before use

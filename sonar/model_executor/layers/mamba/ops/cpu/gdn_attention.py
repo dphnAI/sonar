@@ -6,7 +6,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-import sonar._custom_ops as ops
+import sonar._cpu_ops as ops
 from sonar.forward_context import ForwardContext, get_forward_context
 from sonar.logger import init_logger
 from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
@@ -469,6 +469,7 @@ def _spec_forward(
     width: int,
     state_len: int,
 ) -> torch.Tensor:
+
     num_spec_decodes = attn_metadata_i.num_spec_decodes
     spec_state_indices = attn_metadata_i.spec_state_indices_tensor
     spec_qsl = attn_metadata_i.spec_query_start_loc

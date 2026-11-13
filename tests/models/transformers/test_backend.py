@@ -21,6 +21,7 @@ from transformers import (
     PreTrainedConfig,
 )
 
+from sonar.compilation.counter import compilation_counter
 from sonar.config import (
     ModelConfig,
     ParallelConfig,
@@ -28,16 +29,18 @@ from sonar.config import (
     SpeculativeConfig,
     set_current_sonar_config,
 )
+from sonar.config.compilation import CompilationMode
 from sonar.model_executor import model_loader
 from sonar.model_executor.models.interfaces import SupportsMultiModal
 from sonar.model_executor.models.transformers.base import Base
 from sonar.model_executor.models.transformers.fusers import AttentionFuser
 from sonar.model_executor.models.transformers.fusers.attention import SONAR_ATTN_IMPL
 from sonar.model_executor.models.transformers.multimodal import MultiModalMixin
+from sonar.model_executor.models.transformers.utils import infer_dynamic_arg_dims
 from sonar.model_executor.models.utils import StageMissingLayer
 
 from ...conftest import HfRunner, SonarRunner
-from ...utils import multi_gpu_test, prep_prompts
+from ...utils import create_new_process_for_each_test, multi_gpu_test, prep_prompts
 from ..registry import HF_EXAMPLE_MODELS
 from ..utils import check_embeddings_close, check_logprobs_close
 
@@ -46,6 +49,22 @@ from ..utils import check_embeddings_close, check_logprobs_close
 def enable_pickle(monkeypatch):
     """`LLM.apply_model` requires pickling a function."""
     monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+
+
+@pytest.mark.parametrize("text_tied,model_tied", [(False, False), (True, False), (False, True), (True, True)])
+@pytest.mark.parametrize("head_quantization", [None, "quantized_lm_head", "head_bits"])
+def test_tied_embeddings_respect_quantized_output_head(text_tied, model_tied, head_quantization):
+    quant_config = None
+    if head_quantization == "quantized_lm_head":
+        quant_config = SimpleNamespace(has_quantized_lm_head=lambda: True)
+    elif head_quantization == "head_bits":
+        quant_config = SimpleNamespace(has_quantized_lm_head=lambda: False, head_bits=4)
+    model = SimpleNamespace(
+        text_config=SimpleNamespace(tie_word_embeddings=text_tied),
+        config=SimpleNamespace(tie_word_embeddings=model_tied),
+        quant_config=quant_config,
+    )
+    assert Base._get_tie_word_embeddings(model) == ((text_tied or model_tied) and head_quantization is None)
 
 
 def get_model(arch: str) -> str:
@@ -125,7 +144,7 @@ def check_implementation(
     "model,model_impl,num_fused",
     [
         ("meta-llama/Llama-3.2-1B-Instruct", "transformers", (1, 1)),
-        ("hmellor/Ilama-3.2-1B", "auto", (1, 1)),  # CUSTOM CODE
+        ("vllm-project/Ilama-3.2-1B", "auto", (1, 1)),  # CUSTOM CODE
         ("allenai/OLMoE-1B-7B-0924", "transformers", (0, 1)),  # MoE
     ],
 )  # trust_remote_code=True by default
@@ -147,6 +166,49 @@ def test_models(
     )
 
 
+@create_new_process_for_each_test("spawn")
+def test_compile_mm_encoder(sonar_runner: type[SonarRunner], monkeypatch: pytest.MonkeyPatch) -> None:
+    """Idefics3's encoder has an unannotated and a `torch.BoolTensor` input."""
+    # Disable multiprocessing so that the counter is in the same process
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+
+    # One graph for the language model and one for the encoder
+    with (
+        compilation_counter.expect(num_models_seen=2),
+        sonar_runner(
+            "HuggingFaceTB/SmolVLM-256M-Instruct",
+            model_impl="transformers",
+            max_model_len=2048,
+            limit_mm_per_prompt={"image": 1},
+            gpu_memory_utilization=0.5,
+            compilation_config={
+                "mode": CompilationMode.SONAR_COMPILE,
+                "compile_mm_encoder": True,
+            },
+        ),
+    ):
+        pass
+
+
+def test_infer_dynamic_arg_dims():
+    """Only unannotated and (legacy) tensor arguments are dynamic."""
+
+    class Encoder(nn.Module):
+        def forward(
+            self,
+            pixel_values,
+            position_ids: torch.Tensor,
+            mask: torch.BoolTensor | None = None,
+            grid: tuple[int, int] = (1, 1),
+            tiles: list[torch.Tensor] | None = None,
+            **kwargs,
+        ):
+            pass
+
+    expected = {"pixel_values": 0, "position_ids": 0, "mask": 0}
+    assert infer_dynamic_arg_dims(Encoder) == expected
+
+
 def test_hybrid_attention(sonar_runner: type[SonarRunner]) -> None:
     prompts, _, _ = prep_prompts(4, (800, 801))
     kwargs_ref = {"max_model_len": 8192, "enforce_eager": True}
@@ -155,7 +217,7 @@ def test_hybrid_attention(sonar_runner: type[SonarRunner]) -> None:
         sonar_runner,
         sonar_runner,
         prompts,
-        model="hmellor/tiny-random-Gemma2ForCausalLM",
+        model="vllm-project/tiny-random-Gemma2ForCausalLM",
         kwargs_ref=kwargs_ref,
         kwargs_test=kwargs_test,
     )
@@ -214,7 +276,7 @@ def test_sinks(hf_runner: type[HfRunner], sonar_runner: type[SonarRunner]) -> No
 
 
 def test_mla(sonar_runner: type[SonarRunner], example_prompts: list[str]) -> None:
-    model = "hmellor/tiny-random-DeepseekV2ForCausalLM"
+    model = "vllm-project/tiny-random-DeepseekV2ForCausalLM"
     args = (example_prompts, 32, 5)
     kwargs: dict[str, Any] = {"max_model_len": 2048, "enforce_eager": True}
 
@@ -258,7 +320,7 @@ def test_distributed(
 @pytest.mark.parametrize(
     "model, quantization_kwargs",
     [
-        ("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ", {}),
+        ("vllm-project/TinyLlama-1.1B-Chat-v0.3-AWQ", {}),
         ("LnL-AI/TinyLlama-1.1B-Chat-v1.0-GPTQ-4bit", {}),
     ],
 )
@@ -325,16 +387,12 @@ def test_embed_loading(sonar_runner, model):
 
 
 @pytest.mark.parametrize("arch", ["TransformersEmbeddingModel", "TransformersForSequenceClassification"])
-@pytest.mark.parametrize("use_v2_model_runner", [False, True], ids=["v1", "v2"])
 def test_pooling(
     hf_runner,
     sonar_runner,
     example_prompts,
     arch,
-    monkeypatch,
-    use_v2_model_runner,
 ):
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
     model = get_model(arch)
 
     sonar_kwargs = dict(max_model_len=None, model_impl="transformers")
@@ -640,6 +698,16 @@ def test_marking_skipped_without_tokenizer():
     assert not isinstance(vision_tower, StageMissingLayer)
 
 
+def test_missing_encoders_are_skipped():
+    """Gemma 4 31B has no audio tower, so `get_encoder` returns `None` for audio."""
+
+    class Model(nn.Module):
+        def get_encoder(self, modality: str) -> nn.Module | None:
+            return nn.Identity() if modality == "image" else None
+
+    assert MarkingStub()._find_encoder_classes(Model()) == {"image": nn.Identity}
+
+
 NUM_LAYERS = 4
 
 
@@ -879,3 +947,22 @@ def test_mtp_draft_loads_mtp_weights(model_type, tmp_path, tp_init, monkeypatch)
                 layer.get_parameter(param_name).cpu(),
                 weights[f"{mtp}.{ckpt_name}"].to(torch.bfloat16),
             )
+
+
+def test_init_parameters_keeps_declared_dtype_and_requires_grad():
+    """Meta parameters materialize in their own dtype, as with `from_pretrained`,
+    and an integer parameter, which cannot require grad, does not fail."""
+    with torch.device("meta"):
+        module = nn.Module()
+        module.fp32 = nn.Parameter(torch.empty(2))
+        module.fp8 = nn.Parameter(torch.empty(2, dtype=torch.float8_e4m3fn), requires_grad=False)
+        module.int8 = nn.Parameter(torch.empty(2, dtype=torch.int8), requires_grad=False)
+    stub = SimpleNamespace(
+        model_config=SimpleNamespace(dtype=torch.bfloat16),
+        device_config=SimpleNamespace(device=torch.device("cpu")),
+    )
+    Base.init_parameters(stub, module)
+
+    assert module.fp32.dtype == torch.float32 and module.fp32.requires_grad
+    assert module.fp8.dtype == torch.float8_e4m3fn and not module.fp8.requires_grad
+    assert module.int8.dtype == torch.int8 and not module.int8.requires_grad

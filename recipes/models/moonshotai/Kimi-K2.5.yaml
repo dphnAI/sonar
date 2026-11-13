@@ -148,7 +148,7 @@ strategy_overrides:
     prefill:
       nodes: 1               # 1 GB200 node = 4 GPUs
       parallelism: dep       # DP + expert-parallel pool
-      sonar_args:
+      vllm_args:
         - "--max-num-batched-tokens"
         - "16384"
         - "--block-size"
@@ -157,7 +157,7 @@ strategy_overrides:
     decode:
       nodes: 1               # 4 GB200 nodes = 16 GPUs
       parallelism: dep
-      sonar_args:
+      vllm_args:
         - "--compilation-config"
         - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         - "--block-size"
@@ -187,7 +187,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu132
   ```
 
   **Pip (AMD ROCm):**
@@ -211,7 +211,7 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve moonshotai/Kimi-K2.5 \
+  sonar run moonshotai/Kimi-K2.5 \
     --host 0.0.0.0 \
     --port 8000 \
     --trust-remote-code \
@@ -231,7 +231,7 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve moonshotai/Kimi-K2.5 \
+  sonar run moonshotai/Kimi-K2.5 \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --mm-encoder-tp-mode data \
@@ -259,12 +259,11 @@ guide: |
   export SONAR_ROCM_USE_AITER=1
   export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  sonar serve amd/Kimi-K2.5-MXFP4 \
+  sonar run amd/Kimi-K2.5-MXFP4 \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --mm-encoder-tp-mode data \
-    --kv-cache-dtype fp8 \
-    --gpu-memory-utilization 0.90
+    --kv-cache-dtype fp8
   ```
 
   Notes:
@@ -315,7 +314,7 @@ guide: |
   The full reproduction serve command is then:
 
   ```bash
-  sonar serve amd/Kimi-K2.5-MXFP4 \
+  sonar run amd/Kimi-K2.5-MXFP4 \
     --port "${PORT:-8000}" \
     --tensor-parallel-size 4 \
     --gpu-memory-utilization 0.85 \
@@ -359,10 +358,9 @@ guide: |
   # TP < 8 only:
   export SONAR_ROCM_USE_AITER_RMSNORM=0
 
-  sonar serve amd/Kimi-K2.5-MXFP4 \
+  sonar run amd/Kimi-K2.5-MXFP4 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.90 \
     --kv-cache-dtype fp8 \
     --block-size 16 \
     --async-scheduling \
@@ -422,7 +420,10 @@ guide: |
 
   ## Troubleshooting
 
-  - **OOM errors:** Lower `--gpu-memory-utilization` or adjust TP/EP to match your GPU count.
+  - **OOM errors:** Lower `--max-num-seqs`, `--max-num-batched-tokens` or `--max-model-len`, or adjust
+    TP/EP to match your GPU count. With extensible KV caches on CUDA and ROCm, Sonar sizes the cache from memory measured after
+    warmup, so leave `--gpu-memory-utilization` unset unless the GPU is shared
+    ([details](https://docs.vllm.ai/en/latest/configuration/optimization/#gpu-memory-utilization)).
   - **Vision encoder performance:** Use `--mm-encoder-tp-mode data` to run the vision encoder
     in data-parallel mode. The encoder is small, so TP adds communication overhead with little gain.
   - **Unique multimodal inputs:** Pass `--mm-processor-cache-gb 0` to avoid caching overhead.

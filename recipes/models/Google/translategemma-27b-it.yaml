@@ -29,7 +29,7 @@ variants:
     precision: bf16
     vram_minimum_gb: 65
     description: "Original Google checkpoint in BF16 (has Sonar compatibility issues — prefer sonar-optimized variant)"
-  sonar_optimized:
+  vllm_optimized:
     model_id: "Infomaniak-AI/vllm-translategemma-27b-it"
     precision: bf16
     vram_minimum_gb: 65
@@ -89,7 +89,6 @@ guide: |
     vllm/vllm-openai:latest \
       Infomaniak-AI/vllm-translategemma-27b-it \
       --served-model-name translategemma-27b-it \
-      --gpu-memory-utilization 0.8 \
       --host 0.0.0.0 \
       --port 8000
   ```

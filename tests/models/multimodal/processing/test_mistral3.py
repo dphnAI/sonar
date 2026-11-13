@@ -42,7 +42,10 @@ _RGB_RESCALE = 1.0 / 255.0
 
 
 @pytest.mark.usefixtures("default_sonar_config")
-@pytest.mark.skipif(not HAS_TRITON or not current_platform.is_cuda(), reason="CUDA Triton kernel")
+@pytest.mark.skipif(
+    not HAS_TRITON or not current_platform.is_cuda_alike(),
+    reason="CUDA or ROCm Triton kernel",
+)
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("normalize", [False, True])
 @pytest.mark.parametrize(("channels", "patch_shape"), [(3, (4, 4)), (2, (2, 4))])

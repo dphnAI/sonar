@@ -12,7 +12,7 @@ import pytest
 import torch
 
 import sonar.model_executor.kernels.mhc as mhc_kernels
-from sonar._custom_ops import (
+from sonar._cpu_ops import (
     compress_norm_rope_store_cpu,
     compress_norm_rope_store_indexer_cpu,
     flash_mla_with_kvcache_cpu,
@@ -1242,7 +1242,7 @@ def test_fused_indexer_q_rope_quant_dispatches_to_cpu_kernel():
         positions, q, cos_sin_cache, weights, softmax_scale, head_scale
     )
 
-    with mock.patch("sonar._custom_ops.fused_indexer_q_rope_quant_cpu") as mocked:
+    with mock.patch("sonar._cpu_ops.fused_indexer_q_rope_quant_cpu") as mocked:
         fused_indexer_q_rope_quant(
             positions,
             q.clone(),

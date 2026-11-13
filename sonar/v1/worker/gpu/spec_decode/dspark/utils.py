@@ -14,7 +14,6 @@ from sonar.v1.worker.gpu.spec_decode.dflash.utils import (
     resolve_dflash_cache_dtype,
 )
 from sonar.v1.worker.gpu.spec_decode.eagle.utils import get_target_lm_head
-from sonar.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
 
 logger = init_logger(__name__)
 
@@ -106,7 +105,7 @@ def load_dspark_model(target_model: nn.Module, sonar_config: SonarConfig) -> nn.
             sonar_config.cache_config,
             cache_dtype=resolve_dflash_cache_dtype(sonar_config),
         ),
-        load_config=get_pp_safe_draft_load_config(get_draft_load_config(sonar_config)),
+        load_config=get_draft_load_config(sonar_config),
     )
     # SonarConfig post-init restores the target's quant config because the target
     # config is retained for DSpark's target-layer metadata, so we must override it.

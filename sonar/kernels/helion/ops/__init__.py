@@ -7,9 +7,9 @@ specific op module it needs, e.g.::
 
     from sonar.kernels.helion.ops import silu_mul_fp8  # noqa: F401
 
-which triggers that op's ``@register_kernel`` as an import side effect.
+which triggers that op's `@register_kernel` as an import side effect.
 
-Tools that need the full registry call ``import_all_kernels()`` to force every
+Tools that need the full registry call `import_all_kernels()` to force every
 op module to register.
 """
 
@@ -18,7 +18,7 @@ import pkgutil
 
 
 def import_all_kernels() -> list[str]:
-    """Import every kernel submodule so all ``@register_kernel`` decorators run.
+    """Import every kernel submodule so all `@register_kernel` decorators run.
 
     Returns:
         The fully-qualified module names that were imported.

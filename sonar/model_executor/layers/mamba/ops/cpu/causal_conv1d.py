@@ -6,7 +6,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from sonar._custom_ops import causal_conv1d_update_cpu_vec
+from sonar._cpu_ops import causal_conv1d_update_cpu_vec
 from sonar.v1.attention.backends.utils import NULL_BLOCK_ID, PAD_SLOT_ID
 
 

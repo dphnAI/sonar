@@ -880,7 +880,7 @@ async def test_d3_rejects_instructions(d3):
         (
             "choice",
             {"billing": "Charges", "app_fault": None},
-            "Which?\n\nOptions:\nA Charges\nB app fault\n\nReply with the option code only.",
+            ("Which?\n\nOptions:\nA Charges\nB app fault\n\nReply with the option code only."),
         ),
         (
             "choice",
@@ -890,7 +890,7 @@ async def test_d3_rejects_instructions(d3):
         (
             "noul",
             {"true": "asks to cancel", "false": "anything else"},
-            "Which?\nYes: asks to cancel\nNo: anything else\n\nReply with yes or no only.",
+            ("Which?\nYes: asks to cancel\nNo: anything else\n\nReply with yes or no only."),
         ),
         (
             "score",

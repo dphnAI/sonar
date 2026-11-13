@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests that the V2 model runner limits max_model_len to the draft's (#57941).
+"""Tests that the model runner limits max_model_len to the draft's (#57941).
 
-The V2 speculators draft at every length the target accepts, so a draft model
+The speculators draft at every length the target accepts, so a draft model
 whose max_model_len is smaller than the target's (and whose rotary cache can't
-be raised to match) must lower the target's max_model_len. The V1 model runner
-instead skips speculation for longer batches, so it keeps the target's
-max_model_len.
+be raised to match) must lower the target's max_model_len.
 """
 
 import pytest
@@ -15,16 +13,26 @@ from sonar.config import ModelConfig, ParallelConfig, SonarConfig, SpeculativeCo
 from sonar.engine.arg_utils import EngineArgs
 
 # All repos are public; only config/tokenizer-config files are fetched.
-AR_MODEL = "JackFram/llama-68m"  # max_position_embeddings=2048
-EAGLE3_DRAFT = "yuhuili/EAGLE3-LLaMA3.1-Instruct-8B"  # max_position_embeddings=2048
+AR_MODEL = "vllm-project/llama-68m"  # max_position_embeddings=2048
+EAGLE3_DRAFT = "vllm-project/EAGLE3-LLaMA3.1-Instruct-8B"  # max_position_embeddings=2048
 LLAMA3_TARGET = "unsloth/Meta-Llama-3.1-8B-Instruct"  # max_position_embeddings=131072
 HYBRID_MODEL = "ai21labs/Jamba-tiny-random"  # hybrid Mamba/attention
+# Ships an MTP layer; max_position_embeddings=262144 in its nested text_config.
+MTP_TARGET = "Qwen/Qwen3.5-0.8B"
+DFLASH_DRAFT = "z-lab/Qwen3-4B-DFlash-b16"  # max_position_embeddings=40960
+DFLASH_TARGET = "Qwen/Qwen3-4B"  # max_position_embeddings=40960
+
+
+def _yarn(original: int, factor: float) -> dict:
+    return {
+        "rope_type": "yarn",
+        "factor": factor,
+        "original_max_position_embeddings": original,
+    }
 
 
 @pytest.mark.cpu_test
-@pytest.mark.parametrize("use_v2_model_runner", [True, False])
-def test_draft_model_limits_max_model_len(use_v2_model_runner: bool, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
+def test_draft_model_limits_max_model_len():
     model_config = ModelConfig(AR_MODEL, hf_overrides={"max_position_embeddings": 8192})
     speculative_config = SpeculativeConfig(
         target_model_config=model_config,
@@ -34,11 +42,9 @@ def test_draft_model_limits_max_model_len(use_v2_model_runner: bool, monkeypatch
         num_speculative_tokens=3,
     )
     sonar_config = SonarConfig(model_config=model_config, speculative_config=speculative_config)
-    assert sonar_config.use_v2_model_runner == use_v2_model_runner
     draft_model_config = speculative_config.draft_model_config
     assert draft_model_config.max_model_len == 2048
-    expected = 2048 if use_v2_model_runner else 8192
-    assert sonar_config.model_config.max_model_len == expected
+    assert sonar_config.model_config.max_model_len == 2048
 
 
 @pytest.mark.cpu_test
@@ -47,7 +53,6 @@ def test_eagle_draft_limits_max_model_len_unless_resized(resizable: bool, monkey
     """An EAGLE draft's max_position_embeddings is raised to the target's
     max_model_len when its RoPE type allows it; otherwise the draft limits
     max_model_len."""
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     if not resizable:
         monkeypatch.setattr("sonar.config.speculative._CACHE_ONLY_ROPE_TYPES", frozenset())
     model_config = ModelConfig(LLAMA3_TARGET, max_model_len=8192)
@@ -59,20 +64,81 @@ def test_eagle_draft_limits_max_model_len_unless_resized(resizable: bool, monkey
         num_speculative_tokens=3,
     )
     sonar_config = SonarConfig(model_config=model_config, speculative_config=speculative_config)
-    assert sonar_config.use_v2_model_runner
     draft_hf_config = speculative_config.draft_model_config.hf_config
     assert draft_hf_config.max_position_embeddings == (8192 if resizable else 2048)
     assert sonar_config.model_config.max_model_len == (8192 if resizable else 2048)
 
 
 @pytest.mark.cpu_test
-def test_draft_limit_applies_before_hybrid_mamba_block_size(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("target", "draft", "method", "hf_overrides", "expected"),
+    [
+        pytest.param(
+            MTP_TARGET,
+            None,
+            "mtp",
+            {
+                "text_config": {
+                    "rope_parameters": _yarn(262144, 4.0),
+                    "max_position_embeddings": 1048576,
+                }
+            },
+            1048576,
+            id="mtp-nested-x4",
+        ),
+        pytest.param(
+            MTP_TARGET,
+            None,
+            "mtp",
+            {
+                "text_config": {
+                    "rope_parameters": _yarn(262144, 2.0),
+                    "max_position_embeddings": 1048576,
+                }
+            },
+            524288,
+            id="mtp-nested-x2",
+        ),
+        pytest.param(
+            DFLASH_TARGET,
+            DFLASH_DRAFT,
+            "dflash",
+            {
+                "rope_parameters": {**_yarn(32768, 4.0), "rope_theta": 1000000},
+                "max_position_embeddings": 131072,
+            },
+            131072,
+            id="dflash-x4",
+        ),
+    ],
+)
+def test_yarn_draft_limits_max_model_len_to_its_rotary_cache(
+    target: str,
+    draft: str | None,
+    method: str,
+    hf_overrides: dict,
+    expected: int,
 ):
+    """The target's YaRN overrides reach the draft but its
+    max_position_embeddings doesn't (#58080), so the draft's rotary cache,
+    original_max_position_embeddings * factor rows, bounds max_model_len."""
+    model_config = ModelConfig(target, hf_overrides=hf_overrides)
+    speculative_config = SpeculativeConfig(
+        target_model_config=model_config,
+        target_parallel_config=ParallelConfig(),
+        model=draft,
+        method=method,
+        num_speculative_tokens=1,
+    )
+    sonar_config = SonarConfig(model_config=model_config, speculative_config=speculative_config)
+    assert sonar_config.model_config.max_model_len == expected
+
+
+@pytest.mark.cpu_test
+def test_draft_limit_applies_before_hybrid_mamba_block_size():
     """With prefix caching off, hybrid models default mamba_block_size to
     max_model_len, so it must follow the draft's limit instead of tripping
     the --mamba-block-size validation (#63844)."""
-    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     sonar_config = EngineArgs(
         model=HYBRID_MODEL,
         max_model_len=4096,

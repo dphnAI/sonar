@@ -91,8 +91,7 @@ guide: |
     `configuration_param2moe.py`.
   - **Hardware:** one GPU is enough. The BF16 weights are ~34.3 GB, so an H100
     80GB leaves ample room for the 32,768-token KV cache. A single 48 GB
-    **L40S** also runs the same configuration: at the default
-    `--gpu-memory-utilization 0.9` roughly 8–9 GB remains for KV, and this
+    **L40S** also runs the same configuration: at least 8–9 GB remains for KV, and this
     model's KV cache is small (21 layers × 8 KV heads × 64 head dim ≈ 42 KB per
     token), so about 6 concurrent sequences fit at the full 32,768-token
     window — more if you cap `--max-model-len`.
@@ -104,7 +103,7 @@ guide: |
   This is the exact configuration verified on both H100 and L40S:
 
   ```bash
-  sonar serve bharatgenai/Param2-17B-A2.4B-Thinking \
+  sonar run bharatgenai/Param2-17B-A2.4B-Thinking \
     --trust-remote-code \
     --async-scheduling \
     --tensor-parallel-size 1 \
@@ -196,7 +195,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  sonar bench serve \
+  sonar bench run \
     --model bharatgenai/Param2-17B-A2.4B-Thinking \
     --dataset-name random \
     --random-input-len 2048 \

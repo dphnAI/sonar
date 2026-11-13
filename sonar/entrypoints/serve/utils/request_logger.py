@@ -7,8 +7,8 @@ from collections.abc import Sequence
 import torch
 
 from sonar import envs
-from sonar.entrypoints.pooling.typing import AnyPoolingRequest
-from sonar.entrypoints.serve.engine.typing import AnyRequest
+from sonar.entrypoints.pooling.types import AnyPoolingRequest
+from sonar.entrypoints.serve.engine.types import AnyRequest
 from sonar.logger import init_logger
 from sonar.lora.request import LoRARequest
 from sonar.pooling_params import PoolingParams

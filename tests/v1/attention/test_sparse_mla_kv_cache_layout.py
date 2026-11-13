@@ -27,13 +27,108 @@ from sonar.v1.worker.utils import allocate_kv_cache, customize_attention_spec
 pytestmark = pytest.mark.skip_global_cleanup
 
 
+@pytest.mark.parametrize("mha_method", ["absent", "unimplemented", "implemented"])
+def test_sparse_mha_requires_an_implemented_forward(mha_method):
+    from sonar.model_executor.layers.attention.mla_attention import MLAAttentionImpl
+
+    def forward_mha(*args, **kwargs):
+        pytest.fail("capability selection must not execute attention")
+
+    methods = {
+        "absent": {},
+        "unimplemented": {"forward_mha": MLAAttentionImpl.forward_mha},
+        "implemented": {"forward_mha": forward_mha},
+    }
+    impl = type("SparseImpl", (), methods[mha_method])()
+    layer = SimpleNamespace(
+        impl=impl,
+        hisparse_cache=None,
+        prefill_backend=None,
+        _sonar_config=SimpleNamespace(attention_config=SimpleNamespace(sparse_mla_force_mqa=False)),
+    )
+    metadata = SimpleNamespace(prefill=SimpleNamespace(use_dense_mha=True))
+
+    assert MLAAttention._use_sparse_mha(layer, metadata) is (mha_method == "implemented")
+
+
+def test_sparse_mqa_only_backend_declares_no_dense_prefill():
+    from sonar.v1.attention.backend import SparseMLAAttentionImpl
+    from sonar.v1.attention.backends.mla.sm89_mla_sparse import Sm89MLASparseImpl
+
+    assert not SparseMLAAttentionImpl.supports_dense_mha_prefill
+    assert not Sm89MLASparseImpl.supports_dense_mha_prefill
+    assert Sm89MLASparseImpl.get_fp8_ds_mla_row_bytes(None) == 656
+
+
+@pytest.mark.parametrize("allow_local_prefill", [False, True])
+@pytest.mark.parametrize(
+    "query_lens,seq_lens,expected_counts,fresh_prefill",
+    [
+        ([1, 1], [9, 12], (2, 0, 2), False),
+        ([1, 1, 4, 3], [9, 12, 4, 3], (2, 2, 2), True),
+        ([1, 1, 4, 3], [9, 12, 8, 3], (2, 2, 2), False),
+    ],
+    ids=["decode-only", "mixed-fresh", "mixed-continuation"],
+)
+def test_sm89_metadata_retains_wrapper_counts(
+    monkeypatch, allow_local_prefill, query_lens, seq_lens, expected_counts, fresh_prefill
+):
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.attention.backends.mla import sm89_mla_sparse as sm89
+
+    # Exercise the host metadata path without CUDA allocation or pinned memory.
+    monkeypatch.setattr(sm89, "np_to_pinned_tensor", torch.from_numpy)
+    starts = torch.tensor([0, *torch.tensor(query_lens).cumsum(0).tolist()], dtype=torch.int32, device="cpu")
+    lengths = torch.tensor(seq_lens, dtype=torch.int32, device="cpu")
+    num_tokens = sum(query_lens)
+    common = CommonAttentionMetadata(
+        query_start_loc=starts,
+        query_start_loc_cpu=starts,
+        seq_lens=lengths,
+        seq_lens_cpu_upper_bound=lengths,
+        num_reqs=len(query_lens),
+        num_actual_tokens=num_tokens,
+        max_query_len=max(query_lens),
+        max_seq_len=max(seq_lens),
+        block_table_tensor=torch.zeros(len(query_lens), 1, dtype=torch.int32, device="cpu"),
+        slot_mapping=torch.arange(num_tokens, dtype=torch.int64, device="cpu"),
+    )
+    builder = object.__new__(sm89.Sm89MLASparseMetadataBuilder)
+    builder.device = torch.device("cpu")
+    builder.allow_local_prefill = allow_local_prefill
+    builder.reorder_batch_threshold = 1
+    builder.req_id_per_token_buffer = torch.full((num_tokens + 3,), -1, dtype=torch.int32, device="cpu")
+    builder.local_prefill_slot_buffer = torch.arange(num_tokens, dtype=torch.int64, device="cpu")
+    builder.kv_cache_spec = SimpleNamespace(block_size=64)
+    builder.topk_tokens = 2048
+    builder.sonar_config = SimpleNamespace(parallel_config=SimpleNamespace(cp_kv_cache_interleave_size=64))
+
+    metadata = builder.build(0, common)
+
+    assert metadata.seq_lens is lengths
+    assert (metadata.num_decodes, metadata.num_prefills, metadata.num_decode_tokens) == expected_counts
+    assert metadata.query_start_loc is starts
+    assert metadata.slot_mapping is common.slot_mapping
+    assert metadata.block_table is common.block_table_tensor
+    assert metadata.req_id_per_token.tolist() == [req for req, count in enumerate(query_lens) for _ in range(count)]
+    assert builder.req_id_per_token_buffer[num_tokens:].tolist() == [0, 0, 0]
+    if allow_local_prefill and fresh_prefill:
+        local = metadata.prefill_local
+        assert local is not None
+        assert local.workspace_starts.tolist() == [0, 4]
+        assert local.workspace_request_ids.tolist() == [0, 0, 0, 0, 1, 1, 1]
+        assert local.shadow_slot_mapping.tolist() == list(range(num_tokens - metadata.num_decode_tokens))
+    else:
+        assert metadata.prefill_local is None
+
+
 @pytest.mark.parametrize(
     "device",
     [
         "cpu",
         pytest.param(
             "cuda",
-            marks=pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA only"),
+            marks=pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="CUDA/ROCm only"),
         ),
     ],
 )

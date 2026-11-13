@@ -136,7 +136,7 @@ def _ue8m0_inverse(exponent: Uint32, *, loc=None, ip=None) -> Float32:
 
 @dsl_user_op
 def _f32x4_to_e4m3x4(a: Float32, b: Float32, c: Float32, d: Float32, *, loc=None, ip=None) -> Uint32:
-    """Four values to E4M3, ``a`` in the low byte, clamped to +-448 first so
+    """Four values to E4M3, `a` in the low byte, clamped to +-448 first so
     that inf saturates like FlashInfer's MXFP8 kernels and torch."""
     return Uint32(
         llvm.inline_asm(
@@ -188,7 +188,7 @@ def _store_global_u32x2(address: Int64, low: Uint32, high: Uint32, *, loc=None, 
 
 @cute.jit
 def _swizzled_scale_offset(row: Int32, col: Int32, padded_cols: Int32) -> Int32:
-    """Byte offset of block ``col`` of ``row`` in the 128x4 swizzled layout."""
+    """Byte offset of block `col` of `row` in the 128x4 swizzled layout."""
     return (
         col % Int32(4)
         + (col // Int32(4)) * Int32(512)
@@ -199,7 +199,7 @@ def _swizzled_scale_offset(row: Int32, col: Int32, padded_cols: Int32) -> Int32:
 
 
 class _LamportGemmaRMSNormMxfp8Kernel:
-    """FlashInfer's ``_LamportResidualRMSNormDeviceKernel`` (residual add and
+    """FlashInfer's `_LamportResidualRMSNormDeviceKernel` (residual add and
     copy, one rank lane) with a Gemma RMSNorm whose BF16 result is quantized to
     MXFP8 instead of stored.
 
@@ -486,7 +486,7 @@ class _LamportGemmaRMSNormMxfp8Kernel:
 
 
 def mxfp8_scale_numel(num_tokens: int, hidden_size: int) -> int:
-    """Bytes of the 128x4 swizzled UE8M0 scales of ``num_tokens`` rows."""
+    """Bytes of the 128x4 swizzled UE8M0 scales of `num_tokens` rows."""
     rows = math.ceil(num_tokens / _SCALE_ROW_TILE) * _SCALE_ROW_TILE
     cols = math.ceil(hidden_size // MXFP8_BLOCK / _SCALE_COL_TILE) * _SCALE_COL_TILE
     return rows * cols
@@ -496,9 +496,9 @@ class FinalizeAllReduceGemmaRMSNormMxfp8:
     """MoE top-k finalize, TP all-reduce, residual add, Gemma RMSNorm and MXFP8
     quantization in two PDL-chained launches.
 
-    ``__call__`` takes an unfinalized MoE output plus its TP-partial shared-expert
+    `__call__` takes an unfinalized MoE output plus its TP-partial shared-expert
     output and returns the MXFP8 normalized rows with the new residual. Each
-    instance owns a Lamport mailbox for ``max_num_tokens`` rows that all layers
+    instance owns a Lamport mailbox for `max_num_tokens` rows that all layers
     share; construction is collective over the TP group.
     """
 
@@ -689,7 +689,7 @@ def init_fused_moe_finalize(*, hidden_size: int, max_num_tokens: int, top_k: int
     """Build the kernel every deferred MoE output is finalized with.
 
     Collective over the TP group, so every rank calls it, and only when
-    ``supports_fused_moe_finalize`` holds.
+    `supports_fused_moe_finalize` holds.
     """
     global _fused_moe_finalize
     _fused_moe_finalize = FinalizeAllReduceGemmaRMSNormMxfp8(

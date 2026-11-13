@@ -8,17 +8,20 @@ packed through query_start_loc into one launch, and the decode rows as
 next_n-row sequences on uniform steps. `RocmMxfp4IndexerMetadataBuilder` plans
 this for any model's indexer, and a two-level indexer's candidate blocks once
 a subclass sets their size. DeepSeek-V4.1's builder does, and with
-``AttentionConfig.indexer_sparse_logits`` adds the per-step state the
+`AttentionConfig.indexer_sparse_logits` adds the per-step state the
 candidate consumers share.
 """
 
 import bisect
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 
 import torch
 
+import sonar.envs as envs
 from sonar.config import SonarConfig
+from sonar.distributed import get_tensor_model_parallel_rank
 from sonar.logger import init_logger
+from sonar.utils.math_utils import cdiv
 from sonar.v1.attention.backend import (
     AttentionCGSupport,
     CommonAttentionMetadata,
@@ -47,6 +50,8 @@ logger = init_logger(__name__)
 _GATHER_MIN_CUT_DECODE = 3.0
 _GATHER_MIN_CUT_PREFILL = 1.5
 
+_DECODE_SHARD_MIN_ROWS = 64
+
 
 @dataclass
 class RocmMxfp4PrefillPlan:
@@ -56,7 +61,7 @@ class RocmMxfp4PrefillPlan:
 
     requests: list[tuple[int, int, int]]
     """(first row, end row, request) per request with rows in the chunk; rows
-    count from ``chunk.token_start``, requests index ``chunk.block_table``."""
+    count from `chunk.token_start`, requests index `chunk.block_table`."""
     width: int
     """Logits columns: an upper bound on the chunk's compressed contexts."""
     row_ends: torch.Tensor
@@ -113,8 +118,8 @@ def native_decode(
 ) -> RocmMxfp4NativeDecode | None:
     """The step as next_n-row sequences, or None when a request has fewer rows.
 
-    ``row_lens`` and ``row_block_table`` are the flattened rows' bounds and
-    block table, ``query_lens`` the decode requests' query lengths. Trailing
+    `row_lens` and `row_block_table` are the flattened rows' bounds and
+    block table, `query_lens` the decode requests' query lengths. Trailing
     empty requests are cudagraph padding: they keep their next_n rows, with no
     context. Only the step's shape decides, so a FULL graph captured on a
     uniform batch replays the same launch on a padded one.
@@ -126,10 +131,48 @@ def native_decode(
     return RocmMxfp4NativeDecode(next_n, context_lens[:num_reqs], row_block_table[::next_n])
 
 
+@dataclass(frozen=True)
+class DecodeRowShard:
+    start: int
+    stop: int
+    span: int
+    num_rows: int
+
+    @classmethod
+    def plan(cls, num_rows: int, unit: int, world: int, rank: int, capacity: int) -> "DecodeRowShard | None":
+        if world < 2 or num_rows < _DECODE_SHARD_MIN_ROWS:
+            return None
+        span = cdiv(num_rows, world * unit) * unit
+        if num_rows + span > capacity:
+            return None
+        start = min(rank * span, num_rows)
+        return cls(start, min(start + span, num_rows), span, num_rows)
+
+    def narrow(
+        self,
+        row_lens: torch.Tensor,
+        row_block_table: torch.Tensor,
+        native: RocmMxfp4NativeDecode | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, RocmMxfp4NativeDecode | None]:
+        lo, hi = self.start, self.stop
+        if native is not None:
+            seqs = slice(lo // native.next_n, hi // native.next_n)
+            native = replace(
+                native,
+                context_lens=native.context_lens[seqs],
+                block_table=native.block_table[seqs],
+            )
+        return row_lens[lo:hi], row_block_table[lo:hi], native
+
+
+def step_has_prefill(cm: CommonAttentionMetadata, decode_threshold: int) -> bool:
+    return cm.max_query_len > decode_threshold and cm.is_prefilling is not None and bool(cm.is_prefilling.any())
+
+
 @dataclass
 class RocmMxfp4IndexerMetadata(DeepseekV32IndexerMetadata):
     prefill_plans: list[RocmMxfp4PrefillPlan] = field(default_factory=list)
-    """Parallel to ``prefill.chunks``."""
+    """Parallel to `prefill.chunks`."""
     decode_row_lens: torch.Tensor | None = None
     """[rows] int32 compressed context of each decode query row."""
     decode_block_ends: torch.Tensor | None = None
@@ -139,6 +182,7 @@ class RocmMxfp4IndexerMetadata(DeepseekV32IndexerMetadata):
     """The same rows as next_n-row sequences, for the dense launches."""
     decode_schedule: torch.Tensor | None = None
     """The dense decode launches' work schedule, built once for the step."""
+    decode_shard: DecodeRowShard | None = None
     decode_use_gather: bool = False
     """Whether the candidate consumers gather for the decode rows."""
     decode_gather: tuple[dict, torch.Tensor] | None = None
@@ -160,11 +204,11 @@ def plan_prefill_chunks(
 ) -> list[RocmMxfp4PrefillPlan]:
     """Split each chunk into its requests.
 
-    ``query_start_loc`` and ``seq_lens_cpu`` are the step's host copies (the
-    latter an upper bound), ``context_lens`` the device compressed lengths.
+    `query_start_loc` and `seq_lens_cpu` are the step's host copies (the
+    latter an upper bound), `context_lens` the device compressed lengths.
     A chunk covers whole requests, or a query slice of one request; either
     way it launches once, packed through the chunk's part of the device
-    ``query_start_loc``.
+    `query_start_loc`.
     """
     block = candidate_block_size
     plans = []
@@ -207,7 +251,7 @@ def split_prefill_chunks(
 
     Nothing gathers K here, so the requests' contexts do not add up: a chunk's
     logits are [rows, widest compressed context] fp32, at most
-    ``max_logits_bytes``. A request too wide to launch whole is cut on its
+    `max_logits_bytes`. A request too wide to launch whole is cut on its
     query rows.
     """
 
@@ -241,7 +285,7 @@ def plan_gather_launches(
     A consumer's logits are [rows, pool] however long the context, so the
     dense split, sized for the context, would launch it far more often than
     its memory needs. Each request's rows go back together across the chunks
-    that cut them, then out again at most ``max_rows`` a launch.
+    that cut them, then out again at most `max_rows` a launch.
     """
     # Per request: (first token, [(plan, first row, end row)]), and the chunk
     # and request index its block table and context come from.
@@ -348,6 +392,7 @@ class RocmMxfp4IndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
         # A two-level (candidate block) indexer's builder sets these.
         self.candidate_block_size = 0
         self.min_gather_width: float | None = None
+        self.decode_shard_world, self.decode_shard_rank = 1, 0
 
         self.decode_block_ends_buffer = torch.zeros(self.arange_buffer.shape[0], dtype=torch.int32, device=device)
         self.context_lens_buffer = torch.zeros(self.arange_buffer.shape[0], dtype=torch.int32, device=device)
@@ -396,21 +441,35 @@ class RocmMxfp4IndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
         torch.floor_divide(cm.seq_lens[: cm.num_reqs], self.compress_ratio, out=context_lens)
         if base.decode is not None:
             lengths = base.decode.seq_lens.view(-1)
-            metadata.decode_row_lens = lengths
-            block = self.candidate_block_size
-            if block:
-                ends = self.decode_block_ends_buffer[: lengths.shape[0]]
-                torch.add(lengths, block - 1, out=ends)
-                ends.floor_divide_(block)
-                metadata.decode_block_ends = ends
             query_start_loc = cm.query_start_loc_cpu[: base.num_decodes + 1]
-            metadata.decode_native = native_decode(
+            native = native_decode(
                 lengths,
                 base.decode.block_table,
                 torch.diff(query_start_loc).tolist(),
                 self.native_next_n,
                 context_lens,
             )
+            decode_shard = None
+            if not step_has_prefill(cm, self.decode_threshold):
+                decode_shard = DecodeRowShard.plan(
+                    lengths.shape[0],
+                    1 if native is None else native.next_n,
+                    self.decode_shard_world,
+                    self.decode_shard_rank,
+                    self.sonar_config.scheduler_config.max_num_batched_tokens,
+                )
+            if decode_shard is not None:
+                lengths, block_table, native = decode_shard.narrow(lengths, base.decode.block_table, native)
+                metadata.decode = replace(base.decode, block_table=block_table, seq_lens=lengths[:, None])
+                metadata.decode_shard = decode_shard
+            metadata.decode_row_lens = lengths
+            metadata.decode_native = native
+            block = self.candidate_block_size
+            if block:
+                ends = self.decode_block_ends_buffer[: lengths.shape[0]]
+                torch.add(lengths, block - 1, out=ends)
+                ends.floor_divide_(block)
+                metadata.decode_block_ends = ends
             metadata.decode_schedule = build_rocm_mxfp4_decode_schedule(
                 lengths,
                 self.num_heads,
@@ -437,7 +496,7 @@ class RocmMxfp4IndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder):
 
 class DeepseekV41RocmMxfp4IndexerMetadataBuilder(RocmMxfp4IndexerMetadataBuilder):
     """DeepSeek-V4.1's two-level indexer: sets the candidate block size the
-    base plans with and, with ``indexer_sparse_logits``, adds the consumers'
+    base plans with and, with `indexer_sparse_logits`, adds the consumers'
     gathers."""
 
     def __init__(
@@ -451,6 +510,10 @@ class DeepseekV41RocmMxfp4IndexerMetadataBuilder(RocmMxfp4IndexerMetadataBuilder
         super().__init__(kv_cache_spec, layer_names, sonar_config, device, **kwargs)
         hf_config = sonar_config.model_config.hf_text_config
         self.candidate_block_size = getattr(hf_config, "candidate_block_size", 0)
+        tp = sonar_config.parallel_config.tensor_parallel_size
+        if tp > 1 and not envs.SONAR_BATCH_INVARIANT:
+            self.decode_shard_world = tp
+            self.decode_shard_rank = get_tensor_model_parallel_rank()
         self.num_candidate_cols = 0
         if sonar_config.attention_config.indexer_sparse_logits:
             prefix = "attention_config.indexer_sparse_logits"

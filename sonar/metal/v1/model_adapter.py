@@ -21,7 +21,7 @@ class ModelAdapter(Protocol):
         """Whether a multimodal config should run on the text-only path."""
 
     def normalize_model_config(self, model_config: ModelConfig) -> None:
-        """Apply model-specific normalisations to ``model_config`` in place.
+        """Apply model-specific normalisations to `model_config` in place.
 
         Called early during platform setup so the engine sees a consistent
         view of the model before constructing input processors, etc.
@@ -47,7 +47,7 @@ class ModelAdapter(Protocol):
         num_kv_heads: int,
         head_dim: int,
     ) -> tuple[list[int], list[int]] | None:
-        """Return per-layer ``(kv_heads, head_dim)`` lists, or None for uniform."""
+        """Return per-layer `(kv_heads, head_dim)` lists, or None for uniform."""
 
     def build_sliding_window_per_layer(self, args: dict[str, Any], num_layers: int) -> list[int] | None:
         """Return per-layer sliding window sizes, or None for no enforcement."""
@@ -104,11 +104,11 @@ class DefaultModelAdapter(ModelAdapter):
         """Whether the current serve mode should use the text-only path.
 
         Modes:
-        - ``multimodal-native``: never force compatibility; keep native VLM
+        - `multimodal-native`: never force compatibility; keep native VLM
           loading active so multimodal support can be developed/tested.
-        - ``text-only-compat``: force the text-only path only for the
+        - `text-only-compat`: force the text-only path only for the
           known-safe compatibility allowlist.
-        - ``auto``: apply the compatibility path only for known-incompatible
+        - `auto`: apply the compatibility path only for known-incompatible
           checkpoints such as Gemma4 and Qwen3.5/Qwen3.6 FP8 wrappers.
         """
         multimodal_mode = self._multimodal_mode()
@@ -119,14 +119,14 @@ class DefaultModelAdapter(ModelAdapter):
         return self._matches_auto_text_backbone_override(hf_config)
 
     def normalize_model_config(self, model_config: ModelConfig) -> None:
-        """Clear ``multimodal_config`` for models served on the text backbone.
+        """Clear `multimodal_config` for models served on the text backbone.
 
         When the active serve mode routes a multimodal checkpoint through the
-        text-only compatibility path, leaving ``multimodal_config`` populated
+        text-only compatibility path, leaving `multimodal_config` populated
         causes Sonar to eagerly initialize multimodal processors that the
         compatibility path intentionally bypasses. Clearing it here makes
-        ``is_multimodal_model`` ``False`` so the input processor skips that
-        setup. The ``should_force_text_backbone`` predicate is the single
+        `is_multimodal_model` `False` so the input processor skips that
+        setup. The `should_force_text_backbone` predicate is the single
         source of truth for whether the compatibility path applies.
         """
         if model_config.multimodal_config is None:
@@ -153,14 +153,12 @@ class DefaultModelAdapter(ModelAdapter):
     def require_uniform_kv_heads(self, args: dict[str, Any], num_kv_heads: int | None) -> None:
         """Reject configs with mismatched KV head counts under the uniform path.
 
-        Called from :meth:`sonar.metal.v1.cache_policy.ModelCachePolicy.\
-validate_paged_attention_support` only when ``kv_heads_per_layer`` has
-        NOT been populated.  Models whose adapter populates per-layer shapes
-        via :meth:`build_per_layer_kv_shapes` (Gemma4 26B/31B) handle
-        mismatched KV counts layer-by-layer and skip this check.  Any other
-        config with ``num_global_key_value_heads != num_key_value_heads``
-        silently falls back to the scalar uniform path with wrong cache
-        sizing, so fail fast here instead.
+        `ModelCachePolicy.validate_paged_attention_support` calls this check
+        when `kv_heads_per_layer` is unset. Adapters that populate per-layer
+        shapes via `build_per_layer_kv_shapes` (Gemma4 26B/31B) handle
+        mismatched KV counts per layer and skip this check. Other configs
+        with `num_global_key_value_heads != num_key_value_heads` would allocate
+        the wrong cache sizes under the uniform path.
         """
         global_kv_heads = args.get("num_global_key_value_heads")
         if global_kv_heads and num_kv_heads and int(global_kv_heads) != int(num_kv_heads):
@@ -183,16 +181,16 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
         """Build the layer→cache_idx mapping for YOCO KV sharing.
 
         Gemma4's "You Only Cache Once" architecture only caches K/V for
-        the first ``N - num_kv_shared_layers`` layers.  Shared layers
+        the first `N - num_kv_shared_layers` layers.  Shared layers
         reuse the cache of the most recent unique layer of the same
         attention type (sliding or full).
 
-        Follows the same logic as mlx_lm's ``Gemma4TextModel.previous_kvs``
+        Follows the same logic as mlx_lm's `Gemma4TextModel.previous_kvs`
         mapping.
 
         Returns:
-            ``(num_unique_cache_layers, {layer_idx: cache_idx})`` or
-            ``None`` if the model does not use KV sharing.
+            `(num_unique_cache_layers, {layer_idx: cache_idx})` or
+            `None` if the model does not use KV sharing.
         """
         num_layers = args.get("num_hidden_layers", 0)
         num_shared = args.get("num_kv_shared_layers", 0)
@@ -228,20 +226,20 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
         num_kv_heads: int,
         head_dim: int,
     ) -> tuple[list[int], list[int]] | None:
-        """Return per-layer ``(kv_heads, head_dim)`` lists for Gemma4, else None.
+        """Return per-layer `(kv_heads, head_dim)` lists for Gemma4, else None.
 
-        Gemma4 26B/31B mix sliding attention (``num_key_value_heads``,
-        ``head_dim``) with full attention (``num_global_key_value_heads``,
-        ``global_head_dim``), exposed via ``layer_types``.  Other models use
+        Gemma4 26B/31B mix sliding attention (`num_key_value_heads`,
+        `head_dim`) with full attention (`num_global_key_value_heads`,
+        `global_head_dim`), exposed via `layer_types`.  Other models use
         a uniform KV shape across every layer, in which case this returns
-        ``None`` and the cache path falls back to the scalar
-        ``num_kv_heads`` / ``head_dim`` fields on the runner.
+        `None` and the cache path falls back to the scalar
+        `num_kv_heads` / `head_dim` fields on the runner.
 
-        Edge case: some Gemma4 checkpoints (e.g. ``gemma-4-E2B``) override
-        only ``global_head_dim`` while reusing the sliding-layer KV-head
+        Edge case: some Gemma4 checkpoints (e.g. `gemma-4-E2B`) override
+        only `global_head_dim` while reusing the sliding-layer KV-head
         count for full-attention layers.  In that case
-        ``num_global_key_value_heads`` is absent and the full-attention
-        KV-head count falls back to ``num_kv_heads`` — collapsing to a
+        `num_global_key_value_heads` is absent and the full-attention
+        KV-head count falls back to `num_kv_heads` — collapsing to a
         uniform layout would cause full-attention layers to write into
         under-sized cache slots.
 
@@ -252,12 +250,12 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
             head_dim: Resolved sliding-layer head_dim (pre max-with-global).
 
         Returns:
-            ``(kv_heads_per_layer, head_dim_per_layer)`` of length
-            ``num_layers``, or ``None`` when the model is uniform.
+            `(kv_heads_per_layer, head_dim_per_layer)` of length
+            `num_layers`, or `None` when the model is uniform.
 
         Raises:
-            ValueError: If a ``layer_types`` entry is neither
-                ``"sliding_attention"`` nor ``"full_attention"``.  Unknown
+            ValueError: If a `layer_types` entry is neither
+                `"sliding_attention"` nor `"full_attention"`.  Unknown
                 types surface loudly here instead of silently falling back
                 to full-attention shapes.
         """
@@ -293,10 +291,10 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
         """Return per-layer sliding window sizes for Gemma4, else None.
 
         Gemma4 sliding-attention layers enforce a local window
-        (``config.sliding_window``); full-attention layers attend to the
-        entire context (represented as ``-1``).  Models without
-        ``layer_types`` or ``sliding_window`` in their config return
-        ``None``, keeping the current disabled-everywhere behavior.
+        (`config.sliding_window`); full-attention layers attend to the
+        entire context (represented as `-1`).  Models without
+        `layer_types` or `sliding_window` in their config return
+        `None`, keeping the current disabled-everywhere behavior.
         """
         layer_types: list[str] = args.get("layer_types", [])
         sliding_window = args.get("sliding_window")

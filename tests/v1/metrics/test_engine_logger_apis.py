@@ -4,6 +4,7 @@ import copy
 
 import pytest
 
+from sonar.config import CacheConfig
 from sonar.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM
 from sonar.v1.metrics.loggers import PerEngineStatLoggerAdapter
 from sonar.v1.metrics.ray_wrappers import RayPrometheusStatLogger
@@ -11,6 +12,12 @@ from tests.plugins.sonar_add_dummy_stat_logger.dummy_stat_logger.dummy_stat_logg
     DummyStatLogger,
 )
 from tests.utils import wait_for_memory_to_settle
+
+
+def _required_utilization(engine_args: AsyncEngineArgs) -> float:
+    # Unset resolves to 1.0 under the extensible KV cache, which does not need
+    # that memory free up front; wait for the standard fraction instead.
+    return engine_args.gpu_memory_utilization or CacheConfig.DEFAULT_GPU_MEMORY_UTILIZATION
 
 
 @pytest.fixture
@@ -35,7 +42,7 @@ async def test_async_llm_replace_default_loggers(log_stats_enabled_engine_args):
         assert isinstance(engine.logger_manager.stat_loggers[0], RayPrometheusStatLogger)
     finally:
         engine.shutdown()
-        wait_for_memory_to_settle(threshold_ratio=1.0 - log_stats_enabled_engine_args.gpu_memory_utilization)
+        wait_for_memory_to_settle(threshold_ratio=1.0 - _required_utilization(log_stats_enabled_engine_args))
 
 
 @pytest.mark.asyncio
@@ -66,4 +73,4 @@ async def test_async_llm_add_to_default_loggers(log_stats_enabled_engine_args):
         assert engine.log_stats
     finally:
         engine.shutdown()
-        wait_for_memory_to_settle(threshold_ratio=1.0 - disabled_log_engine_args.gpu_memory_utilization)
+        wait_for_memory_to_settle(threshold_ratio=1.0 - _required_utilization(disabled_log_engine_args))

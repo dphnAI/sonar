@@ -16,6 +16,9 @@ from sonar._aiter_ops import (
     rocm_aiter_ops,
 )
 from sonar.compilation.passes.fusion.matcher_utils import MROPE_OP, ROTARY_OP
+from sonar.compilation.passes.fusion.muse_glimmer_qk_rope_cache_fusion import (
+    MuseGlimmerQkRopeCacheFusionPass,
+)
 from sonar.compilation.passes.fusion.qk_norm_rope_kvcache_fusion import (
     QkNormRopeKvCacheFusionPass,
 )
@@ -318,6 +321,109 @@ class QKNormMRoPEObservableKTestModel(QKNormMRoPEKVCacheTestModel):
         self, qkv: torch.Tensor, positions: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         return QKNormRoPEKVCacheTestModel.forward(self, qkv, positions)
+
+
+class MuseQKNormRoPEKVCacheTestModel(QKNormRoPEKVCacheTestModel):
+    q_scale = 3.875
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.qk_norm = RMSNorm(self.head_size, eps=self.q_norm.variance_epsilon, has_weight=False)
+
+    def forward(
+        self, qkv: torch.Tensor, positions: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        q = q.reshape(-1, self.head_size)
+        q = self.qk_norm(q).reshape(-1, self.q_size) * self.q_scale
+        k = k.reshape(-1, self.head_size)
+        k = self.qk_norm(k).reshape(-1, self.kv_size)
+        q = q.to(v.dtype)
+        k = k.to(v.dtype)
+        q, k = self.rotary_emb(positions, q, k)
+        q = q.view(-1, self.num_heads, self.head_size)
+        k = k.view(-1, self.num_kv_heads, self.head_size)
+        v = v.view(-1, self.num_kv_heads, self.head_size)
+        dummy = torch.ops.sonar.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
+        return q, k, v, dummy
+
+
+@pytest.mark.parametrize("num_tokens", [5, 512])
+def test_muse_qk_norm_rope_cache_fuses_all_token_counts(num_tokens: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    torch.manual_seed(0)
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_TRITON_ROPE", "0")
+    monkeypatch.setenv("SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT", "0")
+    rocm_aiter_ops.refresh_env_variables()
+
+    device = torch.device(os.environ.get("SONAR_TEST_CUDA_DEVICE", "cuda"))
+    sonar_config = SonarConfig(
+        model_config=ModelConfig(
+            model=os.environ.get("SONAR_TEST_MODEL", "Qwen/Qwen3-0.6B"),
+            dtype=torch.bfloat16,
+        ),
+        cache_config=CacheConfig(block_size=16, cache_dtype="auto"),
+        compilation_config=CompilationConfig(
+            mode=CompilationMode.SONAR_COMPILE,
+            custom_ops=["+rotary_embedding"],
+            use_inductor_graph_partition=True,
+        ),
+    )
+    text_config = sonar_config.model_config.hf_text_config
+    text_config.head_dim = 128
+    text_config.layer_rope_theta = [10000.0]
+    text_config.rms_norm_eps = 1e-6
+    text_config.qk_scale_factor = MuseQKNormRoPEKVCacheTestModel.q_scale
+    with sonar.config.set_current_sonar_config(sonar_config):
+        model = MuseQKNormRoPEKVCacheTestModel(
+            sonar_config=sonar_config,
+            attn_backend=AttentionBackendEnum.ROCM_AITER_FA,
+            num_heads=32,
+            num_kv_heads=8,
+            head_size=128,
+            is_neox=True,
+            rms_norm_eps=1e-6,
+            dtype=torch.bfloat16,
+            device=device,
+        ).to(device)
+        fusion_pass = MuseGlimmerQkRopeCacheFusionPass(sonar_config)
+        backend = TestBackend(
+            NoOpEliminationPass(sonar_config),
+            SplitCoalescingPass(sonar_config),
+            ScatterSplitReplacementPass(sonar_config),
+            fusion_pass,
+            PostCleanupPass(sonar_config),
+        )
+        qkv = torch.randn(
+            num_tokens,
+            model.q_size + 2 * model.kv_size,
+            device=device,
+            dtype=torch.bfloat16,
+        )
+        positions = torch.arange(num_tokens, device=device)
+
+        with set_forward_context(None, sonar_config):
+            context = get_forward_context()
+            metadata = model.build_attn_metadata(num_tokens, KVCacheLayout.LBHNC)
+            context.slot_mapping = {model.layer_name: metadata.slot_mapping}
+            expected = model(qkv, positions)
+            expected_cache = model.attn.kv_cache.clone()
+
+        torch._dynamo.mark_dynamic(qkv, 0)
+        torch._dynamo.mark_dynamic(positions, 0)
+        with set_forward_context(None, sonar_config):
+            context = get_forward_context()
+            metadata = model.build_attn_metadata(num_tokens, KVCacheLayout.LBHNC)
+            context.slot_mapping = {model.layer_name: metadata.slot_mapping}
+            actual = torch.compile(model, backend=backend)(qkv, positions)
+            actual_cache = model.attn.kv_cache.clone()
+
+        assert fusion_pass.matched_count == 1
+        backend.check_before_ops([torch.ops.sonar.unified_kv_cache_update.default])
+        backend.check_after_ops([torch.ops.sonar.fused_muse_qk_rope_cache.default])
+        for expected_tensor, actual_tensor in zip(expected[:3], actual[:3]):
+            torch.testing.assert_close(expected_tensor, actual_tensor, atol=4e-2, rtol=2e-2)
+        torch.testing.assert_close(expected_cache, actual_cache, atol=4e-2, rtol=2e-2)
 
 
 def _run_qk_norm_rope_kvcache_fusion_test(

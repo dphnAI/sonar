@@ -221,8 +221,9 @@ class CpuPlatform(Platform):
         # which is still being resolved while this platform class is loading.
         from sonar.triton_utils import HAS_TRITON
 
+        # Non-x86 CPUs without Triton use the standalone CPU model runner.
         if cls.get_cpu_architecture() == CpuArchEnum.X86 and not HAS_TRITON:
-            logger.warning_once("Triton is not installed. triton-cpu is expected on x86 CPUs.")
+            raise RuntimeError("Sonar on x86 CPUs requires Triton (triton-cpu).")
 
         cache_config = sonar_config.cache_config
 
@@ -323,7 +324,7 @@ class CpuPlatform(Platform):
             logger.warning_once("Dual-Batch Overlap is not supported on CPU, disabled.")
             parallel_config.enable_dbo = False
 
-        # Note: workaround for v1 gpu_model_runner
+        # CPU doesn't capture CUDA graphs. compile_sizes can expand these sizes.
         from sonar.config import CompilationMode
 
         sonar_config.compilation_config.cudagraph_capture_sizes = []
@@ -635,65 +636,15 @@ class CpuPlatform(Platform):
                 log_extension_import_failure("sonar._C", e, target_logger=logger)
 
     @classmethod
-    def register_triton_kernel_overrides(cls) -> None:
-        """Fallback C++ implementations for core Triton kernels.
-
-        Used when the Triton-CPU backend is unavailable. When Triton-CPU is
-        present, the Triton kernels can run natively and the overrides
-        would only shadow them, so registration is skipped.
-        """
-        from sonar.triton_utils import HAS_TRITON
-
-        if HAS_TRITON:
-            return
-
-        from sonar.triton_utils.dispatcher import register_kernels
-        from sonar.utils import cpu_triton_utils as cpu_tl
-
-        register_kernels(
-            {
-                "sonar.v1.worker.block_table.ComputeSlotMappingKernel.kernel": (
-                    cpu_tl._compute_slot_mapping_kernel_impl
-                ),
-                "sonar.v1.spec_decode.utils.eagle_step_slot_mapping_metadata_kernel": (
-                    cpu_tl._eagle_step_slot_mapping_metadata_kernel_impl
-                ),
-                "sonar.v1.spec_decode.utils.eagle_prepare_inputs_padded_kernel": (
-                    cpu_tl._eagle_prepare_inputs_padded_kernel_impl
-                ),
-                "sonar.v1.spec_decode.utils.eagle_prepare_next_token_padded_kernel": (
-                    cpu_tl._eagle_prepare_next_token_padded_kernel_impl
-                ),
-                "sonar.v1.spec_decode.utils.copy_and_expand_eagle_inputs_kernel": (
-                    cpu_tl._copy_and_expand_eagle_inputs_kernel_impl
-                ),
-                "sonar.v1.spec_decode.utils.copy_and_expand_dflash_inputs_kernel": (
-                    cpu_tl._copy_and_expand_dflash_inputs_kernel_impl
-                ),
-                "sonar.v1.sample.rejection_sampler.rejection_greedy_sample_kernel": (
-                    cpu_tl._rejection_greedy_sample_kernel_impl
-                ),
-                "sonar.v1.sample.rejection_sampler.rejection_random_sample_kernel": (
-                    cpu_tl._rejection_random_sample_kernel_impl
-                ),
-                "sonar.v1.sample.rejection_sampler.expand_kernel": (cpu_tl._expand_kernel_impl),
-                "sonar.v1.sample.rejection_sampler.sample_recovered_tokens_kernel": (
-                    cpu_tl._sample_recovered_tokens_kernel_impl
-                ),
-                "sonar.v1.worker.mamba_utils.batch_memcpy_kernel": (cpu_tl._batch_memcpy_impl),
-            }
-        )
-
-    @classmethod
     def pack_kv_cache(
         cls,
         kv_cache: torch.Tensor,
         indices: torch.Tensor,
     ) -> None:
         """Rewrite the kv cache shape for the current platform."""
-        # Import lazily: cpu_attn pulls in _custom_ops, which needs a fully
+        # Import lazily: cpu_attn pulls in _cpu_ops, which needs a fully
         # initialized sonar.platforms (avoid circular import while CpuPlatform loads).
-        from sonar._custom_ops import cpu_attn_reshape_and_cache
+        from sonar._cpu_ops import cpu_attn_reshape_and_cache
         from sonar.v1.attention.backends.cpu_attn import _get_attn_isa
 
         # MLA uses a single latent cache of shape [N, block_size, head_size],

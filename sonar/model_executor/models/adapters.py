@@ -281,15 +281,15 @@ def as_embedding_model(cls: type[_T]) -> type[_T]:
 def _resolve_num_labels(hf_config: Any, text_config: Any) -> int:
     """Resolve the label count for a sequence classification head.
 
-    ``PreTrainedConfig.num_labels`` is derived from ``id2label``, which always
+    `PreTrainedConfig.num_labels` is derived from `id2label`, which always
     carries a default of two entries. Composite configs (such as multimodal
     checkpoints) declare their label space on the top-level config, so reading
-    ``num_labels`` from ``get_text_config()`` silently returns that default and
+    `num_labels` from `get_text_config()` silently returns that default and
     builds a score head of the wrong size.
 
     Prefer the top-level config whenever it declares a label space of its own,
-    mirroring the ``classifier_from_token`` / ``method`` lookups in
-    ``as_seq_cls_model``.
+    mirroring the `classifier_from_token` / `method` lookups in
+    `as_seq_cls_model`.
     """
     if text_config is hf_config:
         return hf_config.num_labels
@@ -454,7 +454,7 @@ def _get_language_model_for_seq_cls(model: nn.Module) -> nn.Module:
             if isinstance(candidate, nn.Module) and candidate is not model and hasattr(candidate, "model"):
                 return candidate
 
-    for name, child in model.named_children():
+    for _, child in model.named_children():
         child_name = type(child).__name__
         if ("ForCausalLM" in child_name or "LMHead" in child_name) and hasattr(child, "model"):
             return child

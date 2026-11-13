@@ -38,11 +38,11 @@ def check_machete_supports_shape(in_features: int, out_features: int) -> tuple[b
     if in_features % MACHETE_PREPACKED_BLOCK_SHAPE[0] != 0:
         return (
             False,
-            f"Input features size must be divisible by {MACHETE_PREPACKED_BLOCK_SHAPE[0]}",
+            (f"Input features size must be divisible by {MACHETE_PREPACKED_BLOCK_SHAPE[0]}"),
         )
     if out_features % MACHETE_PREPACKED_BLOCK_SHAPE[1] != 0:
         return (
             False,
-            f"Output features size must be divisible by {MACHETE_PREPACKED_BLOCK_SHAPE[1]}",
+            (f"Output features size must be divisible by {MACHETE_PREPACKED_BLOCK_SHAPE[1]}"),
         )
     return True, None

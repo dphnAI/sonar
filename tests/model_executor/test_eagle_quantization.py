@@ -133,7 +133,6 @@ def test_eagle3_lm_head_receives_quant_config():
     mock_sonar_config = Mock()
     mock_sonar_config.speculative_config.draft_model_config.hf_config = mock_hf_config
     mock_sonar_config.model_config.get_num_layers.return_value = 32
-    mock_sonar_config.speculative_config.parallel_drafting = False
 
     with (
         patch("sonar.model_executor.models.llama_eagle3.LlamaModel") as MockModel,
