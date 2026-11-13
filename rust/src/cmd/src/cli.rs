@@ -27,7 +27,7 @@ use serde_json::Value;
 use serde_with::{DefaultOnNull, OneOrMany, serde_as};
 use sonar_chat::GenerationConfigMode;
 use sonar_chat::ToolStrictLevel;
-use sonar_chat::multimodal::MmLimitPerPrompt;
+use sonar_chat::multimodal::{MediaAccess, MmLimitPerPrompt};
 use sonar_engine_core_client::TransportMode;
 use sonar_engine_core_client::protocol::dtype::ModelDtype;
 use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
@@ -513,6 +513,20 @@ pub struct SharedRuntimeArgs {
     #[arg(long, value_parser = parse_json::<MmLimitPerPrompt>, value_name = "JSON", default_value = "{}")]
     #[serde(default)]
     pub limit_mm_per_prompt: MmLimitPerPrompt,
+
+    /// If set, only media URLs whose host is one of these names can be used
+    /// for multi-modal inputs, on every redirect hop too. Media is never
+    /// fetched from a host that names or resolves to a non-public address.
+    #[arg(long, num_args = 1.., value_name = "DOMAIN")]
+    #[serde(default)]
+    pub allowed_media_domains: Option<Vec<String>>,
+
+    /// Allowing API requests to read local images or videos from directories
+    /// specified by the server file system. This is a security risk. Should
+    /// only be enabled in trusted environments.
+    #[arg(long, value_name = "DIR")]
+    #[serde(default)]
+    pub allowed_local_media_path: Option<String>,
 
     /// LoRA adapters to load before serving, each as `name=path` or a JSON
     /// object: `{"name": "name", "path": "lora_path", "base_model_name": "id"}`.
@@ -1013,6 +1027,17 @@ impl SharedRuntimeArgs {
         })
     }
 
+    /// Where request media may be loaded from. Like Python, an empty
+    /// `--allowed-local-media-path` allows no local files.
+    fn media_access(&self) -> MediaAccess {
+        MediaAccess {
+            allowed_domains: self.allowed_media_domains.clone(),
+            allowed_local_media_path: (self.allowed_local_media_path.as_deref())
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from),
+        }
+    }
+
     /// Apply fallback logic for configuration from env variables, using
     /// `lookup` to read the environment.
     fn apply_env_fallbacks(
@@ -1081,6 +1106,7 @@ impl SharedRuntimeArgs {
         let api_server_options = self.api_server_options();
         let fingerprint_mode = self.fingerprint_mode_config();
         let cors = self.cors_config();
+        let media_access = self.media_access();
         let access_log = self.access_log_config();
         let tls = self.ssl.tls_config();
         let profiler = self.profiler();
@@ -1128,6 +1154,7 @@ impl SharedRuntimeArgs {
             trust_request_chat_template: self.trust_request_chat_template,
             exclude_tools_when_tool_choice_none: self.exclude_tools_when_tool_choice_none,
             limit_mm_per_prompt: self.limit_mm_per_prompt,
+            media_access,
             lora_modules: self.lora_modules,
             chat_template_content_format: self.chat_template_content_format,
             max_logprobs: self.max_logprobs,
@@ -1174,6 +1201,7 @@ impl SharedRuntimeArgs {
         let api_server_options = self.api_server_options();
         let fingerprint_mode = self.fingerprint_mode_config();
         let cors = self.cors_config();
+        let media_access = self.media_access();
         let access_log = self.access_log_config();
         let tls = self.ssl.tls_config();
         let profiler = self.profiler();
@@ -1220,6 +1248,7 @@ impl SharedRuntimeArgs {
             trust_request_chat_template: self.trust_request_chat_template,
             exclude_tools_when_tool_choice_none: self.exclude_tools_when_tool_choice_none,
             limit_mm_per_prompt: self.limit_mm_per_prompt,
+            media_access,
             lora_modules: self.lora_modules,
             chat_template_content_format: self.chat_template_content_format,
             max_logprobs: self.max_logprobs,

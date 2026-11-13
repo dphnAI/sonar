@@ -342,6 +342,7 @@ fn multimodal_backend_with_limits(
         },
         Arc::new(TestTokenizer::new().with_regular_token("<|image_pad|>", QWEN_IMAGE_TOKEN_ID)),
         limit_mm_per_prompt,
+        &Default::default(),
     )
     .expect("load multimodal info")
     .expect("qwen multimodal info is registered");

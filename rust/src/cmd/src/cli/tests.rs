@@ -287,6 +287,8 @@ fn serve_args_forward_python_flags_with_separator() {
                         trust_request_chat_template: false,
                         exclude_tools_when_tool_choice_none: false,
                         limit_mm_per_prompt: {},
+                        allowed_media_domains: None,
+                        allowed_local_media_path: None,
                         lora_modules: [],
                         chat_template_content_format: Auto,
                         return_tokens_as_token_ids: false,
@@ -2297,6 +2299,8 @@ fn frontend_args_accept_json() {
                         trust_request_chat_template: false,
                         exclude_tools_when_tool_choice_none: false,
                         limit_mm_per_prompt: {},
+                        allowed_media_domains: None,
+                        allowed_local_media_path: None,
                         lora_modules: [],
                         chat_template_content_format: Auto,
                         return_tokens_as_token_ids: false,
@@ -2983,6 +2987,88 @@ fn unsupported_args_fail_startup() {
     }
 }
 
+/// Build the frontend config from `sonar-rs serve` flags.
+fn serve_config(flags: &[&str]) -> Config {
+    let cli =
+        Cli::try_parse_from(["sonar-rs", "serve", "Qwen/Qwen3-0.6B"].iter().chain(flags)).unwrap();
+    let Command::Serve(args) = cli.command else {
+        panic!("expected serve args");
+    };
+    args.to_frontend_config("tcp://127.0.0.1:62100".to_string(), &topology(&args))
+}
+
+/// Build the frontend config from the JSON args the Python launcher sends.
+fn frontend_json_config(args_json: serde_json::Value) -> Config {
+    let cli = Cli::try_parse_from([
+        "sonar-rs",
+        "frontend",
+        "--listen-fd",
+        "3",
+        "--input-listener-fd",
+        "999999",
+        "--output-listener-fd",
+        "999998",
+        "--args-json",
+        &args_json.to_string(),
+    ])
+    .unwrap();
+    let Command::Frontend(args) = cli.command else {
+        panic!("expected frontend args");
+    };
+    args.into_config()
+}
+
+#[test]
+fn media_access_args_reach_frontend_config() {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    let expected = sonar_chat::multimodal::MediaAccess {
+        allowed_domains: Some(vec!["a.example".to_string(), "b.example".to_string()]),
+        allowed_local_media_path: Some(dir.into()),
+    };
+
+    // Python's argparse takes the domains as `nargs="+"`.
+    let config = serve_config(&[
+        "--allowed-media-domains",
+        "a.example",
+        "b.example",
+        "--allowed-local-media-path",
+        dir,
+    ]);
+    assert_eq!(config.media_access, expected);
+    config.validate().unwrap();
+
+    // The Python launcher sends the parsed list and the path as JSON.
+    let config = frontend_json_config(serde_json::json!({
+        "model_tag": "Qwen/Qwen3-0.6B",
+        "allowed_media_domains": ["a.example", "b.example"],
+        "allowed_local_media_path": dir,
+    }));
+    assert_eq!(config.media_access, expected);
+    config.validate().unwrap();
+
+    // Like Python, an empty path allows no local files.
+    let config = serve_config(&["--allowed-local-media-path", ""]);
+    assert_eq!(config.media_access, Default::default());
+}
+
+#[test]
+fn allowed_local_media_path_must_be_an_existing_directory() {
+    let missing = concat!(env!("CARGO_MANIFEST_DIR"), "/missing-media-dir");
+    let file = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+    for (path, reason) in [(missing, "does not exist"), (file, "must be a directory")] {
+        let expected = format!("Invalid `--allowed-local-media-path`: The path {path} {reason}.");
+
+        let error = serve_config(&["--allowed-local-media-path", path]).validate().unwrap_err();
+        assert_eq!(error.to_string(), expected);
+
+        let config = frontend_json_config(serde_json::json!({
+            "model_tag": "Qwen/Qwen3-0.6B",
+            "allowed_local_media_path": path,
+        }));
+        assert_eq!(config.validate().unwrap_err().to_string(), expected);
+    }
+}
+
 #[test]
 fn frontend_args_json_rejects_malformed_json() {
     let error = Cli::try_parse_from([
@@ -3263,6 +3349,8 @@ fn serve_args_accept_handshake_aliases() {
                         trust_request_chat_template: false,
                         exclude_tools_when_tool_choice_none: false,
                         limit_mm_per_prompt: {},
+                        allowed_media_domains: None,
+                        allowed_local_media_path: None,
                         lora_modules: [],
                         chat_template_content_format: Auto,
                         return_tokens_as_token_ids: false,
@@ -3568,6 +3656,10 @@ fn serve_frontend_config_uses_dp_address_as_advertised_host() {
             trust_request_chat_template: false,
             exclude_tools_when_tool_choice_none: false,
             limit_mm_per_prompt: {},
+            media_access: MediaAccess {
+                allowed_domains: None,
+                allowed_local_media_path: None,
+            },
             lora_modules: [],
             chat_template_content_format: Auto,
             max_logprobs: None,
@@ -3702,6 +3794,10 @@ fn serve_frontend_config_keeps_tcp_transport_for_non_local_only_topology() {
             trust_request_chat_template: false,
             exclude_tools_when_tool_choice_none: false,
             limit_mm_per_prompt: {},
+            media_access: MediaAccess {
+                allowed_domains: None,
+                allowed_local_media_path: None,
+            },
             lora_modules: [],
             chat_template_content_format: Auto,
             max_logprobs: None,
@@ -3955,6 +4051,10 @@ fn frontend_config_uses_external_coordinator_when_coordinator_address_is_present
             trust_request_chat_template: false,
             exclude_tools_when_tool_choice_none: false,
             limit_mm_per_prompt: {},
+            media_access: MediaAccess {
+                allowed_domains: None,
+                allowed_local_media_path: None,
+            },
             lora_modules: [],
             chat_template_content_format: Auto,
             max_logprobs: None,

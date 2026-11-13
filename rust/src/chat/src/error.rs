@@ -50,6 +50,9 @@ pub enum Error {
     MmLimitExceeded { modality: String, limit: usize },
     #[error("invalid inline multimodal features: {message}")]
     InvalidPreprocessedMultimodal { message: String },
+    /// A `file://` media URL the server refuses or cannot read.
+    #[error("{0}")]
+    InvalidLocalMedia(String),
     #[error("multimodal preprocessing error: {0}")]
     Multimodal(#[message] String),
     #[error("{kind} parsing is not available for model `{model_id}`")]
@@ -145,6 +148,7 @@ impl Error {
             | Self::UnsupportedContentPart(_)
             | Self::UnsupportedModality { .. }
             | Self::InvalidPreprocessedMultimodal { .. }
+            | Self::InvalidLocalMedia(_)
             | Self::MmLimitExceeded { .. } => true,
 
             _ => false,

@@ -13,7 +13,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use itertools::{Either, izip};
@@ -42,6 +42,7 @@ mod expand;
 mod image;
 mod input;
 mod item;
+mod local;
 mod models;
 mod preprocessed;
 mod tensor;
@@ -65,6 +66,9 @@ pub struct MultimodalModelInfo {
     media_connector: Arc<MediaConnector>,
     /// Maximum number of input items allowed per prompt for each modality.
     limit_mm_per_prompt: MmLimitPerPrompt,
+    /// Canonical `--allowed-local-media-path`, or `None` to refuse `file://`
+    /// media.
+    local_media_root: Option<Arc<Path>>,
 }
 
 /// Per-modality item-count limits configured by `--limit-mm-per-prompt`.
@@ -105,6 +109,67 @@ impl MmLimitSpec {
         match self {
             Self::Count(count) => Some(*count),
             Self::Options { count, .. } => *count,
+        }
+    }
+}
+
+/// Where request media may be loaded from, set by `--allowed-media-domains`
+/// and `--allowed-local-media-path`.
+///
+/// Remote media is also refused when its host names or resolves to a
+/// non-public address; this is checked on every redirect hop.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct MediaAccess {
+    /// Host names remote media may be fetched from. `None` or an empty list
+    /// allows any host.
+    pub allowed_domains: Option<Vec<String>>,
+    /// Directory that `file://` media must resolve under. `None` refuses
+    /// local files.
+    pub allowed_local_media_path: Option<PathBuf>,
+}
+
+impl MediaAccess {
+    /// Check that `allowed_local_media_path` names an existing directory, as
+    /// Python does at startup.
+    pub fn validate(&self) -> std::result::Result<(), String> {
+        let Some(path) = &self.allowed_local_media_path else {
+            return Ok(());
+        };
+        let shown = path.display();
+        match fs::metadata(path) {
+            Ok(metadata) if metadata.is_dir() => Ok(()),
+            Ok(_) => Err(format!(
+                "Invalid `--allowed-local-media-path`: The path {shown} must be a directory."
+            )),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(format!(
+                "Invalid `--allowed-local-media-path`: The path {shown} does not exist."
+            )),
+            Err(error) => Err(format!(
+                "Invalid `--allowed-local-media-path`: The path {shown} cannot be read: {}",
+                error.as_report()
+            )),
+        }
+    }
+
+    /// The local media directory with symlinks and `..` resolved, the root
+    /// that `file://` media is confined to.
+    fn local_media_root(&self) -> Result<Option<Arc<Path>>> {
+        let Some(path) = &self.allowed_local_media_path else {
+            return Ok(None);
+        };
+        let root = fs::canonicalize(path).map_err(|error| {
+            let (path, error) = (path.display(), error.as_report());
+            multimodal!("invalid `--allowed-local-media-path` {path}: {error}")
+        })?;
+        Ok(Some(Arc::from(root)))
+    }
+
+    /// The connector checks remote hosts; `file://` media never reaches it
+    /// (see `local`).
+    fn connector_config(&self) -> MediaConnectorConfig {
+        MediaConnectorConfig {
+            allowed_domains: self.allowed_domains.clone(),
+            ..MediaConnectorConfig::default()
         }
     }
 }
@@ -389,6 +454,7 @@ impl MultimodalModelInfo {
         files: MultimodalConfigFiles<'_>,
         tokenizer: DynTokenizer,
         limit_mm_per_prompt: MmLimitPerPrompt,
+        media_access: &MediaAccess,
     ) -> Result<Option<Self>> {
         let config = match files.config {
             Some(path) => {
@@ -435,6 +501,7 @@ impl MultimodalModelInfo {
             video_preprocessor_config,
             audio_preprocessor_config,
             limit_mm_per_prompt,
+            media_access,
         )
     }
 
@@ -446,6 +513,7 @@ impl MultimodalModelInfo {
         video_preprocessor_config: PreProcessorConfig,
         audio_preprocessor_config: PreProcessorConfig,
         limit_mm_per_prompt: MmLimitPerPrompt,
+        media_access: &MediaAccess,
     ) -> Result<Option<Self>> {
         let (image, video) =
             Self::resolve_vision_lanes(&context, preprocessor_config, video_preprocessor_config)?;
@@ -465,8 +533,9 @@ impl MultimodalModelInfo {
             // and DNS resolver). llm-multimodal enables no reqwest TLS
             // backend; this workspace's `native-tls` feature provides it.
             reqwest_0_13::Client::builder(),
-            MediaConnectorConfig::default(),
+            media_access.connector_config(),
         )?);
+        let local_media_root = media_access.local_media_root()?;
 
         let placeholder_token_ids = [
             image.as_ref().map(|support| support.placeholder.marker_token_ids.as_slice()),
@@ -487,6 +556,7 @@ impl MultimodalModelInfo {
             audio,
             media_connector,
             limit_mm_per_prompt,
+            local_media_root,
         }))
     }
 
@@ -986,6 +1056,7 @@ impl MultimodalModelInfo {
                 &mut part,
                 video_sampling_policy.map(|(sampling, _)| sampling),
             )?;
+            local::inline_file_url(&mut part, self.local_media_root.as_ref()).await?;
             tracker.push_part(part)?;
         }
 
@@ -1145,6 +1216,7 @@ mod tests {
         config: serde_json::Value,
         tokenizer: TestTokenizer,
         limit_mm_per_prompt: MmLimitPerPrompt,
+        media_access: &MediaAccess,
     ) -> MultimodalModelInfo {
         let context = MultimodalModelContext {
             model_id: format!("{model_type}-test"),
@@ -1159,6 +1231,7 @@ mod tests {
             PreProcessorConfig::default(),
             PreProcessorConfig::default(),
             limit_mm_per_prompt,
+            media_access,
         )
         .unwrap()
         .unwrap_or_else(|| panic!("{model_type} multimodal support should resolve"))
@@ -1169,7 +1242,13 @@ mod tests {
         config: serde_json::Value,
         tokenizer: TestTokenizer,
     ) -> MultimodalModelInfo {
-        test_info_with_limits(model_type, config, tokenizer, HashMap::new())
+        test_info_with_limits(
+            model_type,
+            config,
+            tokenizer,
+            HashMap::new(),
+            &MediaAccess::default(),
+        )
     }
 
     fn llama4_info() -> MultimodalModelInfo {
@@ -1226,6 +1305,7 @@ mod tests {
             },
             Arc::new(qwen3_vl_tokenizer()),
             Default::default(),
+            &MediaAccess::default(),
         )
         .unwrap()
         .unwrap();
@@ -1292,6 +1372,7 @@ mod tests {
             video_config,
             PreProcessorConfig::default(),
             HashMap::new(),
+            &MediaAccess::default(),
         )
         .unwrap()
         .expect("GLM-5.3-Flash multimodal support")
@@ -1458,6 +1539,7 @@ mod tests {
             PreProcessorConfig::default(),
             PreProcessorConfig::default(),
             HashMap::new(),
+            &MediaAccess::default(),
         )
         .unwrap()
         .expect("Nemotron-H Omni multimodal support")
@@ -1671,6 +1753,7 @@ mod tests {
             },
             Arc::new(muse_spark_tokenizer()),
             HashMap::new(),
+            &MediaAccess::default(),
         )
         .unwrap()
         .unwrap();
@@ -1799,6 +1882,7 @@ mod tests {
             PreProcessorConfig::default(),
             PreProcessorConfig::default(),
             HashMap::new(),
+            &MediaAccess::default(),
         )
         .expect("resolution should not error");
 
@@ -1973,7 +2057,84 @@ mod tests {
             qwen3_vl_config(),
             qwen3_vl_tokenizer(),
             limit_mm_per_prompt,
+            &MediaAccess::default(),
         )
+    }
+
+    fn qwen3_vl_info_with_media_access(media_access: MediaAccess) -> MultimodalModelInfo {
+        test_info_with_limits(
+            "qwen3_vl",
+            qwen3_vl_config(),
+            qwen3_vl_tokenizer(),
+            HashMap::new(),
+            &media_access,
+        )
+    }
+
+    async fn prepare_image_url(info: &MultimodalModelInfo, url: String) -> Result<MmFeatures> {
+        let media = MediaContentPart::ImageUrl {
+            url,
+            detail: None,
+            uuid: None,
+            max_long_side_pixel: None,
+        };
+        let mut token_ids = vec![QWEN3_IMAGE_PAD_ID];
+        info.prepare_multimodal(vec![media], &mut token_ids, ModelDtype::Float32, None)
+            .await
+    }
+
+    /// The allow-list is checked by name before any lookup or connection, so
+    /// neither case needs the network.
+    #[tokio::test]
+    async fn allowed_media_domains_refuse_other_hosts() {
+        let info = qwen3_vl_info_with_media_access(MediaAccess {
+            allowed_domains: Some(vec![
+                "images.example.com".to_string(),
+                "127.0.0.1".to_string(),
+            ]),
+            allowed_local_media_path: None,
+        });
+
+        let error = prepare_image_url(&info, "https://evil.example/a.png".to_string())
+            .await
+            .unwrap_err()
+            .to_report_string();
+        assert!(
+            error.contains("media domain 'evil.example' is not in the allow list"),
+            "{error}"
+        );
+
+        // An allowed host passes the name check and reaches the address
+        // policy, which refuses loopback.
+        let error = prepare_image_url(&info, "http://127.0.0.1/a.png".to_string())
+            .await
+            .unwrap_err()
+            .to_report_string();
+        assert!(!error.contains("allow list"), "{error}");
+        assert!(error.contains("media host '127.0.0.1'"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn allowed_local_media_path_serves_file_urls_under_it() {
+        use base64::Engine as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("image.png");
+        let png = base64::engine::general_purpose::STANDARD
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+            .unwrap();
+        std::fs::write(&path, png).unwrap();
+        let url = url::Url::from_file_path(&path).unwrap().to_string();
+
+        let info = qwen3_vl_info_with_media_access(MediaAccess {
+            allowed_domains: None,
+            allowed_local_media_path: Some(dir.path().to_path_buf()),
+        });
+        let features = prepare_image_url(&info, url.clone()).await.unwrap();
+        assert_eq!(features.len(), 1);
+
+        let error = prepare_image_url(&qwen3_vl_info(), url).await.unwrap_err();
+        assert!(error.is_request_validation_error(), "{error:?}");
     }
 
     #[test]
