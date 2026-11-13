@@ -217,9 +217,49 @@ GLM's FlashInfer sparse attention backend supports PCP or DCP separately,
 not both together.
 
 For cost-aware eviction, add `--prefix-cache-eviction gds` and
-`--prefill-cost-coefficients D E`, fitted to prefill timings. `1 0` gives a
-linear token-count cost model. `--prefix-cache-leaf-last` prefers retaining
+`--prefill-cost-coefficients D E`. `1 0` gives a linear token-count cost model
+when no calibration is available. `--prefix-cache-leaf-last` prefers retaining
 each session's newest checkpoint.
+
+#### Calibrate the cost coefficients
+
+`sonar calibrate flashstates` measures the coefficients for a model, GPU
+layout and workload. Pass the serve command after `--`:
+
+```bash
+sonar calibrate flashstates -- nvidia/GLM-5.3-Flash-NVFP4 \
+  --tensor-parallel-size 2 --enable-prefix-caching \
+  --mamba-frontier-checkpoint --mamba-prefill-export \
+  --prefix-cache-eviction gds --prefix-cache-leaf-last
+```
+
+The command starts and stops `sonar serve` itself, one server at a time, and
+sets `--host`, `--port` and `--prefill-cost-coefficients`. It runs in two
+stages:
+
+1. It times uncached prefills from 8,192 tokens to the workload's long prompts
+   and fits `T(L) = C + D·L + E·L²/200000` to the median time at each length.
+2. Only the ratio `E/D` changes eviction, so it then replays a multi-turn
+   workload under cache pressure with candidate ratios, starting a fresh
+   server for each. Each trial warms the cache, then measures output
+   throughput and p90 TTFT.
+
+The command recommends the measured best ratio when it beats the fitted ratio
+beyond measurement noise, and the fitted ratio otherwise. It writes
+`report.md`, `result.json` and per-trial server logs to the output directory.
+
+The default workload replays the public coding-agent traces
+`semianalysisai/cc-traces-weka-062126` (about 1.9 GB, downloaded once). Pass
+`--workload` with a directory or `.jsonl` file of Weka-format traces to replay
+your own traffic, or `synthetic` to run without a download. By default the
+session count is set so that session contexts total 1.5 times the KV cache
+capacity. A workload without cache pressure cannot distinguish the ratios, and
+the report says so.
+
+`--effort quick|standard|thorough` sets the trial count and length. A
+standard run makes six trials of 10 minutes of warmup and 20 minutes of
+measurement, plus server startup each time. Press Ctrl-C to stop; continue
+with `sonar calibrate flashstates --resume DIR`.
 
 ## Quantize model weights
 

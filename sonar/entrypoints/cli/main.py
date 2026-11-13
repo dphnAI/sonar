@@ -22,6 +22,7 @@ def main():
         return
 
     import sonar.entrypoints.cli.benchmark.main
+    import sonar.entrypoints.cli.calibrate
     import sonar.entrypoints.cli.collect_env
     import sonar.entrypoints.cli.download_kernels
     import sonar.entrypoints.cli.launch
@@ -36,6 +37,7 @@ def main():
     from sonar.utils.argparse_utils import FlexibleArgumentParser
 
     CMD_MODULES = [
+        sonar.entrypoints.cli.calibrate,
         sonar.entrypoints.cli.openai,
         sonar.entrypoints.cli.serve,
         sonar.entrypoints.cli.run,
@@ -90,7 +92,10 @@ def main():
         for cmd in new_cmds:
             cmd.subparser_init(subparsers).set_defaults(dispatch_function=cmd.cmd)
             cmds[cmd.name] = cmd
-    args = parser.parse_args()
+    argv, serve_args = sonar.entrypoints.cli.calibrate.split_passthrough(sys.argv[1:])
+    args = parser.parse_args(argv)
+    if serve_args is not None:
+        args.serve_args = serve_args
     if args.subparser in cmds:
         cmd = cmds[args.subparser]
         configure_logging_from_args(args)
