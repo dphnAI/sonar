@@ -45,7 +45,7 @@ from sonar.forward_context import ForwardContext
 from sonar.logger import init_logger
 from sonar.v1.attention.backend import AttentionMetadata
 from sonar.v1.core.block_pool import BlockPool
-from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
 from sonar.v1.core.sched.output import SchedulerOutput
 from sonar.v1.kv_cache_interface import KVCacheConfig
 from sonar.v1.outputs import KVConnectorOutput
@@ -166,7 +166,9 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
             if isinstance(spec, MambaSpec) and spec.mamba_cache_mode != "align":
                 unsupported.append(f"group {group_id}: mamba_cache_mode={spec.mamba_cache_mode!r} != 'align'")
         pcp = sonar_config.parallel_config.prefill_context_parallel_size
-        if len(store_group_ids) > 1 and pcp > 1:
+        transfer = sonar_config.kv_transfer_config
+        frontier = transfer is not None and transfer.kv_connector_extra_config.get("frontier_write_through", False)
+        if len(store_group_ids) > 1 and pcp > 1 and not frontier:
             unsupported.append(f"PCP > 1 (pcp={pcp}) with hybrid attention")
         if unsupported:
             raise ValueError("MooncakeStoreConnector does not support: " + "; ".join(unsupported))
@@ -186,11 +188,20 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         assert kv_cache_config is not None, "kv_cache_config is required"
         self.kv_role = sonar_config.kv_transfer_config.kv_role
         extra_config = sonar_config.kv_transfer_config.kv_connector_extra_config
-        if extra_config.get("frontier_write_through") or extra_config.get("unit_policy_url"):
-            raise ValueError(
-                "FlashStates host-tier options require its custom Mooncake store integration. "
-                "Sonar currently supports GPU-resident FlashStates checkpoints."
-            )
+        if extra_config.get("unit_policy_url"):
+            raise ValueError("unit_policy_url requires a custom Mooncake policy provider and is not supported.")
+        if extra_config.get("frontier_write_through"):
+            if not sonar_config.cache_config.mamba_frontier_checkpoint:
+                raise ValueError("frontier_write_through requires mamba_frontier_checkpoint")
+            if not extra_config.get("load_async", True):
+                raise ValueError("frontier_write_through requires load_async")
+            if not extra_config.get("lookup_async", True):
+                raise ValueError("frontier_write_through requires lookup_async")
+            parallel = sonar_config.parallel_config
+            if parallel.distributed_executor_backend == "external_launcher" and parallel.data_parallel_size > 1:
+                raise ValueError("frontier_write_through does not support external_launcher with data parallelism")
+            if extra_config.get("save_decode_cache"):
+                raise ValueError("frontier_write_through replaces save_decode_cache; do not enable both")
         save_decode_cache = extra_config.get("save_decode_cache", False)
         # Capacity-only: contributes its segment to the store pool but transfers
         # no KV, so the KV-cache-shape invariants below cannot be reached.
@@ -251,6 +262,18 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         assert self.connector_scheduler is not None
         return self.connector_scheduler.update_state_after_alloc(request, blocks, num_external_tokens)
 
+    def bind_kv_cache_manager(self, kv_cache_manager: KVCacheManager) -> None:
+        super().bind_kv_cache_manager(kv_cache_manager)
+        assert self.connector_scheduler is not None
+        self.connector_scheduler.kv_cache_manager = kv_cache_manager
+
+    def get_loaded_kv_cache_group_ids(self, request: Request) -> tuple[int, ...]:
+        assert self.connector_scheduler is not None
+        spec = self.connector_scheduler.load_specs.get(request.request_id)
+        if spec is not None and spec.frontier is not None:
+            return tuple(sorted({group for group, _, _ in spec.frontier.blocks}))
+        return super().get_loaded_kv_cache_group_ids(request)
+
     def bind_gpu_block_pool(self, gpu_block_pool: BlockPool) -> None:
         assert self.connector_scheduler is not None
         self.connector_scheduler.bind_gpu_block_pool(gpu_block_pool)
@@ -288,6 +311,7 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         # so a finishing request never has to defer freeing them.
         assert self.connector_scheduler is not None
         self.connector_scheduler.register_finished_lookahead_save(request, block_ids)
+        self.connector_scheduler.register_finished_frontier(request)
         return False, None
 
     def register_finished_partial_tail(

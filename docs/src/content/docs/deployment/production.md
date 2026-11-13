@@ -296,6 +296,65 @@ Set `cache_prefix` to a deployment-specific value when sharing a Store.
 Weight files and environment settings are not hashed, so change a custom
 prefix when changing weights under the same model path.
 
+Give each local engine a distinct `lookup_rpc_port` in `kv_connector_extra_config`.
+
+#### FlashStates checkpoints in Mooncake
+
+`frontier_write_through: true` stores a finished hybrid request's exact computed
+prefix, including a partial attention page, recurrent state and any required
+indexer ring. Enable `--mamba-frontier-checkpoint` and use `kv_both` with
+`kv_load_failure_policy: "recompute"`. Keep `load_async` and `lookup_async` enabled
+(the defaults), and leave `save_decode_cache` disabled.
+The model's FlashStates and context-parallel admission requirements still apply.
+`unit_policy_url` and `external_launcher` with data parallelism are not supported
+for host frontier checkpoints.
+
+On minimal Debian/Ubuntu images, install `libibverbs1`, `librdmacm1` and
+`ibverbs-providers` before loading the Mooncake wheel, including for TCP.
+Start the native master installed by `tools/install_kv_connectors.sh`:
+
+```bash
+mooncake_master --rpc_port=50051 --metrics_port=50052 \
+  --enable_http_metadata_server=true --http_metadata_server_port=50053
+```
+
+For a local TCP setup, save this Store configuration as `mooncake.json`.
+Each worker contributes the configured host segment.
+
+```json
+{
+  "master_server_address": "127.0.0.1:50051",
+  "metadata_server": "http://127.0.0.1:50053/metadata",
+  "protocol": "tcp",
+  "device_name": "",
+  "mode": "embedded",
+  "global_segment_size": "8GB",
+  "local_buffer_size": "64MB"
+}
+```
+
+Launch a supported hybrid model with:
+
+```bash
+MC_FORCE_TCP=1 MOONCAKE_CONFIG_PATH="$PWD/mooncake.json" \
+sonar serve "$MODEL" --enable-prefix-caching --mamba-cache-mode align \
+  --mamba-frontier-checkpoint \
+  --kv-transfer-config '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"frontier_write_through":true,"cache_prefix":"weights-and-build-version"}}'
+```
+
+Use an immutable weights/build identifier for `cache_prefix`. Frontiers require
+matching parallel geometry and rank-local cache layouts. Engines must use the
+same prefix-hash algorithm. xxHash also needs a shared `PYTHONHASHSEED`.
+Missing or failed checkpoint loads recompute the request.
+
+Each host checkpoint contains its full attention prefix, so size the Store for
+the retained prefixes rather than just the recurrent states.
+
+To reset GPU prefix caches while retaining host checkpoints, let pending saves
+drain, then call `LLM.reset_prefix_cache(reset_connector=False)` or
+`POST /reset_prefix_cache?reset_external=false`. An external reset clears
+Mooncake too.
+
 ### CPU offload huge pages
 
 `SimpleCPUOffloadConnector` accepts `cpu_hugepage_block_size: "2MB"` or `"1GB"`
