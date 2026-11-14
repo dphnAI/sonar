@@ -81,6 +81,12 @@ pub struct ResolvedModelFiles {
     pub processor_config_path: Option<PathBuf>,
     pub chat_template_path: Option<PathBuf>,
     pub config_path: Option<PathBuf>,
+    /// `decision_config.json`, which makes a Qwen3.5 backbone a Decision 3.0
+    /// model.
+    pub decision_config_path: Option<PathBuf>,
+    /// `joint_head_config.json`, which makes a Qwen3.5 or Qwen3-Omni
+    /// checkpoint a Clef joint schema model.
+    pub joint_head_config_path: Option<PathBuf>,
     /// Keep a patched config alive across clones and backend ownership.
     config_temp_path: Option<Arc<tempfile::TempPath>>,
 }
@@ -179,6 +185,8 @@ impl ResolvedModelFiles {
             processor_config_path: model_files.get("processor_config.json").await?,
             chat_template_path,
             config_path,
+            decision_config_path: config_files.get("decision_config.json").await?,
+            joint_head_config_path: config_files.get("joint_head_config.json").await?,
             config_temp_path: None,
         })
     }

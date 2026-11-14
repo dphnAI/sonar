@@ -31,7 +31,7 @@ pub use output::{
     CollectedGenerateOutput, FinishReason, GenerateOutput, GenerateOutputStream,
     GenerateOutputStreamExt, GeneratePromptInfo, PromptCacheUsage, TokenUsage,
 };
-pub use request::GenerateRequest;
+pub use request::{EncodeRequest, GenerateRequest};
 pub use request_metrics::{RequestTimestamps, current_unix_timestamp_secs};
 pub use sonar_engine_core_client::protocol::logprobs::{Logprobs, PositionLogprobs, TokenLogprob};
 pub use weight_versions::{WeightVersionSpan, WeightVersions};
@@ -107,6 +107,11 @@ pub trait Llm: Any + Send + Sync {
         request: GenerateRequest,
         n: NonZeroU32,
     ) -> Result<Vec<BoxGenerateOutputStream>>;
+
+    /// Submit one tokenized pooling request and stream its outputs; the
+    /// terminal output carries the pooler's output. Dropping the stream
+    /// before the terminal output aborts the request.
+    async fn encode(&self, request: EncodeRequest) -> Result<BoxGenerateOutputStream>;
 
     /// Abort in-flight requests by their external (user-supplied) request ids.
     /// An empty slice aborts every in-flight request.
@@ -280,6 +285,18 @@ impl EngineCoreLlm {
         Ok(streams)
     }
 
+    /// Submit one tokenized pooling request and return its output stream.
+    pub async fn encode(&self, req: EncodeRequest) -> Result<GenerateOutputStream> {
+        let prepared = req.prepare(self.randomize_request_id)?;
+        self.submit(
+            prepared.engine_request,
+            &prepared.prompt_token_ids,
+            None,
+            None,
+        )
+        .await
+    }
+
     /// Submit one prepared engine request and track it until its stream drops.
     async fn submit(
         &self,
@@ -376,6 +393,10 @@ impl Llm for EngineCoreLlm {
     ) -> Result<Vec<BoxGenerateOutputStream>> {
         let streams = EngineCoreLlm::generate_n(self, request, n).await?;
         Ok(streams.into_iter().map(|stream| stream.boxed()).collect())
+    }
+
+    async fn encode(&self, request: EncodeRequest) -> Result<BoxGenerateOutputStream> {
+        Ok(EngineCoreLlm::encode(self, request).await?.boxed())
     }
 
     async fn abort(&self, external_ids: &[String]) -> Result<()> {

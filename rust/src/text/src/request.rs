@@ -332,7 +332,7 @@ impl TextRequest {
 /// Whether a cache salt is safe to hand to downstream cache backends, which
 /// may use these characters as key separators or terminators. Mirrors Python's
 /// `validate_cache_salt`, which counts length in code points.
-fn is_valid_cache_salt(salt: &str) -> bool {
+pub fn is_valid_cache_salt(salt: &str) -> bool {
     const MAX_LEN: usize = 128;
     const FORBIDDEN: [char; 4] = ['@', '/', '\\', '\0'];
 

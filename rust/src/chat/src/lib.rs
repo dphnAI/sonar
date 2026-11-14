@@ -273,6 +273,22 @@ impl ChatRequestProcessor {
         Ok(text_request)
     }
 
+    /// Render one request's chat template without preparing its media, whose
+    /// placeholders stay as the template writes them.
+    pub async fn render_prompt(&self, mut request: ChatRequest) -> Result<Prompt> {
+        request.validate()?;
+        self.map_reasoning_effort(&mut request);
+        let renderer = self.backend.chat_renderer();
+        if request.chat_options.chat_template.is_some() && !renderer.renders_request_chat_template()
+        {
+            return Err(Error::UnsupportedRequestChatTemplate);
+        }
+        let rendered = tokio::task::spawn_blocking(move || renderer.render(&request))
+            .await
+            .map_err(|e| Error::ChatTemplate(format!("render task join error: {e}")))??;
+        Ok(rendered.prompt)
+    }
+
     /// Prepare one chat request without submitting it to an engine.
     ///
     /// The returned text request is already tokenized: the output processors

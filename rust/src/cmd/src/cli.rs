@@ -38,8 +38,8 @@ use sonar_server::{
     AccessLogConfig, ApiServerOptions, ChatTemplateContentFormatOption, Config, CoordinatorMode,
     CorsConfig, CustomHistogramBuckets, DEFAULT_KEEP_ALIVE_TIMEOUT, DEFAULT_LOG_STATS_INTERVAL,
     DEFAULT_MAX_N_SEQUENCES, DEFAULT_REQUEST_BODY_LIMIT_BYTES, FingerprintMode, HttpListenerMode,
-    LoraModulePath, OutputLogConfig, OutputLogging, ParserSelection, ReasoningEffort, RenderConfig,
-    RendererSelection,
+    LogprobsMode, LoraModulePath, OutputLogConfig, OutputLogging, ParserSelection, ReasoningEffort,
+    RenderConfig, RendererSelection,
 };
 use sonar_text::backend::hf::{HfOverrides, ModelFileSources};
 use sonar_tracing::{LogFormatter, LogLevel};
@@ -442,6 +442,17 @@ pub struct SharedRuntimeArgs {
     #[arg(long, value_parser = clap::value_parser!(i32).range(-1..), allow_negative_numbers = true)]
     #[serde(default)]
     pub max_logprobs: Option<i32>,
+    /// What the engine returns as logprobs: `raw_logprobs` (default),
+    /// `processed_logprobs`, `raw_logits` or `processed_logits`. Forwarded to
+    /// the engine; decisions need log probabilities.
+    #[arg(long, default_value_t)]
+    #[serde(default)]
+    pub logprobs_mode: LogprobsMode,
+    /// Configuration of discrete diffusion models as a JSON object. The Rust
+    /// frontend reads `canvas_length`; the engine reads every field.
+    #[arg(long, value_parser = parse_json::<DiffusionConfig>, value_name = "JSON")]
+    #[serde(default)]
+    pub diffusion_config: Option<DiffusionConfig>,
     /// The interval (or buffer size) for streaming in terms of token length.
     /// A smaller value (1) makes streaming smoother by sending each token
     /// immediately, while a larger value (e.g., 10) reduces host overhead and
@@ -1158,6 +1169,11 @@ impl SharedRuntimeArgs {
             lora_modules: self.lora_modules,
             chat_template_content_format: self.chat_template_content_format,
             max_logprobs: self.max_logprobs,
+            logprobs_mode: self.logprobs_mode,
+            diffusion_canvas_length: self
+                .diffusion_config
+                .as_ref()
+                .and_then(|config| config.canvas_length),
             stream_interval: self.stream_interval,
             api_server_options,
             fingerprint_mode,
@@ -1252,6 +1268,11 @@ impl SharedRuntimeArgs {
             lora_modules: self.lora_modules,
             chat_template_content_format: self.chat_template_content_format,
             max_logprobs: self.max_logprobs,
+            logprobs_mode: self.logprobs_mode,
+            diffusion_canvas_length: self
+                .diffusion_config
+                .as_ref()
+                .and_then(|config| config.canvas_length),
             stream_interval: self.stream_interval,
             api_server_options,
             fingerprint_mode,
@@ -1402,6 +1423,20 @@ pub struct StructuredOutputsConfig {
     pub backend: StructuredOutputBackend,
     /// Additional Python structured outputs config fields consumed by the
     /// engine layer.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, Value>,
+}
+
+/// Diffusion model configuration parsed from `--diffusion-config`.
+///
+/// Only `canvas_length` is read by the Rust frontend. All other fields are
+/// accepted but ignored; they are consumed by the Python engine layer.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct DiffusionConfig {
+    /// Length of the denoising canvas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas_length: Option<u32>,
+    /// Additional Python diffusion config fields consumed by the engine layer.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
 }
@@ -1658,6 +1693,19 @@ impl ServeArgs {
             managed_engine
                 .python_args
                 .extend(["--logging-config".to_string(), logging_config]);
+        }
+        // The engine owns these; the frontend reads them to serve decisions.
+        if self.runtime.logprobs_mode != LogprobsMode::default() {
+            managed_engine.python_args.extend([
+                "--logprobs-mode".to_string(),
+                self.runtime.logprobs_mode.to_string(),
+            ]);
+        }
+        if let Some(diffusion_config) = &self.runtime.diffusion_config {
+            managed_engine.python_args.extend([
+                "--diffusion-config".to_string(),
+                serde_json::to_string(diffusion_config).expect("JSON object serializes"),
+            ]);
         }
         managed_engine.into_config(
             self.runtime.model.id.clone(),

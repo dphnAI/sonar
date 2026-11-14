@@ -109,6 +109,76 @@ pub struct ApiServerOptions {
     pub max_n_sequences: i64,
 }
 
+/// What the engine returns as logprobs (`--logprobs-mode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogprobsMode {
+    RawLogits,
+    #[default]
+    RawLogprobs,
+    ProcessedLogits,
+    ProcessedLogprobs,
+}
+
+impl LogprobsMode {
+    const ALL: [Self; 4] = [
+        Self::RawLogits,
+        Self::RawLogprobs,
+        Self::ProcessedLogits,
+        Self::ProcessedLogprobs,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RawLogits => "raw_logits",
+            Self::RawLogprobs => "raw_logprobs",
+            Self::ProcessedLogits => "processed_logits",
+            Self::ProcessedLogprobs => "processed_logprobs",
+        }
+    }
+
+    /// Whether the engine returns log probabilities rather than logits.
+    pub fn returns_logprobs(self) -> bool {
+        matches!(self, Self::RawLogprobs | Self::ProcessedLogprobs)
+    }
+}
+
+impl fmt::Display for LogprobsMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for LogprobsMode {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::ALL.into_iter().find(|mode| mode.as_str() == value).ok_or_else(|| {
+            let modes: Vec<_> = Self::ALL.iter().map(|mode| mode.as_str()).collect();
+            format!("expected one of {}", modes.join(", "))
+        })
+    }
+}
+
+/// Engine and frontend settings that decide how `/v1/decisions` and
+/// `/v1/systemone` read the model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+pub struct DecisionsConfig {
+    /// What the engine returns as logprobs; reads need log probabilities.
+    pub logprobs_mode: LogprobsMode,
+    /// The served canvas of a diffusion model (`--diffusion-config`
+    /// `canvas_length`), over the model config's `canvas_length`.
+    pub diffusion_canvas_length: Option<u32>,
+    /// Whether the server sets `--chat-template`, which a trusted request's
+    /// `chat_template_kwargs.chat_template` does not replace.
+    pub server_chat_template: bool,
+    /// Whether the model serves as language-only and takes no media.
+    pub language_model_only: bool,
+    /// Whether requests may pass their own chat template
+    /// (`--trust-request-chat-template`).
+    pub trust_request_chat_template: bool,
+}
+
 /// Which generated outputs to log, like Python's `--enable-log-outputs` and
 /// `--enable-log-deltas`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
@@ -392,6 +462,10 @@ pub struct Config {
     /// Optional maximum number of top log probabilities accepted by the
     /// frontend. `None` delegates to the text layer default.
     pub max_logprobs: Option<i32>,
+    /// What the engine returns as logprobs (`--logprobs-mode`).
+    pub logprobs_mode: LogprobsMode,
+    /// The served canvas of a diffusion model, from `--diffusion-config`.
+    pub diffusion_canvas_length: Option<u32>,
     /// Minimum number of newly generated tokens batched into each streamed
     /// output after the first one. Requests can raise it with their own
     /// `stream_interval`.

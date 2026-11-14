@@ -8,6 +8,7 @@ use serde::Deserialize;
 use sonar_engine_core_client::protocol::kv_hints::KvHintsEnvelope;
 use sonar_engine_core_client::protocol::lora::LoraRequest;
 use sonar_engine_core_client::protocol::multimodal::MmFeatures;
+use sonar_engine_core_client::protocol::pooling::PoolingParams;
 use sonar_engine_core_client::protocol::request::{EngineCoreRequest, ReasoningParserKwargs};
 use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use uuid::Uuid;
@@ -132,6 +133,64 @@ impl GenerateRequest {
                 // Computed by the engine-core client, which knows the engine's
                 // prefix hash config.
                 block_hashes: None,
+            },
+        })
+    }
+}
+
+/// Tokenized pooling request accepted by [`crate::EngineCoreLlm`], the
+/// counterpart of Python `AsyncLLM.encode()`.
+///
+/// The engine runs the model's pooler over the prompt and returns its output
+/// on the request's only output, with no generated tokens.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EncodeRequest {
+    /// Unique ID of the request.
+    pub request_id: String,
+    /// Token IDs of the prompt.
+    pub prompt_token_ids: Vec<u32>,
+    /// Pooling parameters, with their defaults resolved like Python's
+    /// `PoolingParams.verify()` does.
+    pub pooling_params: PoolingParams,
+    /// Optional multimodal features already prepared by `sonar-chat`.
+    pub mm_features: Option<MmFeatures>,
+    /// Optional salt used to partition prefix-cache entries for this request.
+    pub cache_salt: Option<String>,
+    /// Request scheduling priority. Lower values are scheduled earlier.
+    pub priority: i32,
+    /// Optional LoRA adapter request applied to this request.
+    pub lora_request: Option<LoraRequest>,
+}
+
+impl EncodeRequest {
+    /// Validate and lower this request into the raw engine-core request format.
+    pub(crate) fn prepare(self, randomize_request_id: bool) -> Result<PreparedGenerateRequest> {
+        if self.prompt_token_ids.is_empty() {
+            return Err(Error::EmptyPromptTokenIds {
+                request_id: self.request_id,
+            });
+        }
+        let external_request_id = self.request_id;
+        let engine_request_id = if randomize_request_id {
+            let random_suffix = Uuid::new_v4().simple().to_string();
+            format!("{external_request_id}-{}", &random_suffix[..8])
+        } else {
+            external_request_id.clone()
+        };
+        Ok(PreparedGenerateRequest {
+            prompt_token_ids: self.prompt_token_ids.as_slice().into(),
+            engine_request: EngineCoreRequest {
+                request_id: engine_request_id,
+                prompt_token_ids: Some(self.prompt_token_ids.into()),
+                mm_features: self.mm_features,
+                sampling_params: None,
+                pooling_params: Some(self.pooling_params),
+                arrival_time: current_unix_timestamp_secs(),
+                lora_request: self.lora_request,
+                cache_salt: self.cache_salt,
+                priority: self.priority,
+                external_req_id: Some(external_request_id),
+                ..EngineCoreRequest::default()
             },
         })
     }

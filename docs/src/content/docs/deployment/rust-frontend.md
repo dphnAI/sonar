@@ -82,8 +82,18 @@ The current Rust router provides these public routes:
 | `/v1/models` | Served model list |
 | `/v1/completions` | OpenAI-compatible completions |
 | `/v1/chat/completions` | OpenAI-compatible chat completions |
+| `/v1/decisions` and `/v1/systemone` | Structured decisions |
 | `/tokenize` and `/detokenize` | Tokenizer operations |
 | `/inference/v1/generate` | Token-input and token-output generation |
+
+The decision routes serve the models that read labels by generation: Qwen3,
+Qwen3.5, Gemma 4, LFM2-VL and DiffusionGemma. They read the engine's
+`--logprobs-mode` and `--diffusion-config` like the Python frontend. The
+models that score options with a pooling head (D3, Clef-Flash and Clef-Omni)
+answer on `/v1/systemone` only, as in the Python frontend; D3 and Clef-Flash
+also read images. These inputs return 501: videos to D3 and Clef-Flash, any
+media to Clef-Omni, images to LFM2-VL, and images for models without a Rust
+image processor. Use the Python frontend for them.
 
 Runtime LoRA routes are available when
 `SONAR_ALLOW_RUNTIME_LORA_UPDATING` is enabled. Development and profiling

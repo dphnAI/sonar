@@ -83,6 +83,8 @@ pub struct CollectedGenerateOutput {
     pub weight_versions: Option<Vec<WeightVersionSpan>>,
     /// Routed-expert rows for the whole request.
     pub routed_experts: Option<WireNdArray>,
+    /// The pooler's output of a pooling request.
+    pub pooling_output: Option<WireNdArray>,
 }
 
 /// Prompt-scoped metadata emitted only once on the first [`GenerateOutput`] for
@@ -211,6 +213,8 @@ pub struct GenerateOutput {
     /// request finishes, so text decoding can drop the rows of tokens cut off
     /// by a stop string.
     pub routed_experts: AuxOutputRows,
+    /// The pooler's output, on the final output of a pooling request.
+    pub pooling_output: Option<Box<WireNdArray>>,
     /// Snapshot of engine lifecycle timestamps after this output.
     ///
     /// Every output carries a snapshot because text decoding may finish the
@@ -272,6 +276,9 @@ impl GenerateOutput {
         self.spec_decode_metrics = next.spec_decode_metrics;
         self.weight_versions.append(next.weight_versions);
         self.routed_experts.append(next.routed_experts);
+        if next.pooling_output.is_some() {
+            self.pooling_output = next.pooling_output;
+        }
         self.timestamps = next.timestamps;
     }
 }
@@ -304,6 +311,7 @@ impl GenerateOutput {
             spec_decode_metrics: None,
             weight_versions,
             routed_experts: AuxOutputRows::default(),
+            pooling_output: None,
             timestamps: RequestTimestamps::default(),
         }
     }
@@ -438,6 +446,7 @@ impl GenerateOutputStream {
             spec_decode_metrics: raw.spec_decode_metrics,
             weight_versions,
             routed_experts: AuxOutputRows::from_engine(raw.routed_experts),
+            pooling_output: raw.pooling_output,
             timestamps: self.request_metrics.timestamps(),
         };
 
@@ -552,6 +561,7 @@ impl<T: Stream<Item = Result<GenerateOutput>> + Send> T {
                         spec_decode_metrics: None,
                         weight_versions: None,
                         routed_experts: None,
+                        pooling_output: None,
                     });
                 }
 
@@ -568,6 +578,7 @@ impl<T: Stream<Item = Result<GenerateOutput>> + Send> T {
                     collected.spec_decode_metrics = output.spec_decode_metrics.map(|value| *value);
                     collected.weight_versions = weight_versions.spans();
                     collected.routed_experts = routed_experts.concat()?;
+                    collected.pooling_output = output.pooling_output.map(|value| *value);
                     if let Some(mask) = collected.sampling_mask.as_ref()
                         && mask.rows.len() != collected.token_ids.len()
                     {

@@ -16,7 +16,9 @@ use tokio::runtime::Runtime;
 use tokio::time::{Duration, Instant, sleep_until};
 use tracing::warn;
 
-use crate::config::{AccessLogConfig, ApiServerOptions, CorsConfig, LoraModulePath};
+use crate::config::{
+    AccessLogConfig, ApiServerOptions, CorsConfig, DecisionsConfig, LoraModulePath,
+};
 use crate::lora::{
     LoadLoraError, LoadedLora, LoraDisabledError, LoraManager, LoraModelResolution, UnloadLoraError,
 };
@@ -65,6 +67,10 @@ pub struct AppState {
     pub profiler: Option<String>,
     /// Public weight-receipt configuration; `None` leaves legacy serving unchanged.
     pub(crate) dphn_network_config: Option<crate::DphnNetworkConfig>,
+    /// Settings that decide how decisions read the model.
+    pub(crate) decisions_config: DecisionsConfig,
+    /// Whether and how the model answers decisions, resolved on first use.
+    pub(crate) decisions: tokio::sync::OnceCell<crate::routes::DecisionsAvailability>,
 }
 
 impl AppState {
@@ -96,6 +102,8 @@ impl AppState {
             request_runtime: OnceLock::new(),
             profiler: None,
             dphn_network_config: None,
+            decisions_config: DecisionsConfig::default(),
+            decisions: tokio::sync::OnceCell::new(),
         }
     }
 
@@ -137,6 +145,12 @@ impl AppState {
 
     pub fn with_dphn_network_config(mut self, config: Option<crate::DphnNetworkConfig>) -> Self {
         self.dphn_network_config = config;
+        self
+    }
+
+    /// Set how decisions read the model.
+    pub fn with_decisions_config(mut self, config: DecisionsConfig) -> Self {
+        self.decisions_config = config;
         self
     }
 

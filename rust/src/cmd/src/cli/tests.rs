@@ -10,7 +10,7 @@ use sonar_engine_core_client::protocol::dtype::ModelDtype;
 use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
 use sonar_engine_core_client::{CoordinatorMode as EngineCoreCoordinatorMode, TransportMode};
 use sonar_server::{
-    Config, FingerprintMode, GenerationConfigMode, HttpListenerMode, LoraModulePath,
+    Config, FingerprintMode, GenerationConfigMode, HttpListenerMode, LogprobsMode, LoraModulePath,
     OutputLogConfig, OutputLogging, ParserSelection, ReasoningEffort, RendererSelection,
 };
 use sonar_text::backend::hf::ModelSource;
@@ -278,6 +278,8 @@ fn serve_args_forward_python_flags_with_separator() {
                         renderer: Auto,
                         language_model_only: false,
                         max_logprobs: None,
+                        logprobs_mode: RawLogprobs,
+                        diffusion_config: None,
                         stream_interval: 1,
                         shutdown_timeout: 0,
                         http_timeout_keep_alive: None,
@@ -993,6 +995,63 @@ fn frontend_args_json_reads_python_structured_outputs_config() {
         };
         assert_eq!(args.into_config().structured_outputs_backend, expected);
     }
+}
+
+#[test]
+fn serve_args_read_and_forward_decision_engine_settings() {
+    let cli = Cli::try_parse_from([
+        "sonar-rs",
+        "serve",
+        "Qwen/Qwen3-0.6B",
+        "--logprobs-mode",
+        "processed_logprobs",
+        "--diffusion-config",
+        r#"{"canvas_length":64,"max_denoising_steps":8}"#,
+    ])
+    .unwrap();
+    let Command::Serve(args) = cli.command else {
+        panic!("expected serve args");
+    };
+    let frontend = args.to_frontend_config("tcp://127.0.0.1:0".into(), &topology(&args));
+    assert_eq!(frontend.logprobs_mode, LogprobsMode::ProcessedLogprobs);
+    assert_eq!(frontend.diffusion_canvas_length, Some(64));
+    let python_args = args.to_managed_engine_config(5555, &topology(&args), None).python_args;
+    let value = |flag: &str| {
+        let index = python_args.iter().position(|arg| arg == flag).expect(flag);
+        python_args[index + 1].clone()
+    };
+    assert_eq!(value("--logprobs-mode"), "processed_logprobs");
+    let forwarded: serde_json::Value = serde_json::from_str(&value("--diffusion-config")).unwrap();
+    assert_eq!(
+        forwarded,
+        serde_json::json!({"canvas_length": 64, "max_denoising_steps": 8})
+    );
+
+    // The Python supervisor passes them in the bootstrap JSON.
+    let args_json = serde_json::json!({
+        "model_tag": "Qwen/Qwen3-0.6B",
+        "logprobs_mode": "raw_logits",
+        "diffusion_config": {"canvas_length": 32},
+    });
+    let cli = Cli::try_parse_from([
+        "sonar-rs",
+        "frontend",
+        "--listen-fd",
+        "3",
+        "--input-listener-fd",
+        "999999",
+        "--output-listener-fd",
+        "999998",
+        "--args-json",
+        &args_json.to_string(),
+    ])
+    .unwrap();
+    let Command::Frontend(args) = cli.command else {
+        panic!("expected frontend args");
+    };
+    let config = args.into_config();
+    assert_eq!(config.logprobs_mode, LogprobsMode::RawLogits);
+    assert_eq!(config.diffusion_canvas_length, Some(32));
 }
 
 #[test]
@@ -2290,6 +2349,8 @@ fn frontend_args_accept_json() {
                         renderer: Auto,
                         language_model_only: false,
                         max_logprobs: None,
+                        logprobs_mode: RawLogprobs,
+                        diffusion_config: None,
                         stream_interval: 1,
                         shutdown_timeout: 0,
                         http_timeout_keep_alive: None,
@@ -3340,6 +3401,8 @@ fn serve_args_accept_handshake_aliases() {
                         renderer: Auto,
                         language_model_only: false,
                         max_logprobs: None,
+                        logprobs_mode: RawLogprobs,
+                        diffusion_config: None,
                         stream_interval: 1,
                         shutdown_timeout: 0,
                         http_timeout_keep_alive: None,
@@ -3663,6 +3726,8 @@ fn serve_frontend_config_uses_dp_address_as_advertised_host() {
             lora_modules: [],
             chat_template_content_format: Auto,
             max_logprobs: None,
+            logprobs_mode: RawLogprobs,
+            diffusion_canvas_length: None,
             stream_interval: 1,
             api_server_options: ApiServerOptions {
                 enable_log_requests: false,
@@ -3801,6 +3866,8 @@ fn serve_frontend_config_keeps_tcp_transport_for_non_local_only_topology() {
             lora_modules: [],
             chat_template_content_format: Auto,
             max_logprobs: None,
+            logprobs_mode: RawLogprobs,
+            diffusion_canvas_length: None,
             stream_interval: 1,
             api_server_options: ApiServerOptions {
                 enable_log_requests: false,
@@ -4058,6 +4125,8 @@ fn frontend_config_uses_external_coordinator_when_coordinator_address_is_present
             lora_modules: [],
             chat_template_content_format: Auto,
             max_logprobs: None,
+            logprobs_mode: RawLogprobs,
+            diffusion_canvas_length: None,
             stream_interval: 1,
             api_server_options: ApiServerOptions {
                 enable_log_requests: false,

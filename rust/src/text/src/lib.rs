@@ -25,7 +25,7 @@ pub use output::{
     DecodedText, DecodedTextEvent, DecodedTokenLogprob, Finished, SampledDelta, TextDecodeOptions,
     TextOutputStreamExt, TokenAnchor, TokenAttribution,
 };
-pub use request::{Prompt, SamplingParams, TextRequest, normalize_top_k};
+pub use request::{Prompt, SamplingParams, TextRequest, is_valid_cache_salt, normalize_top_k};
 use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
 pub use sonar_llm::FinishReason;
 use sonar_llm::{BoxGenerateOutputStream, GenerateRequest, Llm};
@@ -289,6 +289,16 @@ impl TextLlm {
     /// token IDs and logits-domain sampling controls.
     pub fn model_vocab_size(&self) -> usize {
         self.processor.backend.model_vocab_size()
+    }
+
+    /// The model's `config.json`; see [`TextBackend::hf_config`].
+    pub fn hf_config(&self) -> &serde_json::Value {
+        self.processor.backend.hf_config()
+    }
+
+    /// The tokenizer's padding token ID; see [`TextBackend::pad_token_id`].
+    pub fn pad_token_id(&self) -> Option<u32> {
+        self.processor.backend.pad_token_id()
     }
 
     /// Tokenize if needed, lower to a generate request, and return the raw

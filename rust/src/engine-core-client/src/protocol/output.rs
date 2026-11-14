@@ -99,8 +99,9 @@ pub struct EngineCoreOutput {
     /// output.
     #[serde(default)]
     pub new_prompt_logprobs_tensors: Option<MaybeWireLogprobs>,
+    /// The pooler's output of a finished pooling request.
     #[serde(default)]
-    pub pooling_output: Option<Box<OpaqueValue>>,
+    pub pooling_output: Option<Box<WireNdArray>>,
     #[serde(default)]
     pub finish_reason: Option<EngineCoreFinishReason>,
     #[serde(default)]
@@ -237,6 +238,11 @@ impl EngineCoreOutput {
             value
                 .resolve_aux_frame(frames)
                 .map_err(|message| ext_value_decode!("routed_experts: {message}"))?;
+        }
+        if let Some(value) = self.pooling_output.as_mut() {
+            value
+                .resolve_aux_frame(frames)
+                .map_err(|message| ext_value_decode!("pooling_output: {message}"))?;
         }
         Ok(())
     }
@@ -684,5 +690,34 @@ mod tests {
             r#"messagepack decode failed for EngineCoreOutputs: invalid wire shape"#
         ]]
         .assert_eq(&error.to_string());
+    }
+
+    /// Python's `MsgpackEncoder().encode(EngineCoreOutputs(...))` of a
+    /// finished pooling output `torch.tensor([1.5, -0.25, 3.0])`, inline and
+    /// (with `size_threshold=0`) in an auxiliary frame.
+    const PYTHON_INLINE_POOLING: &str = "990091dc0014ac6465636973696f6e2d312d3090c0c093a7666c6f617433329103c70c030000c03f000080be0000404000c0c0c0c0c0c0c000c0c0c0c0c0c0c0cb4128c8d35833fc5cc0c0c0c0c0";
+    const PYTHON_AUX_POOLING: [&str; 2] = [
+        "990091dc0014ac6465636973696f6e2d312d3090c0c093a7666c6f6174333291030100c0c0c0c0c0c0c000c0\
+         c0c0c0c0c0c0cb4128c8d35833fc5cc0c0c0c0c0",
+        "0000c03f000080be00004040",
+    ];
+
+    #[test]
+    fn engine_core_outputs_decode_python_pooling_output() {
+        for frames in [&[PYTHON_INLINE_POOLING][..], &PYTHON_AUX_POOLING[..]] {
+            let frames: Vec<Bytes> =
+                frames.iter().map(|frame| Bytes::from(hex::decode(frame).unwrap())).collect();
+            let EngineCoreOutputs::RequestBatch(batch) =
+                decode_engine_core_outputs(&frames).unwrap()
+            else {
+                panic!("expected a request batch");
+            };
+            let output = &batch.outputs[0];
+            assert_eq!(output.finish_reason, Some(EngineCoreFinishReason::Stop));
+            assert!(output.new_token_ids.is_empty());
+            let pooled = output.pooling_output.as_ref().expect("a pooling output");
+            assert_eq!(pooled.shape, [3]);
+            assert_eq!(pooled.to_f64_vec(), Some(vec![1.5, -0.25, 3.0]));
+        }
     }
 }

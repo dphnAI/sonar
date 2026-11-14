@@ -35,8 +35,8 @@ use axum::http::Request;
 pub use config::{
     AccessLogConfig, ApiServerOptions, Config, CoordinatorMode, CorsConfig,
     DEFAULT_KEEP_ALIVE_TIMEOUT, DEFAULT_LOG_STATS_INTERVAL, DEFAULT_MAX_N_SEQUENCES,
-    DEFAULT_REQUEST_BODY_LIMIT_BYTES, HttpListenerMode, LoraModulePath, OutputLogConfig,
-    OutputLogging, TlsConfig,
+    DEFAULT_REQUEST_BODY_LIMIT_BYTES, DecisionsConfig, HttpListenerMode, LogprobsMode,
+    LoraModulePath, OutputLogConfig, OutputLogging, TlsConfig,
 };
 pub use dphn::DphnNetworkConfig;
 pub use fingerprint::FingerprintMode;
@@ -218,7 +218,14 @@ async fn build_state(config: &Config) -> Result<Arc<AppState>> {
             .with_cors(config.cors.clone())
             .with_access_log(config.access_log.clone())
             .with_profiler(config.profiler.clone())
-            .with_dphn_network_config(config.dphn_network_config.clone()),
+            .with_dphn_network_config(config.dphn_network_config.clone())
+            .with_decisions_config(DecisionsConfig {
+                logprobs_mode: config.logprobs_mode,
+                diffusion_canvas_length: config.diffusion_canvas_length,
+                server_chat_template: config.chat_template.is_some(),
+                language_model_only: config.language_model_only,
+                trust_request_chat_template: config.trust_request_chat_template,
+            }),
     );
 
     // Load operator-configured static LoRA adapters before serving, failing
