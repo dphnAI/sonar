@@ -634,6 +634,13 @@ fn qwen_multimodal_model_info() -> sonar_chat::multimodal::MultimodalModelInfo {
 fn qwen_multimodal_model_info_with_limits(
     limit_mm_per_prompt: sonar_chat::multimodal::MmLimitPerPrompt,
 ) -> sonar_chat::multimodal::MultimodalModelInfo {
+    qwen_multimodal_model_info_with(limit_mm_per_prompt, &Default::default())
+}
+
+fn qwen_multimodal_model_info_with(
+    limit_mm_per_prompt: sonar_chat::multimodal::MmLimitPerPrompt,
+    media_access: &sonar_chat::multimodal::MediaAccess,
+) -> sonar_chat::multimodal::MultimodalModelInfo {
     let config_path = std::env::temp_dir().join(format!(
         "sonar-server-qwen-config-{}.json",
         uuid::Uuid::new_v4()
@@ -652,6 +659,7 @@ fn qwen_multimodal_model_info_with_limits(
         },
         Arc::new(fake_chat_tokenizer()),
         limit_mm_per_prompt,
+        media_access,
     )
     .expect("load multimodal info")
     .expect("qwen multimodal info is registered");
@@ -708,6 +716,7 @@ fn step5_vl_multimodal_model_info_with_limits(
         },
         Arc::new(step5_vl_chat_tokenizer()),
         limit_mm_per_prompt,
+        &Default::default(),
     )
     .expect("load multimodal info")
     .expect("step5_vl multimodal info is registered");
@@ -4716,6 +4725,55 @@ async fn non_stream_chat_rejects_when_image_count_exceeds_limit_mm_per_prompt() 
     assert_eq!(
         json["error"]["message"],
         "At most 1 image(s) may be provided in one prompt."
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial]
+async fn non_stream_chat_rejects_media_outside_allowed_media_domains() {
+    // The domain is refused by name before any lookup or connection, so the
+    // mock engine task is never awaited.
+    let (chat, _engine_task) = test_models_with_engine_outputs_and_backend(
+        b"engine-openai-mm-domain",
+        default_stream_output_specs(),
+        Arc::new(FakeChatBackend::with_multimodal_model_info(
+            qwen_multimodal_model_info_with(
+                std::collections::HashMap::new(),
+                &sonar_chat::multimodal::MediaAccess {
+                    allowed_domains: Some(vec!["images.example.com".to_string()]),
+                    allowed_local_media_path: None,
+                },
+            ),
+        )),
+    )
+    .await;
+    let mut app = build_router(Arc::new(AppState::new(
+        vec!["Qwen/Qwen1.5-0.5B-Chat".to_string()],
+        chat,
+    )));
+
+    let (status, error) = post_json(
+        &mut app,
+        "/v1/chat/completions",
+        json!({
+            "model": "Qwen/Qwen1.5-0.5B-Chat",
+            "stream": false,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "describe "},
+                    {"type": "image_url", "image_url": {"url": "https://evil.example/a.png"}}
+                ]
+            }]
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["error"]["type"], "BadRequestError");
+    assert_eq!(
+        error["error"]["message"],
+        "media domain 'evil.example' is not in the allow list"
     );
 }
 

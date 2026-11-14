@@ -50,6 +50,14 @@ pub enum Error {
     MmLimitExceeded { modality: String, limit: usize },
     #[error("invalid inline multimodal features: {message}")]
     InvalidPreprocessedMultimodal { message: String },
+    /// A media URL or payload the request got wrong, or one the server's
+    /// media policy refuses (Python raises `ValueError`: 400).
+    #[error("{0}")]
+    InvalidMedia(String),
+    /// Media the origin answers with a client error, or a download over the
+    /// size cap (Python's `_wrap_media_fetch_error`: 422).
+    #[error("{0}")]
+    UnprocessableMedia(String),
     #[error("multimodal preprocessing error: {0}")]
     Multimodal(#[message] String),
     #[error("{kind} parsing is not available for model `{model_id}`")]
@@ -145,6 +153,8 @@ impl Error {
             | Self::UnsupportedContentPart(_)
             | Self::UnsupportedModality { .. }
             | Self::InvalidPreprocessedMultimodal { .. }
+            | Self::InvalidMedia(_)
+            | Self::UnprocessableMedia(_)
             | Self::MmLimitExceeded { .. } => true,
 
             _ => false,
@@ -157,8 +167,15 @@ impl Error {
         match self {
             Self::Text(error) => error.param(),
             Self::UnsupportedRequestChatTemplate => Some("chat_template"),
+            Self::UnprocessableMedia(_) => Some("image_url"),
             _ => None,
         }
+    }
+
+    /// Whether the request names media that cannot be processed, answered
+    /// with HTTP 422 like Python's `SonarUnprocessableEntityError`.
+    pub fn is_unprocessable_entity(&self) -> bool {
+        matches!(self, Self::UnprocessableMedia(_))
     }
 
     /// Whether the request could not be taken now, so retrying later may
@@ -168,15 +185,55 @@ impl Error {
     }
 }
 
+/// Answer media failures the way Python's media connector does. Refusals of
+/// the request's own URL or payload are 400s, origin 4xx answers (but 408 and
+/// 429) and downloads over the cap are 422s, and everything else (connection
+/// failures, timeouts, 5xx answers, audio and video decoding) stays a server
+/// error.
 impl From<llm_multimodal::MediaConnectorError> for Error {
     fn from(error: llm_multimodal::MediaConnectorError) -> Self {
-        Self::Multimodal(error.to_report_string())
+        use llm_multimodal::MediaConnectorError as E;
+
+        match &error {
+            E::InvalidUrl(_)
+            | E::UnsupportedScheme(_)
+            | E::DisallowedDomain(_)
+            | E::DisallowedAddress { .. }
+            | E::DisallowedRedirect { .. }
+            | E::TooManyRedirects { .. }
+            | E::DisallowedLocalPath(_)
+            | E::DataUrl(_)
+            | E::Base64Decode(_) => Self::InvalidMedia(error.to_report_string()),
+            // Python's image loader turns an undecodable image into a
+            // `ValueError`; decoder limits are not part of that.
+            E::Image(image) if !matches!(image, image::ImageError::Limits(_)) => {
+                Self::InvalidMedia(error.to_report_string())
+            }
+            E::Http(http)
+                if http.status().is_some_and(|status| {
+                    status.is_client_error() && !matches!(status.as_u16(), 408 | 429)
+                }) =>
+            {
+                let status = http.status().map_or(0, |status| status.as_u16());
+                Self::UnprocessableMedia(format!(
+                    "Failed to fetch media from URL: HTTP {status} error"
+                ))
+            }
+            E::PayloadTooLarge { .. } => Self::UnprocessableMedia(format!(
+                "Failed to fetch media from URL: {}",
+                error.to_report_string()
+            )),
+            _ => Self::Multimodal(error.to_report_string()),
+        }
     }
 }
 
 impl From<llm_multimodal::MultiModalError> for Error {
     fn from(error: llm_multimodal::MultiModalError) -> Self {
-        Self::Multimodal(error.to_report_string())
+        match error {
+            llm_multimodal::MultiModalError::Media(error) => error.into(),
+            error => Self::Multimodal(error.to_report_string()),
+        }
     }
 }
 
@@ -198,5 +255,83 @@ fn available_parser_hint(available_names: &[String]) -> String {
         String::new()
     } else {
         format!(" (choose from: {})", available_names.join(", "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::IpAddr;
+    use std::time::Duration;
+
+    use llm_multimodal::{MediaConnectorError, MultiModalError};
+
+    use super::*;
+
+    /// The status class each media failure is answered with: 400, 422, or a
+    /// server error.
+    fn class(error: MediaConnectorError) -> &'static str {
+        match Error::from(MultiModalError::Media(error)) {
+            error @ Error::InvalidMedia(_) => {
+                assert!(error.is_request_validation_error());
+                "400"
+            }
+            error @ Error::UnprocessableMedia(_) => {
+                assert!(error.is_unprocessable_entity());
+                assert_eq!(error.param(), Some("image_url"));
+                "422"
+            }
+            error @ Error::Multimodal(_) => {
+                assert!(!error.is_request_validation_error());
+                "500"
+            }
+            error => panic!("unexpected error {error:?}"),
+        }
+    }
+
+    #[test]
+    fn media_refusals_are_client_errors_and_fetch_failures_are_not() {
+        let refused = [
+            MediaConnectorError::DisallowedDomain("evil.example".to_string()),
+            MediaConnectorError::DisallowedAddress {
+                host: "media.example".to_string(),
+                address: IpAddr::from([10, 0, 0, 5]),
+                class: "private",
+            },
+            MediaConnectorError::DisallowedRedirect {
+                url: "http://media.example/a.png".to_string(),
+                target: "http://10.0.0.5/a.png".to_string(),
+                reason: "private".to_string(),
+            },
+            MediaConnectorError::TooManyRedirects {
+                url: "http://media.example/a.png".to_string(),
+                limit: 10,
+            },
+            MediaConnectorError::UnsupportedScheme("ftp".to_string()),
+            MediaConnectorError::InvalidUrl("not a url".to_string()),
+        ];
+        for error in refused {
+            assert_eq!(class(error), "400");
+        }
+        assert_eq!(
+            class(MediaConnectorError::PayloadTooLarge {
+                media: "image",
+                limit: 1,
+            }),
+            "422"
+        );
+        assert_eq!(
+            class(MediaConnectorError::Timeout {
+                url: "http://media.example/a.png".to_string(),
+                budget: Duration::from_secs(1),
+            }),
+            "500"
+        );
+        assert_eq!(
+            class(MediaConnectorError::UnresolvableHost {
+                host: "media.example".to_string(),
+                source: std::io::Error::other("no such host"),
+            }),
+            "500"
+        );
     }
 }

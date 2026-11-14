@@ -32,6 +32,12 @@ pub enum ApiError {
         message: String,
         param: Option<String>,
     },
+    /// The request names media that cannot be processed, such as a URL the
+    /// origin answers with a client error.
+    UnprocessableEntity {
+        message: String,
+        param: Option<&'static str>,
+    },
     /// The requested operation conflicts with current server state.
     Conflict { message: String },
     /// An unexpected internal failure happened before streaming started.
@@ -49,6 +55,7 @@ impl ApiError {
             Self::Conflict { .. } => StatusCode::CONFLICT,
             Self::ServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Self::JsonParseError { .. } | Self::InvalidQuery { .. } => StatusCode::BAD_REQUEST,
+            Self::UnprocessableEntity { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             Self::ServiceUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
         }
     }
@@ -76,6 +83,11 @@ impl ApiError {
             Self::InvalidQuery { message, param } => {
                 ("Bad Request", message.clone(), param.clone())
             }
+            Self::UnprocessableEntity { message, param } => (
+                "UnprocessableEntityError",
+                message.clone(),
+                param.map(str::to_string),
+            ),
             // Python has no error class for 409; like its `HTTPException`
             // handler, name the status.
             Self::Conflict { message } => ("Conflict", message.clone(), None),
@@ -143,6 +155,9 @@ pub fn text_submit_error(context: &'static str, error: sonar_text::Error) -> Api
 /// Like [`text_submit_error`], for the chat pipeline, which wraps the text
 /// errors.
 pub fn chat_submit_error(context: &'static str, error: sonar_chat::Error) -> ApiError {
+    if error.is_unprocessable_entity() {
+        return ApiError::unprocessable_entity(error.to_report_string(), error.param());
+    }
     if error.is_request_validation_error() {
         return invalid_request!(param = error.param(), "{}", error.as_report());
     }
@@ -179,6 +194,10 @@ mod tests {
             ApiError::model_not_found("missing"),
             ApiError::not_found("No adapter found for /not/an/adapter"),
             ApiError::json_parse_error("expected value at line 1 column 1"),
+            ApiError::unprocessable_entity(
+                "Failed to fetch media from URL: HTTP 404 error",
+                Some("image_url"),
+            ),
             ApiError::conflict("A profiling session is already active."),
             ApiError::server_error("Internal server error"),
             ApiError::service_unavailable("Generation is paused."),
@@ -192,6 +211,7 @@ mod tests {
             {"error":{"message":"The model `missing` does not exist.","type":"NotFoundError","param":"model","code":404}}
             {"error":{"message":"No adapter found for /not/an/adapter","type":"NotFoundError","param":null,"code":404}}
             {"error":{"message":"expected value at line 1 column 1","type":"Bad Request","param":null,"code":400}}
+            {"error":{"message":"Failed to fetch media from URL: HTTP 404 error","type":"UnprocessableEntityError","param":"image_url","code":422}}
             {"error":{"message":"A profiling session is already active.","type":"Conflict","param":null,"code":409}}
             {"error":{"message":"Internal server error","type":"InternalServerError","param":null,"code":500}}
             {"error":{"message":"Generation is paused.","type":"ServiceUnavailableError","param":null,"code":503}}"#]].assert_eq(&rendered);

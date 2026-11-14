@@ -12,7 +12,7 @@ use axum::http::{HeaderName, HeaderValue, Method};
 use educe::Educe;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sonar_chat::multimodal::MmLimitPerPrompt;
+use sonar_chat::multimodal::{MediaAccess, MmLimitPerPrompt};
 use sonar_chat::{
     ChatTemplateContentFormatOption, GenerationConfigMode, ParserSelection, RendererSelection,
     ToolStrictLevel,
@@ -381,6 +381,9 @@ pub struct Config {
     /// Maximum number of input items allowed per prompt for each modality.
     /// Unspecified modalities are unlimited.
     pub limit_mm_per_prompt: MmLimitPerPrompt,
+    /// Hosts and local directory request media may be loaded from
+    /// (`--allowed-media-domains`, `--allowed-local-media-path`).
+    pub media_access: MediaAccess,
     /// LoRA adapters loaded at startup, in order. Startup fails if any of
     /// them cannot be loaded.
     pub lora_modules: Vec<LoraModulePath>,
@@ -483,6 +486,7 @@ impl Config {
             );
         }
         self.cors.validate()?;
+        self.media_access.validate().map_err(anyhow::Error::msg)?;
         if let Some(tls) = &self.tls {
             tls.validate()?;
         }

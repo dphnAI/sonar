@@ -32,6 +32,11 @@ sonar serve MODEL \
   --allowed-media-domains images.example.com assets.example.net
 ```
 
+The Rust frontend (`SONAR_USE_RUST_FRONTEND=1` or `sonar-rs serve`) honors
+`--allowed-media-domains` too. It checks the list on every redirect hop, and it
+refuses media hosts that name or resolve to loopback, private, link-local, or
+other non-public addresses, even when the list allows them.
+
 Leave `--allowed-local-media-path` empty for a public service. If local files
 are required, point it at a dedicated read-only directory. Never allow `/`.
 

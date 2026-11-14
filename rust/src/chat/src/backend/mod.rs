@@ -9,7 +9,7 @@ use sonar_text::backend::hf::{HfOverrides, ModelSource};
 use sonar_text::{DynTextBackend, GenerationConfigMode, TextBackend};
 
 use crate::error::Result;
-use crate::multimodal::{MmLimitPerPrompt, MultimodalModelInfo};
+use crate::multimodal::{MediaAccess, MmLimitPerPrompt, MultimodalModelInfo};
 use crate::output::DynChatOutputProcessor;
 use crate::renderer::DynChatRenderer;
 use crate::request::ChatRequest;
@@ -97,6 +97,8 @@ pub struct LoadModelBackendsOptions {
     /// Maximum number of input items allowed per prompt for each modality.
     /// Unspecified modalities are unlimited.
     pub limit_mm_per_prompt: MmLimitPerPrompt,
+    /// Hosts and local directory request media may be loaded from.
+    pub media_access: MediaAccess,
 }
 
 /// Shared backends loaded from a model id.
