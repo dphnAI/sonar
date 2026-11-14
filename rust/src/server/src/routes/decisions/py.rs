@@ -233,6 +233,44 @@ fn write_json(out: &mut String, value: &Value, indent: Option<usize>, depth: usi
     }
 }
 
+/// Python's `json.dumps(value, ensure_ascii=False, separators=(",", ":"),
+/// sort_keys=True)`.
+pub(super) fn json_dumps_compact(value: &Value) -> String {
+    fn write(out: &mut String, value: &Value) {
+        match value {
+            Value::Array(items) => {
+                out.push('[');
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    write(out, item);
+                }
+                out.push(']');
+            }
+            Value::Object(map) => {
+                // Python sorts keys by code point, as UTF-8 bytes sort.
+                let mut entries: Vec<_> = map.iter().collect();
+                entries.sort_unstable_by(|a, b| a.0.cmp(b.0));
+                out.push('{');
+                for (i, (key, item)) in entries.into_iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    write_json_str(out, key);
+                    out.push(':');
+                    write(out, item);
+                }
+                out.push('}');
+            }
+            scalar => write_json(out, scalar, None, 0),
+        }
+    }
+    let mut out = String::new();
+    write(&mut out, value);
+    out
+}
+
 /// A JSON string as Python's `json.dumps(..., ensure_ascii=False)` writes it.
 pub(super) fn write_json_str(out: &mut String, s: &str) {
     out.push('"');

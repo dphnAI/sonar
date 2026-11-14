@@ -3,11 +3,13 @@
 
 //! `/v1/decisions` (the OpenAI Decisions API) and `/v1/systemone` (structured
 //! decisions): each question is answered by reading the probability of every
-//! option's label as the reply's first token, or from a diffusion canvas.
+//! option's label as the reply's first token, from a diffusion canvas, or
+//! from a pooling head that scores the options.
 //!
 //! Mirrors `sonar/entrypoints/openai/decisions` and
 //! `sonar/entrypoints/generate/structured_decisions`.
 
+mod pooling;
 mod protocol;
 mod py;
 mod questions;
@@ -33,7 +35,7 @@ use self::questions::{
     DecisionOption, LETTERS, Question, QuestionType, argmax, build_question, expected_level,
 };
 pub(crate) use self::strategy::Availability;
-use self::strategy::{MAX_OPTIONS, MAX_QUESTIONS, QuestionRead, ReadContext, Reader};
+use self::strategy::{MAX_OPTIONS, MAX_QUESTIONS, QuestionRead, ReadContext, Reader, Strategy};
 use crate::error::ApiError;
 use crate::lora::LoraModelResolution;
 use crate::state::AppState;
@@ -58,24 +60,31 @@ impl From<DecisionError> for ApiError {
 const UNTRUSTED_TEMPLATE: &str = "Chat template is passed with request, but \
      --trust-request-chat-template is not set. Refused request with untrusted chat template.";
 
-/// The reader for the served model, or the 501 that explains why there is
-/// none. `endpoint` names the API like Python's 501 does.
-async fn reader<'s>(state: &'s AppState, endpoint: &str) -> Result<&'s Reader, ApiError> {
+/// The strategy of the served model, or the 501 that explains why there is
+/// none.
+async fn strategy(state: &AppState) -> Result<&Strategy, ApiError> {
     let availability = state
         .decisions
         .get_or_init(|| Availability::resolve(state, state.decisions_config))
         .await;
     match availability {
-        Availability::Ready(reader) => Ok(reader),
-        // The Python frontend serves `/v1/decisions` only with generative reads
-        // too.
-        Availability::PythonOnly { message } if endpoint == SYSTEMONE => {
-            Err(ApiError::not_implemented(message.clone()))
-        }
-        _ => Err(ApiError::not_implemented(format!(
-            "The model does not support the {endpoint}"
-        ))),
+        Availability::Ready(strategy) => Ok(strategy),
+        Availability::Unsupported => Err(not_supported(SYSTEMONE)),
     }
+}
+
+/// The reader of the Decisions API, which Python serves only on models that
+/// generate.
+async fn generative_reader(state: &AppState) -> Result<&Reader, ApiError> {
+    match strategy(state).await {
+        Ok(Strategy::Generate(reader)) => Ok(reader),
+        _ => Err(not_supported(DECISIONS)),
+    }
+}
+
+/// Python's 501 for an API the served model does not support.
+fn not_supported(endpoint: &str) -> ApiError {
+    ApiError::not_implemented(format!("The model does not support the {endpoint}"))
 }
 
 const SYSTEMONE: &str = "structured decision API";
@@ -94,8 +103,8 @@ async fn resolve_model(
 
 /// Python admits joint reads only on models that read a canvas, and reads a
 /// single question on its own.
-fn admit_joint(reader: &Reader, joint: bool, questions: usize) -> Result<bool, ApiError> {
-    if joint && !reader.joint_reads() {
+fn admit_joint(joint_reads: bool, joint: bool, questions: usize) -> Result<bool, ApiError> {
+    if joint && !joint_reads {
         return Err(DecisionError::new(
             "joint: this model reads each question on its own; joint reads need DiffusionGemma",
         )
@@ -127,7 +136,7 @@ async fn create_structured_decision(
 ) -> Result<Value, ApiError> {
     let Json(body) = body?;
     let request = parse_systemone_request(&body)?;
-    let reader = reader(state, SYSTEMONE).await?;
+    let strategy = strategy(state).await?;
     let lora = resolve_model(state, request.model.as_deref()).await?;
     let config = state.decisions_config;
     if !config.trust_request_chat_template
@@ -142,14 +151,14 @@ async fn create_structured_decision(
     let base_id = resolve_request_context(headers, request.request_id.as_deref()).request_id;
     let request_id = format!("decision-{base_id}");
 
-    let questions = parse_questions(&request)?;
+    let questions = parse_questions(&request, strategy.max_options())?;
     let images = request.images.clone().unwrap_or_default();
-    reader.check_media(
+    strategy.check_media(
         !images.is_empty(),
         request.audio.as_ref().is_some_and(|audio| !audio.is_empty()),
         request.videos.as_ref().is_some_and(|videos| !videos.is_empty()),
     )?;
-    let joint = admit_joint(reader, request.joint, questions.len())?;
+    let joint = admit_joint(strategy.joint_reads(), request.joint, questions.len())?;
     let priority = i32::try_from(request.priority).map_err(|_| {
         ApiError::invalid_request(
             format!(
@@ -174,15 +183,19 @@ async fn create_structured_decision(
         priority,
         cache_salt: request.cache_salt.clone(),
     };
-    let state_text = reader.render_state(&request.state);
+    let state_text = strategy.render_state(&request.state);
     let instructions = request.instructions.as_deref();
-    let reads = if joint {
-        reader
-            .read_joint(state, &ctx, &questions, instructions, &state_text, &images)
-            .await?
-    } else {
-        reader.read(state, &ctx, &questions, instructions, &state_text, &images).await?
-    };
+    let reads = strategy
+        .read(
+            state,
+            &ctx,
+            &questions,
+            instructions,
+            &state_text,
+            &images,
+            joint,
+        )
+        .await?;
 
     let mut answers = Map::new();
     let mut diagnostics = Map::new();
@@ -220,7 +233,10 @@ async fn create_structured_decision(
     }))
 }
 
-fn parse_questions(request: &SystemOneRequest) -> Result<Vec<Question>, ApiError> {
+fn parse_questions(
+    request: &SystemOneRequest,
+    (max_options, labeled): (usize, bool),
+) -> Result<Vec<Question>, ApiError> {
     if request.questions.is_empty() {
         return Err(DecisionError::new("questions: needs at least one question").into());
     }
@@ -250,7 +266,8 @@ fn parse_questions(request: &SystemOneRequest) -> Result<Vec<Question>, ApiError
                 &spec.type_name,
                 &spec.instructions,
                 &spec.criteria,
-                MAX_OPTIONS,
+                max_options,
+                labeled,
             )
             .map_err(ApiError::from)
         })
@@ -273,7 +290,7 @@ async fn create_decisions(
 ) -> Result<Value, ApiError> {
     let Json(body) = body?;
     let request = parse_decisions_request(&body)?;
-    let reader = reader(state, DECISIONS).await?;
+    let reader = generative_reader(state).await?;
     let lora = resolve_model(state, Some(&request.model)).await?;
     let request_id = format!(
         "decision-{}",
@@ -291,7 +308,7 @@ async fn create_decisions(
         .enumerate()
         .map(|(i, question)| read_question(i, question))
         .collect::<Result<_, _>>()?;
-    let joint = admit_joint(reader, request.joint, questions.len())?;
+    let joint = admit_joint(reader.joint_reads(), request.joint, questions.len())?;
     if state.api_server_options.enable_log_requests {
         info!(
             request_id,

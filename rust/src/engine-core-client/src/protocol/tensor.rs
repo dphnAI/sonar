@@ -322,6 +322,41 @@ impl WireNdArray {
         let bytes = self.data.as_raw_view()?;
         Some(bytes.chunks_exact(4).map(|c| decode(c.try_into().unwrap())).collect())
     }
+
+    /// The values of an inline floating-point array, widened to `f64`, like
+    /// Python's `tensor.tolist()`.
+    pub fn to_f64_vec(&self) -> Option<Vec<f64>> {
+        fn decode<const N: usize>(
+            bytes: &[u8],
+            endianness: Endianness,
+            from: impl Fn([u8; N]) -> f64,
+        ) -> Vec<f64> {
+            bytes
+                .chunks_exact(N)
+                .map(|chunk| {
+                    let mut raw: [u8; N] = chunk.try_into().unwrap();
+                    let big = match endianness {
+                        Endianness::Big => true,
+                        Endianness::Little => false,
+                        Endianness::Native => cfg!(target_endian = "big"),
+                    };
+                    if big {
+                        raw.reverse();
+                    }
+                    from(raw)
+                })
+                .collect()
+        }
+        let bytes = self.data.as_raw_view()?;
+        let endianness = self.dtype.endianness;
+        Some(match self.dtype.scalar {
+            TensorDtype::F64 => decode(bytes, endianness, f64::from_le_bytes),
+            TensorDtype::F32 => decode(bytes, endianness, |raw| f32::from_le_bytes(raw).into()),
+            TensorDtype::F16 => decode(bytes, endianness, |raw| f16::from_le_bytes(raw).into()),
+            TensorDtype::Bf16 => decode(bytes, endianness, |raw| bf16::from_le_bytes(raw).into()),
+            _ => return None,
+        })
+    }
 }
 
 /// Python array/tensor payload reference inside [`WireNdArray`].

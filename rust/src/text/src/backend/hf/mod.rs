@@ -15,7 +15,9 @@ use sonar_tokenizer::{
 };
 use tracing::info;
 
-use self::config::{GenerationConfig, load_generation_config, load_model_config_json};
+use self::config::{
+    GenerationConfig, apply_decision_head, load_generation_config, load_model_config_json,
+};
 pub use self::config::{
     HfChatTemplate, HfNamedChatTemplate, HfSpecialTokens, HfTokenizerConfig, ModelConfig,
     NamedSpecialToken, load_model_config, load_tokenizer_config,
@@ -53,7 +55,9 @@ pub struct HfTextBackend {
     /// Model config (`config.json`).
     model_config: ModelConfig,
     /// The whole `config.json`, for frontends that read fields the typed
-    /// config does not keep.
+    /// config does not keep, with the architecture and config of a decision
+    /// head the checkpoint ships (`decision_config.json`,
+    /// `joint_head_config.json`).
     hf_config: serde_json::Value,
     /// The tokenizer config's padding token, when it resolves to an ID.
     pad_token_id: Option<u32>,
@@ -68,7 +72,12 @@ impl HfTextBackend {
     ) -> Result<Self> {
         let tokenizer_config = load_tokenizer_config(files.tokenizer_config_path.as_deref())?;
         let model_config = load_model_config(files.config_path.as_deref())?;
-        let hf_config = load_model_config_json(files.config_path.as_deref())?;
+        let mut hf_config = load_model_config_json(files.config_path.as_deref())?;
+        apply_decision_head(
+            &mut hf_config,
+            files.decision_config_path.as_deref(),
+            files.joint_head_config_path.as_deref(),
+        )?;
         let model_vocab_size = model_config.vocab_size()? as usize;
         let tokenizer = match &files.tokenizer {
             Some(tokenizer) => load_tokenizer(tokenizer)?,

@@ -6,9 +6,7 @@
 //! Mirrors `sonar/entrypoints/openai/decisions/strategies.py` for the
 //! strategies that generate: `NextTokenStrategy`, `LiquidStrategy` and
 //! `DiffusionGemmaCanvasStrategy`. The strategies that score options with a
-//! classification head (`D3Strategy`, `JointSchemaStrategy` and
-//! `ClefFlashStrategy`) send pooling requests, which the Rust frontend cannot
-//! make, so their models answer 501 and name the Python frontend.
+//! pooling head live in `pooling.rs`.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -25,6 +23,7 @@ use sonar_text::output::TextDecodeOptions;
 use sonar_text::{Prompt, SamplingParams, TextRequest};
 use tracing::warn;
 
+use super::pooling::PoolingReader;
 use super::questions::{LETTERS, Question, QuestionType, label_softmax};
 use super::{DecisionError, py};
 use crate::config::DecisionsConfig;
@@ -40,24 +39,17 @@ const MIN_WARM_PREFIX_TOKENS: usize = 128;
 /// Python's `MAX_LOGPROB_TOKEN_IDS`.
 const MAX_LOGPROB_TOKEN_IDS: usize = 128;
 
-const FRONTEND_FALLBACK: &str = "Set SONAR_USE_RUST_FRONTEND=0 to use the Python frontend.";
+pub(super) const FRONTEND_FALLBACK: &str =
+    "Set SONAR_USE_RUST_FRONTEND=0 to use the Python frontend.";
 
-/// How the Python frontend reads a served architecture.
+/// How the Python frontend reads a served architecture that generates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PythonStrategy {
-    /// One generate request per question, or per canvas of questions.
-    Generate {
-        family: Family,
-        /// Whether the model class takes images (`SupportsMultiModal`).
-        multimodal: bool,
-        /// Whether the model class keeps recurrent state (`IsHybrid`).
-        hybrid: bool,
-    },
-    /// Pooling reads through a classification head.
-    Pooling {
-        strategy: &'static str,
-        task: &'static str,
-    },
+struct PythonStrategy {
+    family: Family,
+    /// Whether the model class takes images (`SupportsMultiModal`).
+    multimodal: bool,
+    /// Whether the model class keeps recurrent state (`IsHybrid`).
+    hybrid: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,27 +59,15 @@ enum Family {
     DiffusionGemma,
 }
 
-/// Python's `READ_STRATEGIES`.
+/// Python's `READ_STRATEGIES`, for the architectures that generate.
 fn python_strategy(architecture: &str) -> Option<PythonStrategy> {
     use Family::*;
-    let generate = |family, multimodal, hybrid| PythonStrategy::Generate {
+    let generate = |family, multimodal, hybrid| PythonStrategy {
         family,
         multimodal,
         hybrid,
     };
     Some(match architecture {
-        "ClefFlashForJointSchema" => PythonStrategy::Pooling {
-            strategy: "ClefFlashStrategy",
-            task: "token_classify",
-        },
-        "ClefOmniForJointSchema" => PythonStrategy::Pooling {
-            strategy: "JointSchemaStrategy",
-            task: "token_classify",
-        },
-        "D3ForSequenceClassification" => PythonStrategy::Pooling {
-            strategy: "D3Strategy",
-            task: "classify",
-        },
         "Gemma4ForCausalLM" | "Qwen3ForCausalLM" => generate(NextToken, false, false),
         "Gemma4ForConditionalGeneration" | "Gemma4UnifiedForConditionalGeneration" => {
             generate(NextToken, true, false)
@@ -103,14 +83,17 @@ fn python_strategy(architecture: &str) -> Option<PythonStrategy> {
 
 /// Whether the served model answers decisions, as resolved once per server.
 pub(crate) enum Availability {
-    Ready(Box<Reader>),
-    /// The Python frontend serves `/v1/systemone` for this model with pooling
-    /// reads, which the Rust frontend cannot make.
-    PythonOnly {
-        message: String,
-    },
+    Ready(Box<Strategy>),
     /// Neither frontend serves decisions for this model.
     Unsupported,
+}
+
+/// How the served model reads decisions.
+pub(crate) enum Strategy {
+    /// By generating labels. Serves `/v1/systemone` and `/v1/decisions`.
+    Generate(Reader),
+    /// By pooling, which Python serves on `/v1/systemone` only.
+    Pooling(PoolingReader),
 }
 
 impl Availability {
@@ -125,28 +108,21 @@ impl Availability {
             warn!("decisions are unavailable: the model config names no architecture");
             return Self::Unsupported;
         };
-        let strategy = match python_strategy(architecture) {
-            None => {
-                warn!(
-                    architecture,
-                    "decisions are unavailable for this architecture"
-                );
-                return Self::Unsupported;
-            }
-            Some(PythonStrategy::Pooling { strategy, task }) => {
-                return Self::PythonOnly {
-                    message: format!(
-                        "Structured decisions on {architecture} use {strategy}, which reads \
-                         through the model's {task} head with pooling requests. The Rust \
-                         frontend does not send pooling requests yet. {FRONTEND_FALLBACK}"
-                    ),
-                };
-            }
-            Some(PythonStrategy::Generate {
-                family,
-                multimodal,
-                hybrid,
-            }) => (family, multimodal, hybrid),
+        if let Some(reader) = PoolingReader::new(state, architecture, hf_config) {
+            return match reader {
+                Ok(reader) => Self::Ready(Box::new(Strategy::Pooling(reader))),
+                Err(reason) => {
+                    warn!(architecture, %reason, "decisions are unavailable");
+                    Self::Unsupported
+                }
+            };
+        }
+        let Some(strategy) = python_strategy(architecture) else {
+            warn!(
+                architecture,
+                "decisions are unavailable for this architecture"
+            );
+            return Self::Unsupported;
         };
         if !config.logprobs_mode.returns_logprobs() {
             warn!(
@@ -157,10 +133,74 @@ impl Availability {
             return Self::Unsupported;
         }
         match Reader::new(state, config, strategy).await {
-            Ok(reader) => Self::Ready(Box::new(reader)),
+            Ok(reader) => Self::Ready(Box::new(Strategy::Generate(reader))),
             Err(reason) => {
                 warn!(architecture, %reason, "decisions are unavailable");
                 Self::Unsupported
+            }
+        }
+    }
+}
+
+impl Strategy {
+    /// The most options a question may have, and whether each is scored by
+    /// its label's token.
+    pub(super) fn max_options(&self) -> (usize, bool) {
+        match self {
+            Self::Generate(_) => (MAX_OPTIONS, true),
+            Self::Pooling(reader) => reader.max_options(),
+        }
+    }
+
+    /// Whether `read_joint` answers several questions from one canvas.
+    pub(super) fn joint_reads(&self) -> bool {
+        match self {
+            Self::Generate(reader) => reader.joint_reads(),
+            Self::Pooling(_) => false,
+        }
+    }
+
+    /// The request's state as the model reads it.
+    pub(super) fn render_state(&self, state: &Value) -> String {
+        match self {
+            Self::Generate(reader) => reader.render_state(state),
+            Self::Pooling(reader) => reader.render_state(state),
+        }
+    }
+
+    pub(super) fn check_media(
+        &self,
+        images: bool,
+        audio: bool,
+        videos: bool,
+    ) -> Result<(), ApiError> {
+        match self {
+            Self::Generate(reader) => reader.check_media(images, audio, videos),
+            Self::Pooling(reader) => reader.check_media(images, audio, videos),
+        }
+    }
+
+    /// One answer per question, in order; jointly only if `joint_reads`.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn read(
+        &self,
+        state: &AppState,
+        ctx: &ReadContext,
+        questions: &[Question],
+        instructions: Option<&str>,
+        state_text: &str,
+        images: &[String],
+        joint: bool,
+    ) -> Result<Vec<QuestionRead>, ApiError> {
+        match self {
+            Self::Generate(reader) if joint => {
+                reader.read_joint(state, ctx, questions, instructions, state_text, images).await
+            }
+            Self::Generate(reader) => {
+                reader.read(state, ctx, questions, instructions, state_text, images).await
+            }
+            Self::Pooling(reader) => {
+                reader.read(state, ctx, questions, instructions, state_text, images).await
             }
         }
     }
@@ -269,7 +309,11 @@ impl Reader {
     async fn new(
         state: &AppState,
         config: DecisionsConfig,
-        (family, multimodal, hybrid): (Family, bool, bool),
+        PythonStrategy {
+            family,
+            multimodal,
+            hybrid,
+        }: PythonStrategy,
     ) -> Result<Self, String> {
         let text = state.chat.text();
         if !text.has_tokenizer() {

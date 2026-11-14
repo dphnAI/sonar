@@ -673,6 +673,7 @@ mod tests {
                 spec_decode_metrics: None,
                 weight_versions: Default::default(),
                 routed_experts: Default::default(),
+                pooling_output: None,
                 timestamps: Default::default(),
             }),
             Ok(GenerateOutput {
@@ -695,6 +696,7 @@ mod tests {
                 spec_decode_metrics: None,
                 weight_versions: WeightVersions::new(None, 1),
                 routed_experts: Default::default(),
+                pooling_output: None,
                 timestamps: Default::default(),
             }),
         ]);
@@ -786,6 +788,7 @@ mod tests {
             spec_decode_metrics: None,
             weight_versions,
             routed_experts: Default::default(),
+            pooling_output: None,
             timestamps: Default::default(),
         }
     }
@@ -986,6 +989,7 @@ mod tests {
             spec_decode_metrics: None,
             weight_versions: None,
             routed_experts: None,
+            pooling_output: None,
         };
 
         let response = collect_generate(
@@ -1059,6 +1063,7 @@ mod tests {
             spec_decode_metrics: Some(metrics.clone()),
             weight_versions: None,
             routed_experts: None,
+            pooling_output: None,
         };
 
         let response = collect_generate(
@@ -1178,6 +1183,7 @@ mod tests {
             spec_decode_metrics: None,
             weight_versions: None,
             routed_experts: None,
+            pooling_output: None,
         };
 
         let response = collect_generate(
@@ -1217,6 +1223,7 @@ mod tests {
             spec_decode_metrics: None,
             weight_versions: None,
             routed_experts: None,
+            pooling_output: None,
             prompt_token_ids,
         };
 
@@ -1314,6 +1321,7 @@ mod tests {
             spec_decode_metrics: None,
             weight_versions: None,
             routed_experts: None,
+            pooling_output: None,
         };
 
         let response = collect_generate(
@@ -1361,6 +1369,7 @@ mod tests {
             spec_decode_metrics: None,
             weight_versions: None,
             routed_experts: None,
+            pooling_output: None,
         };
 
         let response = collect_generate(

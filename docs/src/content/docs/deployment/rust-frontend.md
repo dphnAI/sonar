@@ -88,10 +88,12 @@ The current Rust router provides these public routes:
 
 The decision routes serve the models that read labels by generation: Qwen3,
 Qwen3.5, Gemma 4, LFM2-VL and DiffusionGemma. They read the engine's
-`--logprobs-mode` and `--diffusion-config` like the Python frontend. Models
-that answer through a classification head (D3, Clef-Omni and Clef-Flash)
-return 501 on `/v1/systemone`, as do image inputs to LFM2-VL and images for
-models without a Rust image processor. Use the Python frontend for them.
+`--logprobs-mode` and `--diffusion-config` like the Python frontend. The
+models that score options with a pooling head (D3, Clef-Flash and Clef-Omni)
+answer on `/v1/systemone` only, as in the Python frontend; D3 and Clef-Flash
+also read images. These inputs return 501: videos to D3 and Clef-Flash, any
+media to Clef-Omni, images to LFM2-VL, and images for models without a Rust
+image processor. Use the Python frontend for them.
 
 Runtime LoRA routes are available when
 `SONAR_ALLOW_RUNTIME_LORA_UPDATING` is enabled. Development and profiling

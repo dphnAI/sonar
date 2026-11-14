@@ -11,6 +11,7 @@ use serde_with::serde_as;
 
 use crate::protocol::kv_hints::KvHintsEnvelope;
 use crate::protocol::multimodal::MmFeatures;
+use crate::protocol::pooling::PoolingParams;
 use crate::protocol::sampling::EngineCoreSamplingParams;
 use crate::protocol::tensor::WireNdArray;
 use crate::protocol::{OpaqueValue, lora};
@@ -83,9 +84,9 @@ pub struct EngineCoreRequest {
     /// Multimodal features attached to the request.
     pub mm_features: Option<MmFeatures>,
     pub sampling_params: Option<EngineCoreSamplingParams>,
-    /// Pooling parameters are preserved in the schema but not yet strongly
-    /// typed.
-    pub pooling_params: Option<OpaqueValue>,
+    /// Pooling parameters of a pooling request, which sends no sampling
+    /// parameters.
+    pub pooling_params: Option<PoolingParams>,
     pub arrival_time: f64,
     #[serde(default)]
     pub lora_request: Option<lora::LoraRequest>,
@@ -399,5 +400,46 @@ mod tests {
             params.prompt_logprob_token_ids.unwrap().data,
             WireArrayData::AuxIndex(1)
         );
+    }
+
+    /// Python's `MsgpackEncoder().encode(EngineCoreRequest(...))` of a D3
+    /// read: prompt `[11, 22, 33]`, no sampling parameters, and
+    /// `PoolingParams(task="classify", use_activation=False)` after `verify()`.
+    const PYTHON_POOLING_REQUEST: &str = "dc0017ac6465636973696f6e2d312d3093a33c69349103c70c030b00\
+        00001600000021000000c0c09bc2c0c0c0a8636c617373696679c2c2c0c002c0cb3ff8000000000000c0c0c0c0\
+        c0000000c0c2c0c0c0c2c0c0c0";
+
+    #[test]
+    fn engine_core_request_carries_pooling_params_like_python() {
+        let python = hex::decode(PYTHON_POOLING_REQUEST).unwrap();
+        let decoded: EngineCoreRequest = crate::protocol::decode_msgpack(&python).unwrap();
+        let params = PoolingParams::for_task("classify", Some(false));
+        assert_eq!(decoded.sampling_params, None);
+        assert_eq!(decoded.pooling_params.as_ref(), Some(&params));
+        assert_eq!(
+            decoded.prompt_token_ids.unwrap().to_u32_vec(),
+            Some(vec![11, 22, 33])
+        );
+
+        let request = EngineCoreRequest {
+            request_id: "decision-1-0".to_string(),
+            prompt_token_ids: Some(vec![11, 22, 33].into()),
+            pooling_params: Some(params),
+            arrival_time: 1.5,
+            ..EngineCoreRequest::default()
+        };
+        let Value::Array(rust) = decode_value(&encode_msgpack(&request).unwrap()).unwrap() else {
+            panic!("expected array");
+        };
+        let Value::Array(python) = decode_value(&python).unwrap() else {
+            panic!("expected array");
+        };
+        assert_eq!(rust.len(), python.len());
+        // Everything but the prompt's dtype, which Python sends as int32.
+        for (i, (rust, python)) in rust.iter().zip(&python).enumerate() {
+            if i != 1 {
+                assert_eq!(rust, python, "field {i}");
+            }
+        }
     }
 }

@@ -18,6 +18,7 @@ fn choice(criteria: Value, max_options: usize) -> Question {
         &json!("Which team?"),
         &criteria,
         max_options,
+        true,
     )
     .unwrap()
 }
@@ -30,15 +31,15 @@ fn default_choice() -> Question {
 }
 
 fn noul(instructions: &str, criteria: Value) -> Question {
-    build_question("urgent", "noul", &json!(instructions), &criteria, 128).unwrap()
+    build_question("urgent", "noul", &json!(instructions), &criteria, 128, true).unwrap()
 }
 
 fn score(criteria: Value) -> Question {
-    build_question("tone", "score", &json!("How angry?"), &criteria, 128).unwrap()
+    build_question("tone", "score", &json!("How angry?"), &criteria, 128, true).unwrap()
 }
 
 fn build_error(qid: &str, kind: &str, criteria: Value, max_options: usize) -> String {
-    let error = build_question(qid, kind, &json!(""), &criteria, max_options).unwrap_err();
+    let error = build_question(qid, kind, &json!(""), &criteria, max_options, true).unwrap_err();
     crate::error::ApiError::from(error).to_error_response().error.message
 }
 
@@ -99,7 +100,15 @@ fn prompts_match_python() {
 
 #[test]
 fn non_string_instructions_and_criteria_read_like_python_str() {
-    let q = build_question("q", "score", &json!(5), &json!([1, 2.0, true, null]), 128).unwrap();
+    let q = build_question(
+        "q",
+        "score",
+        &json!(5),
+        &json!([1, 2.0, true, null]),
+        128,
+        true,
+    )
+    .unwrap();
     assert_eq!(q.instructions, "5");
     let names: Vec<_> = q.options.iter().map(|o| o.name.as_str()).collect();
     assert_eq!(names, ["1", "2.0", "True", "None"]);
@@ -109,6 +118,7 @@ fn non_string_instructions_and_criteria_read_like_python_str() {
         &Value::Null,
         &json!({"a": {"x": [1]}, "b": 3}),
         128,
+        true,
     )
     .unwrap();
     assert_eq!(q.instructions, "");
@@ -508,7 +518,7 @@ fn systemone_request_rejects_like_pydantic() {
 #[test]
 fn joint_prompt_numbers_each_question() {
     let ask = |qid, kind, instructions: Value, criteria| {
-        build_question(qid, kind, &instructions, &criteria, 128).unwrap()
+        build_question(qid, kind, &instructions, &criteria, 128, true).unwrap()
     };
     let questions = [
         ask(
@@ -566,7 +576,7 @@ fn liquid_prompt_matches_the_checkpoint() {
             "Which?\n\n0 low\n1 high\n\nReply with a single digit 0-1 only.",
         ),
     ] {
-        let q = build_question("q", kind, &json!("Which?"), &criteria, 26).unwrap();
+        let q = build_question("q", kind, &json!("Which?"), &criteria, 26, true).unwrap();
         assert_eq!(liquid_content("", &q), ask);
         assert_eq!(
             liquid_content("Hi.", &q),
@@ -579,6 +589,7 @@ fn liquid_prompt_matches_the_checkpoint() {
         &json!("Which?"),
         &json!({"true": "yes please"}),
         26,
+        true,
     )
     .unwrap();
     assert_eq!(

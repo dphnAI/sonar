@@ -227,14 +227,17 @@ pub(super) struct Question {
 }
 
 impl Question {
-    /// A question labeled with the first labels of its type.
+    /// A question labeled with the first labels of its type. A question of an
+    /// unlabeled read may have more options than its type has labels, and
+    /// keeps all of them.
     pub(super) fn labeled(
         id: String,
         kind: QuestionType,
         instructions: String,
         options: Vec<DecisionOption>,
     ) -> Self {
-        let labels = &kind.label_set()[..options.len()];
+        let label_set = kind.label_set();
+        let labels = &label_set[..options.len().min(label_set.len())];
         Self {
             id,
             kind,
@@ -246,12 +249,15 @@ impl Question {
 }
 
 /// Build one question of the structured decisions API from its request spec.
+/// A `labeled` read scores each option by its label's token, so a question
+/// has at most as many options as its type has labels.
 pub(super) fn build_question(
     qid: &str,
     type_name: &str,
     instructions: &Value,
     criteria: &Value,
     max_options: usize,
+    labeled: bool,
 ) -> Result<Question, DecisionError> {
     if qid.is_empty() {
         return Err(DecisionError::new("question ids must be non-empty"));
@@ -279,7 +285,11 @@ pub(super) fn build_question(
             "question {qid_repr}: duplicate option names"
         )));
     }
-    let limit = max_options.min(kind.label_set().len());
+    let limit = if labeled {
+        max_options.min(kind.label_set().len())
+    } else {
+        max_options
+    };
     if options.len() > limit {
         return Err(DecisionError::new(format!(
             "question {qid_repr}: at most {limit} options for this model"

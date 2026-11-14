@@ -363,6 +363,40 @@ pub(super) fn load_model_config_json(path: Option<&Path>) -> Result<serde_json::
     read_json_file(path)
 }
 
+/// Name the decision model a checkpoint serves as, like Python's
+/// `Qwen3_5ModelArchConfigConvertor` and
+/// `Qwen3OmniMoeModelArchConfigConvertor`: a Qwen3.5 backbone with a
+/// `decision_config.json` is a Decision 3.0 model, and a Qwen3.5 or
+/// Qwen3-Omni checkpoint with a `joint_head_config.json` is a Clef joint
+/// schema model. The head's config is kept under its file's name.
+pub(super) fn apply_decision_head(
+    config: &mut serde_json::Value,
+    decision_config: Option<&Path>,
+    joint_head_config: Option<&Path>,
+) -> Result<()> {
+    let architectures = config.get("architectures").and_then(serde_json::Value::as_array);
+    let architecture = match architectures.map(Vec::as_slice) {
+        Some([architecture]) => architecture.as_str(),
+        _ => None,
+    };
+    let (architecture, key, path) = match (architecture, decision_config, joint_head_config) {
+        (Some("Qwen3_5ForConditionalGeneration"), _, Some(path)) => {
+            ("ClefFlashForJointSchema", "joint_head_config", path)
+        }
+        (Some("Qwen3_5Model"), Some(path), _) => {
+            ("D3ForSequenceClassification", "decision_config", path)
+        }
+        (Some("Qwen3OmniMoeForConditionalGeneration"), _, Some(path)) => {
+            ("ClefOmniForJointSchema", "joint_head_config", path)
+        }
+        _ => return Ok(()),
+    };
+    let head: serde_json::Value = read_json_file(Some(path))?;
+    config["architectures"] = serde_json::json!([architecture]);
+    config[key] = head;
+    Ok(())
+}
+
 fn read_json_file<T>(path: Option<&Path>) -> Result<T>
 where
     T: for<'de> Deserialize<'de> + Default,
@@ -671,5 +705,46 @@ mod tests {
 
         assert_eq!(config.num_experts(), 0);
         assert!(!config.is_moe());
+    }
+
+    #[test]
+    fn decision_heads_name_their_architecture() {
+        let dir = tempfile::tempdir().unwrap();
+        let head = dir.path().join("head.json");
+        std::fs::write(&head, r#"{"codes": ["A", "B"]}"#).unwrap();
+        let rewrite = |architecture: &str, decision: bool, joint: bool| {
+            let mut config = serde_json::json!({"architectures": [architecture]});
+            super::apply_decision_head(
+                &mut config,
+                decision.then_some(head.as_path()),
+                joint.then_some(head.as_path()),
+            )
+            .unwrap();
+            config
+        };
+        assert_eq!(
+            rewrite("Qwen3_5Model", true, false),
+            serde_json::json!({
+                "architectures": ["D3ForSequenceClassification"],
+                "decision_config": {"codes": ["A", "B"]},
+            })
+        );
+        assert_eq!(
+            rewrite("Qwen3_5ForConditionalGeneration", false, true)["architectures"],
+            serde_json::json!(["ClefFlashForJointSchema"])
+        );
+        assert_eq!(
+            rewrite("Qwen3OmniMoeForConditionalGeneration", false, true)["joint_head_config"],
+            serde_json::json!({"codes": ["A", "B"]})
+        );
+        // Only the backbone Python rewrites takes each head.
+        assert_eq!(
+            rewrite("Qwen3_5ForConditionalGeneration", true, false),
+            serde_json::json!({"architectures": ["Qwen3_5ForConditionalGeneration"]})
+        );
+        assert_eq!(
+            rewrite("Qwen3_5Model", false, true),
+            serde_json::json!({"architectures": ["Qwen3_5Model"]})
+        );
     }
 }

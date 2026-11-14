@@ -607,6 +607,7 @@ async fn collect_output_rejects_partial_sampling_mask() {
         spec_decode_metrics: None,
         weight_versions: WeightVersions::new(None, 2),
         routed_experts: Default::default(),
+        pooling_output: None,
         timestamps: Default::default(),
     };
 
@@ -619,6 +620,77 @@ async fn collect_output_rejects_partial_sampling_mask() {
             ..
         }
     ));
+}
+
+/// A pooling request sends pooling parameters and no sampling parameters, and
+/// its collected output carries the pooler's output.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn encode_returns_the_pooling_output() {
+    use sonar_engine_core_client::protocol::pooling::PoolingParams;
+    use sonar_engine_core_client::protocol::tensor::WireNdArray;
+
+    let ipc = IpcNamespace::new().unwrap();
+    let handshake_address = ipc.handshake_endpoint();
+    let (shutdown_tx, engine_task) = spawn_mock_engine_task(
+        handshake_address.clone(),
+        b"engine-encode".to_vec(),
+        |dealer, push| {
+            Box::pin(async move {
+                let add = recv_engine_message(dealer).await;
+                let request: EngineCoreRequest = rmp_serde::from_slice(&add[1]).unwrap();
+                assert!(request.sampling_params.is_none());
+                assert_eq!(
+                    request.pooling_params,
+                    Some(PoolingParams::for_task("classify", Some(false)))
+                );
+                assert_eq!(request.priority, 2);
+                send_outputs(
+                    push,
+                    RequestBatchOutputs {
+                        outputs: vec![EngineCoreOutput {
+                            pooling_output: Some(Box::new(
+                                WireNdArray::from_f32(vec![2], vec![0.5, -1.0]).unwrap(),
+                            )),
+                            ..request_output(
+                                &request.request_id,
+                                vec![],
+                                Some(EngineCoreFinishReason::Stop),
+                            )
+                        }],
+                        ..Default::default()
+                    }
+                    .into(),
+                )
+                .await;
+            })
+        },
+    );
+
+    let llm = connect_async_llm_with_ipc(handshake_address, 0, "test-model", &ipc).await;
+    let collected = llm
+        .encode(sonar_llm::EncodeRequest {
+            request_id: "req-encode".to_string(),
+            prompt_token_ids: vec![1, 2, 3],
+            pooling_params: PoolingParams::for_task("classify", Some(false)),
+            mm_features: None,
+            cache_salt: None,
+            priority: 2,
+            lora_request: None,
+        })
+        .await
+        .unwrap()
+        .collect_output()
+        .await
+        .unwrap();
+    assert_eq!(collected.prompt_token_ids, [1, 2, 3]);
+    assert!(collected.token_ids.is_empty());
+    assert_eq!(
+        collected.pooling_output.unwrap().to_f64_vec(),
+        Some(vec![0.5, -1.0])
+    );
+    let _ = shutdown_tx.send(());
+    engine_task.await.unwrap();
+    llm.shutdown().await.unwrap();
 }
 
 /// Prefiller reuse controls response usage while decoder metrics retain KV work.
