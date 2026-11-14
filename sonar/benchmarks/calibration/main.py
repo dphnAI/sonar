@@ -25,6 +25,7 @@ import aiohttp
 from rich.console import Console
 from rich.prompt import Confirm
 
+from sonar.benchmarks.calibration import pressure
 from sonar.benchmarks.calibration.client import WorkloadRunner, summarize_window
 from sonar.benchmarks.calibration.fit import FitError, fit_prefill_cost
 from sonar.benchmarks.calibration.options import CalibrationOptions, options_from_args
@@ -51,8 +52,6 @@ from sonar.benchmarks.calibration.ui import (
 )
 from sonar.benchmarks.calibration.workload import TokenSampler, Workload, WorkloadError, load_workload
 
-SESSION_PRESSURE = 1.5
-MIN_SESSIONS, MAX_SESSIONS = 4, 512
 DEFAULT_STARTUP_ESTIMATE = 300.0
 METRICS_INTERVAL = 10.0
 # Calibration options that change the result; the others only affect presentation.
@@ -167,18 +166,6 @@ def load_sampler(info: ServeInfo, seed: int) -> TokenSampler:
     return TokenSampler(len(tokenizer), excluded, seed)
 
 
-# Planning helpers
-
-
-def auto_sessions(kv_capacity_tokens: int | None, mean_session_context: float) -> int | None:
-    """Enough concurrent sessions that their contexts exceed the KV cache by
-    `SESSION_PRESSURE`, so eviction decisions matter."""
-    if not kv_capacity_tokens or mean_session_context <= 0:
-        return None
-    sessions = math.ceil(SESSION_PRESSURE * kv_capacity_tokens / mean_session_context)
-    return min(max(sessions, MIN_SESSIONS), MAX_SESSIONS)
-
-
 def default_profile_max_tokens(max_model_len: int, workload: Workload) -> int:
     return min(max_model_len - 1, max(16384, workload.stats.prompt_tokens_p95))
 
@@ -188,7 +175,11 @@ def estimate_seconds(
 ) -> float:
     warmup, duration, trials = options.schedule
     profile = sum(schedule) / prefill_tokens_per_second + 2 * len(schedule)
-    return startup + profile + trials * (startup + warmup + duration)
+    probe = 0.0
+    if options.sessions is None:
+        probe_warmup, probe_duration = options.probe_schedule
+        probe = len(pressure.MULTIPLIERS) * (startup + probe_warmup + probe_duration)
+    return startup + profile + probe + trials * (startup + warmup + duration)
 
 
 def fingerprint(options: CalibrationOptions, serve_args: Sequence[str]) -> dict[str, Any]:
@@ -334,7 +325,8 @@ def write_report(
         "",
         "## Trials",
         "",
-        f"{workload.description}, {state.sessions} concurrent sessions, {gpus} GPU{'s' if gpus != 1 else ''}.",
+        f"{workload.description}, {state.sessions} concurrent sessions, {gpus} GPU{'s' if gpus != 1 else ''}."
+        + (f" {state.sessions_note}" if state.sessions_note else ""),
         "",
         "| R | Runs | Output tok/s/GPU | 95% CI | p90 TTFT (s) |",
         "|---:|---:|---:|---:|---:|",
@@ -401,21 +393,30 @@ class Calibration:
 
     def _eta(self) -> float | None:
         startup = self._startup_estimate()
-        per_trial = startup + self.warmup + self.duration
-        remaining = per_trial * max(0, self.max_trials - len(self.state.trials))
         trial = self.dashboard.trial
-        if trial is not None:
-            remaining -= per_trial
-            if trial.run_started is None:
-                remaining += per_trial
-            else:
-                remaining += max(0.0, trial.warmup + trial.duration - (time.monotonic() - trial.run_started))
+        running = None
+        if trial is not None and trial.run_started is not None:
+            running = max(0.0, trial.warmup + trial.duration - (time.monotonic() - trial.run_started))
+        remaining = 0.0
         if self.state.fit is None:
             done = self.state.profile
             schedule = self.state.profile_schedule or []
             mean = statistics.mean(m.seconds for m in done) + 1.0 if done else 5.0
             remaining += mean * (len(schedule) - len(done)) + (startup if self.server is None else 0.0)
-        return remaining
+        if self.state.sessions is None and self.options.sessions is None:
+            probe_warmup, probe_duration = self.options.probe_schedule
+            per_probe = startup + probe_warmup + probe_duration
+            probes_left = len(self.dashboard.pressure_counts or pressure.MULTIPLIERS) - len(self.state.pressure)
+            if self.dashboard.stage == "pressure" and trial is not None:
+                probes_left -= 1
+                remaining += running if running is not None else per_probe
+            remaining += probes_left * per_probe
+        per_trial = startup + self.warmup + self.duration
+        trials_left = self.max_trials - len(self.state.trials)
+        if self.dashboard.stage == "search" and trial is not None:
+            trials_left -= 1
+            remaining += running if running is not None else per_trial
+        return remaining + max(0, trials_left) * per_trial
 
     def _save(self) -> None:
         self.state.save(self.output)
@@ -454,6 +455,8 @@ class Calibration:
             if self.state.fit is None:
                 await self._profile()
             self.dashboard.fit = self.state.fit
+            await self._pressure()
+            self.dashboard.sessions_note = self.state.sessions_note
             await self._search()
             self._report()
         finally:
@@ -522,41 +525,146 @@ class Calibration:
             max_ttft_p90=self.options.max_ttft_p90,
         )
 
-    def _resolve_sessions(self) -> int:
-        if self.state.sessions is not None:
-            return self.state.sessions
-        sessions = self.options.sessions
-        if sessions is None:
-            capacity = self.state.kv_capacity_tokens
-            if capacity is not None:
-                capacity *= self.info.data_parallel_size
-            sessions = auto_sessions(capacity, self.workload.stats.mean_session_context)
-            if sessions is None:
-                raise CalibrationError(
-                    "The server did not report its KV cache size, so the session count cannot be chosen "
-                    "automatically. Pass --sessions."
-                )
-            self.reporter.event(
-                f"Using {sessions} sessions: {SESSION_PRESSURE}x the KV cache "
-                f"({capacity:,} tokens) over a mean session context of "
-                f"{self.workload.stats.mean_session_context:,.0f} tokens"
-            )
-        self.state.sessions = sessions
-        self._save()
-        return sessions
-
     async def _search(self) -> None:
         self.dashboard.stage = "search"
         config = self._search_config()
         self.dashboard.search_config = config
         self.dashboard.trials = list(self.state.measurements)
-        sessions = self._resolve_sessions()
+        sessions = self.state.sessions
+        assert sessions is not None
+        while (ratio := next_ratio(config, self.state.measurements)) is not None:
+            await self._trial(len(self.state.trials) + 1, ratio, config, sessions)
+
+    async def _run_workload(
+        self, server: ManagedServer, view: TrialView, lanes: int, warmup: float, duration: float
+    ) -> tuple[Any, dict[str, float], dict[str, float], list[float]]:
+        """Replay the workload with `lanes` sessions for `warmup + duration`
+        seconds, tracking server metrics, and summarise the measurement window."""
         max_model_len = self.state.max_model_len or self.info.max_model_len
         assert max_model_len is not None
-        while (ratio := next_ratio(config, self.state.measurements)) is not None:
-            await self._trial(len(self.state.trials) + 1, ratio, config, sessions, max_model_len)
+        runner = WorkloadRunner(
+            server.base_url,
+            self.served_model,
+            self.workload,
+            lanes=lanes,
+            sampler=self.sampler,
+            max_model_len=max_model_len,
+            seed=self.options.seed,
+        )
+        view.snapshot = runner.snapshot
+        view.phase = "running"
+        total = warmup + duration
+        view.run_started = time.monotonic()
+        run = asyncio.create_task(runner.run(total))
+        window_start = view.run_started + warmup
+        window_end = view.run_started + total
+        start_metrics: dict[str, float] | None = None
+        kv_samples: list[float] = []
+        async with aiohttp.ClientSession() as http:
+            while not run.done():
+                if not server.alive():
+                    run.cancel()
+                    raise CalibrationError(
+                        "The server exited unexpectedly. Last log lines:\n" + "\n".join(server.tail()[-30:])
+                    )
+                now = time.monotonic()
+                metrics = await _scrape(server, http)
+                if start_metrics is None and now >= window_start:
+                    start_metrics = metrics
+                usage = metrics.get("sonar:kv_cache_usage_perc") if metrics else None
+                if usage is not None:
+                    view.kv_usage = usage / self.info.data_parallel_size
+                    if window_start <= now < window_end:
+                        kv_samples.append(view.kv_usage)
+                if metrics:
+                    # Hit rate over the window once it starts; before that, since the run began.
+                    base = start_metrics or view.baseline_metrics
+                    if base is None:
+                        view.baseline_metrics = metrics
+                    else:
+                        queries = _delta(base, metrics, "sonar:prefix_cache_queries")
+                        hits = _delta(base, metrics, "sonar:prefix_cache_hits")
+                        if queries:
+                            view.prefix_hit_rate = (hits or 0.0) / queries
+                next_tick = min(now + METRICS_INTERVAL, window_start if start_metrics is None else math.inf)
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(run), timeout=max(0.0, next_tick - time.monotonic()))
+            records = run.result()
+            end_metrics = await _scrape(server, http) or {}
+        # At least ten throughput samples per window for the confidence interval.
+        interval = min(60.0, max(5.0, duration / 10))
+        summary = summarize_window(records, runner.timeline, window_start, window_end, interval=interval)
+        return summary, start_metrics or end_metrics, end_metrics, kv_samples
 
-    async def _trial(self, index: int, ratio: float, config: SearchConfig, sessions: int, max_model_len: int) -> None:
+    async def _pressure(self) -> None:
+        """Choose the session count, probing the cache unless --sessions is set."""
+        if self.state.sessions is not None:
+            return
+        if self.options.sessions is not None:
+            self.state.sessions = self.options.sessions
+            self._save()
+            return
+        capacity = self.state.kv_capacity_tokens
+        if capacity is None:
+            raise CalibrationError(
+                "The server did not report its KV cache size, so the session count cannot be probed. Pass --sessions."
+            )
+        capacity *= self.info.data_parallel_size
+        counts = pressure.ladder(capacity, self.workload.stats.mean_session_context)
+        self.dashboard.stage = "pressure"
+        self.dashboard.pressure = list(self.state.pressure)
+        self.dashboard.pressure_counts = counts
+        fit = self.state.fit
+        assert fit is not None
+        warmup, duration = self.options.probe_schedule
+        while (lanes := pressure.next_sessions(counts, self.state.pressure)) is not None:
+            index = len(self.state.pressure) + 1
+            view = TrialView(
+                index=index,
+                total=len(counts),
+                ratio=fit.ratio,
+                sessions=lanes,
+                warmup=warmup,
+                duration=duration,
+                title=f"Cache-pressure probe {index}/{len(counts)} · {lanes} sessions",
+            )
+            self.dashboard.trial = view
+            # A fresh server per probe, so each starts from an empty cache.
+            server = await self._start_server(
+                f"Starting the server for probe {index} ({lanes} sessions)",
+                fit.coefficients(fit.ratio),
+                self.output / "pressure" / f"{index:02d}-{lanes}-sessions" / "server.log",
+            )
+            load = lanes * self.workload.stats.mean_session_context / capacity
+            self.reporter.event(f"Probing {lanes} sessions ({load:.1f}x the KV cache)")
+            summary, start, end, _ = await self._run_workload(server, view, lanes, warmup, duration)
+            await self._stop_server()
+            queries = _delta(start, end, "sonar:prefix_cache_queries")
+            hits = _delta(start, end, "sonar:prefix_cache_hits")
+            step = pressure.PressureStep(
+                sessions=lanes,
+                prefix_hit_rate=(hits / queries) if hits is not None and queries else None,
+                output_tokens_per_second=summary.output_tokens_per_second,
+                ttft_p90=summary.ttft_p90 if math.isfinite(summary.ttft_p90) else math.inf,
+            )
+            self.state.pressure.append(step)
+            self._save()
+            self.dashboard.pressure.append(step)
+            self.dashboard.trial = None
+            rate = "-" if step.prefix_hit_rate is None else f"{step.prefix_hit_rate * 100:.1f}%"
+            self.reporter.event(
+                f"{lanes} sessions: {rate} prefix hits, "
+                f"{step.output_tokens_per_second / self.info.gpus:,.0f} output tok/s/GPU, "
+                f"p90 TTFT {step.ttft_p90:.2f} s"
+            )
+        sessions, note = pressure.choose_sessions(self.state.pressure)
+        self.state.sessions = sessions
+        self.state.sessions_note = note
+        self._save()
+        self.dashboard.sessions_note = note
+        self.reporter.event(note)
+
+    async def _trial(self, index: int, ratio: float, config: SearchConfig, sessions: int) -> None:
         fit = self.state.fit
         assert fit is not None
         coefficients = fit.coefficients(ratio)
@@ -568,6 +676,7 @@ class Calibration:
             sessions=sessions,
             warmup=self.warmup,
             duration=self.duration,
+            title=f"Trial {index}/{config.max_trials} · R = {format_ratio(ratio)}",
         )
         self.dashboard.trial = trial
         started = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
@@ -576,61 +685,14 @@ class Calibration:
             coefficients,
             directory / "server.log",
         )
-        runner = WorkloadRunner(
-            server.base_url,
-            self.served_model,
-            self.workload,
-            lanes=sessions,
-            sampler=self.sampler,
-            max_model_len=max_model_len,
-            seed=self.options.seed,
-        )
-        trial.snapshot = runner.snapshot
-        trial.phase = "running"
         self.reporter.event(
             f"Trial {index}/{config.max_trials}: R = {format_ratio(ratio)} "
             f"({format_coefficients(coefficients)}), {sessions} sessions"
         )
-        total = self.warmup + self.duration
-        trial.run_started = time.monotonic()
-        run = asyncio.create_task(runner.run(total))
-        window_start = trial.run_started + self.warmup
-        window_end = trial.run_started + total
-        start_metrics: dict[str, float] | None = None
-        kv_samples: list[float] = []
-        async with aiohttp.ClientSession() as http:
-            while not run.done():
-                if not server.alive():
-                    run.cancel()
-                    raise CalibrationError(
-                        "The trial server exited unexpectedly. Last log lines:\n" + "\n".join(server.tail()[-30:])
-                    )
-                now = time.monotonic()
-                metrics = await _scrape(server, http)
-                if start_metrics is None and now >= window_start:
-                    start_metrics = metrics
-                usage = metrics.get("sonar:kv_cache_usage_perc") if metrics else None
-                if usage is not None:
-                    trial.kv_usage = usage / self.info.data_parallel_size
-                    if window_start <= now < window_end:
-                        kv_samples.append(trial.kv_usage)
-                if start_metrics and metrics:
-                    queries = _delta(start_metrics, metrics, "sonar:prefix_cache_queries")
-                    hits = _delta(start_metrics, metrics, "sonar:prefix_cache_hits")
-                    if queries:
-                        trial.prefix_hit_rate = (hits or 0.0) / queries
-                next_tick = min(now + METRICS_INTERVAL, window_start if start_metrics is None else math.inf)
-                with contextlib.suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(asyncio.shield(run), timeout=max(0.0, next_tick - time.monotonic()))
-            records = run.result()
-            end_metrics = await _scrape(server, http)
+        summary, start, end, kv_samples = await self._run_workload(server, trial, sessions, self.warmup, self.duration)
         trial.phase = "stopping"
         await self._stop_server()
-        # At least ten throughput samples per window for the confidence interval.
-        interval = min(60.0, max(5.0, self.duration / 10))
-        summary = summarize_window(records, runner.timeline, window_start, window_end, interval=interval)
-        end = end_metrics or {}
-        measurement = trial_measurement(ratio, summary, start_metrics or end, end, kv_samples)
+        measurement = trial_measurement(ratio, summary, start, end, kv_samples)
         record = TrialRecord(
             index=index,
             coefficients=coefficients,
@@ -645,7 +707,9 @@ class Calibration:
         self._save()
         self.dashboard.trials.append(measurement)
         self.dashboard.trial = None
-        hit_note = f", {measurement.prefix_hit_rate * 100:.1f}% prefix hits" if measurement.prefix_hit_rate else ""
+        hit_note = (
+            f", {measurement.prefix_hit_rate * 100:.1f}% prefix hits" if measurement.prefix_hit_rate is not None else ""
+        )
         self.reporter.event(
             f"Trial {index} R = {format_ratio(ratio)}: "
             f"{measurement.output_tokens_per_second / self.info.gpus:,.0f} output tok/s/GPU, "
@@ -764,7 +828,11 @@ def _run(options: CalibrationOptions, serve_args: list[str], console: Console) -
             trials=trials,
             warmup=warmup,
             duration=duration,
-            sessions=str(options.sessions) if options.sessions else "automatic, from the KV cache size",
+            sessions=(
+                str(options.sessions)
+                if options.sessions
+                else "probed: up to 4 short runs around the KV cache capacity on fresh servers"
+            ),
             objective=(
                 "maximise output throughput"
                 if options.objective == "throughput"

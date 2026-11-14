@@ -39,6 +39,13 @@ class CalibrationOptions:
             self.trials if self.trials is not None else trials,
         )
 
+    @property
+    def probe_schedule(self) -> tuple[float, float]:
+        """Warmup and measurement seconds of each cache-pressure probe: half
+        a trial's warmup and a quarter of its measurement."""
+        warmup, duration, _ = self.schedule
+        return warmup / 2, duration / 4
+
 
 def add_cli_args(parser: argparse.ArgumentParser) -> None:
     workload = parser.add_argument_group("workload")
@@ -52,7 +59,8 @@ def add_cli_args(parser: argparse.ArgumentParser) -> None:
     workload.add_argument(
         "--sessions",
         type=int,
-        help="Concurrent sessions per trial. Default: enough for 1.5x the KV cache capacity.",
+        help="Concurrent sessions per trial. Default: probe counts around the KV cache capacity and use the "
+        "largest one that still reuses the cache well.",
     )
     workload.add_argument("--seed", type=int, default=0, help="Seed for session order and prompts. Default: 0.")
 

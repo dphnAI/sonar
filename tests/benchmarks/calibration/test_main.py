@@ -5,11 +5,12 @@ import time
 import pytest
 from rich.console import Console
 
+from sonar.benchmarks.calibration import pressure
 from sonar.benchmarks.calibration.client import RunnerSnapshot
 from sonar.benchmarks.calibration.fit import PrefillSample, fit_prefill_cost
 from sonar.benchmarks.calibration.main import (
     CalibrationError,
-    auto_sessions,
+    estimate_seconds,
     fingerprint,
     inspect_serve_args,
     pressure_notes,
@@ -80,11 +81,32 @@ def test_effort_sets_defaults_that_options_override():
     assert CalibrationOptions(effort="thorough", trials=3, warmup=60).schedule == (60, 1800.0, 3)
 
 
-def test_auto_sessions_oversubscribe_the_cache_within_bounds():
-    assert auto_sessions(1_000_000, 50_000) == 30
-    assert auto_sessions(1_000, 50_000) == 4
-    assert auto_sessions(10**9, 1_000) == 512
-    assert auto_sessions(None, 1_000) is None
+def test_pressure_probe_keeps_the_largest_count_that_still_reuses_the_cache():
+    assert pressure.ladder(1_000_000, 50_000) == [10, 20, 30, 40]
+    assert pressure.ladder(1_000, 50_000) == [2]
+    probes = [
+        pressure.PressureStep(10, 0.80, 100.0, 1.0),
+        pressure.PressureStep(20, 0.70, 140.0, 1.5),
+        pressure.PressureStep(30, 0.40, 150.0, 4.0),
+    ]
+    # 30 sessions fell below 60% of the best hit rate, so 20 is kept.
+    sessions, reason = pressure.choose_sessions(probes)
+    assert sessions == 20 and "20 sessions kept 70%" in reason
+    assert pressure.next_sessions([10, 20, 30, 40], probes) == 40
+    # A probe that collapses below 30% of the best ends the ladder.
+    collapsed = [*probes[:2], pressure.PressureStep(30, 0.1, 150.0, 9.0)]
+    assert pressure.next_sessions([10, 20, 30, 40], collapsed) is None
+    # A workload that never reuses the cache falls back to the smallest count, with a warning.
+    sessions, reason = pressure.choose_sessions([pressure.PressureStep(10, 0.0, 1.0, 1.0)])
+    assert sessions == 10 and "little to decide" in reason
+
+
+def test_estimate_counts_probes_only_when_sessions_are_automatic():
+    schedule = [8192] * 3
+    auto = estimate_seconds(CalibrationOptions(effort="quick"), schedule, startup=100)
+    fixed = estimate_seconds(CalibrationOptions(effort="quick", sessions=8), schedule, startup=100)
+    # Four probes of a fresh server, 150 s warmup and 150 s measurement each.
+    assert auto - fixed == pytest.approx(4 * (100 + 150 + 150))
 
 
 def test_prefill_time_comes_from_the_server_histogram_when_it_saw_one_request():
@@ -175,6 +197,12 @@ def test_dashboard_renders_each_stage():
     dashboard.fit = _fit()
     profile = _render(render(dashboard))
     assert "16,384" in profile and "R = E/D" in profile and "3/6 requests" in profile
+
+    dashboard.stage = "pressure"
+    dashboard.pressure_counts = [10, 20, 30, 40]
+    dashboard.pressure = [pressure.PressureStep(10, 0.8, 1000.0, 1.2)]
+    probe = _render(render(dashboard))
+    assert "Cache pressure" in probe and "80.0%" in probe and "pending" in probe
 
     config = SearchConfig(fitted_ratio=dashboard.fit.ratio, fitted_interval=(0.1, 0.3), max_trials=6)
     dashboard.stage = "search"

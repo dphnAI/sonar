@@ -21,10 +21,16 @@ from rich.text import Text
 
 from sonar.benchmarks.calibration.client import RunnerSnapshot
 from sonar.benchmarks.calibration.fit import CostFit
+from sonar.benchmarks.calibration.pressure import PressureStep
 from sonar.benchmarks.calibration.profile import ProfileMeasurement
 from sonar.benchmarks.calibration.search import SearchConfig, Selection, TrialMeasurement, format_ratio, select
 
-STAGES = (("profile", "Profile prefill"), ("search", "Search ratios"), ("report", "Report"))
+STAGES = (
+    ("profile", "Profile prefill"),
+    ("pressure", "Probe sessions"),
+    ("search", "Search ratios"),
+    ("report", "Report"),
+)
 _BAR_WIDTH = 16
 _PARTIAL_BLOCKS = " ▏▎▍▌▋▊▉"
 
@@ -63,6 +69,9 @@ class TrialView:
     snapshot: Callable[[], RunnerSnapshot] | None = None
     prefix_hit_rate: float | None = None
     kv_usage: float | None = None
+    title: str = ""
+    # Metrics when the run began, for a live hit rate before the window opens.
+    baseline_metrics: dict[str, float] | None = None
 
 
 @dataclass(slots=True)
@@ -86,6 +95,9 @@ class Dashboard:
     eta_seconds: float | None = None
     events: deque = field(default_factory=lambda: deque(maxlen=4))
     files: list[str] = field(default_factory=list)
+    pressure: list[PressureStep] = field(default_factory=list)
+    pressure_counts: list[int] = field(default_factory=list)
+    sessions_note: str | None = None
 
 
 # Building blocks
@@ -101,8 +113,9 @@ def _stepper(dashboard: Dashboard) -> Text:
             text.append(f"✓ {label}", style="green")
         elif index == current:
             suffix = ""
-            if name == "search" and dashboard.trial is not None:
-                suffix = f" (trial {dashboard.trial.index}/{dashboard.trial.total})"
+            if name in ("pressure", "search") and dashboard.trial is not None:
+                kind = "probe" if name == "pressure" else "trial"
+                suffix = f" ({kind} {dashboard.trial.index}/{dashboard.trial.total})"
             text.append(f"● {label}{suffix}", style="bold cyan")
         else:
             text.append(f"○ {label}", style="dim")
@@ -232,7 +245,7 @@ def _trial_panel(dashboard: Dashboard, trial: TrialView) -> Panel:
         metric("prefix hits", f"{trial.prefix_hit_rate * 100:.1f}%" if trial.prefix_hit_rate is not None else "-"),
         metric("KV usage", f"{trial.kv_usage * 100:.0f}%" if trial.kv_usage is not None else "-"),
     )
-    title = f"Trial {trial.index}/{trial.total} · R = {format_ratio(trial.ratio)}"
+    title = trial.title or f"Trial {trial.index}/{trial.total} · R = {format_ratio(trial.ratio)}"
     return Panel(Group(_trial_bar(trial), Text(), grid), title=title, border_style="yellow")
 
 
@@ -318,6 +331,44 @@ def _result_panel(dashboard: Dashboard) -> Panel:
     return Panel(Group(*lines), title="Result", border_style="green")
 
 
+def _pressure_panel(dashboard: Dashboard) -> Panel:
+    table = Table(box=None, pad_edge=False, header_style="bold dim")
+    table.add_column("Sessions", justify="right")
+    table.add_column("Prefix hits", justify="right")
+    table.add_column("tok/s/GPU", justify="right")
+    table.add_column("p90 TTFT", justify="right", no_wrap=True)
+    table.add_column("", no_wrap=True)
+    rates = [step.prefix_hit_rate or 0.0 for step in dashboard.pressure]
+    best = max(rates, default=0.0)
+    for step in dashboard.pressure:
+        rate = step.prefix_hit_rate or 0.0
+        table.add_row(
+            str(step.sessions),
+            f"{rate * 100:.1f}%",
+            f"{step.output_tokens_per_second / dashboard.gpus:,.0f}",
+            f"{step.ttft_p90:.2f} s",
+            Text(_bar(rate / best if best else 0.0), style="cyan"),
+        )
+    trial = dashboard.trial
+    if trial is not None:
+        table.add_row(Text(str(trial.sessions), style="yellow"), Text("running", style="yellow"))
+    for count in dashboard.pressure_counts:
+        if count not in {step.sessions for step in dashboard.pressure} and (trial is None or trial.sessions != count):
+            table.add_row(Text(str(count), style="dim"), Text("pending", style="dim"))
+    parts: list[RenderableType] = [
+        Text(
+            "Finding the largest session count whose prefix hits stay high: idle sessions must compete "
+            "for the cache, or eviction order cannot matter.",
+            style="dim",
+        ),
+        Text(),
+        table,
+    ]
+    if dashboard.sessions_note:
+        parts += [Text(), Text(dashboard.sessions_note, style="bold")]
+    return Panel(Group(*parts), title="Cache pressure", border_style="blue")
+
+
 def render(dashboard: Dashboard) -> RenderableType:
     parts: list[RenderableType] = [_header(dashboard)]
     if dashboard.stage == "report" and dashboard.selection is not None:
@@ -328,8 +379,13 @@ def render(dashboard: Dashboard) -> RenderableType:
         parts.append(_profile_panel(dashboard))
     elif dashboard.trial is not None:
         parts.append(_trial_panel(dashboard, dashboard.trial))
-    if dashboard.stage != "profile" and dashboard.fit is not None and dashboard.stage != "report":
-        parts.append(Panel(_fit_line(dashboard.fit), title="Prefill cost", border_style="magenta"))
+    if dashboard.stage == "pressure":
+        parts.append(_pressure_panel(dashboard))
+    elif dashboard.stage == "search" and dashboard.fit is not None:
+        setup: list[RenderableType] = [_fit_line(dashboard.fit)]
+        if dashboard.sessions_note:
+            setup.append(Text(dashboard.sessions_note, style="dim"))
+        parts.append(Panel(Group(*setup), title="Setup", border_style="magenta"))
     if (candidates := _candidates_panel(dashboard)) is not None:
         parts.append(candidates)
     for event in dashboard.events:
@@ -458,7 +514,7 @@ def status_line(dashboard: Dashboard) -> str:
     phase = "warmup" if elapsed < trial.warmup else "measuring"
     p90 = f"{snapshot.ttft_p90_recent:.2f} s" if snapshot.ttft_p90_recent else "-"
     return (
-        f"Trial {trial.index}/{trial.total} R={format_ratio(trial.ratio)} {phase} "
+        f"{trial.title or f'Trial {trial.index}/{trial.total}'} {phase} "
         f"{format_duration(elapsed)}/{format_duration(trial.warmup + trial.duration)}: "
         f"{snapshot.output_tokens_per_second / dashboard.gpus:,.0f} output tok/s/GPU, p90 TTFT {p90}, "
         f"{snapshot.completed:,} requests, {snapshot.failed} failed"

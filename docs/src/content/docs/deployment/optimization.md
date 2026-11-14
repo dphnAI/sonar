@@ -251,10 +251,12 @@ beyond measurement noise, and the fitted ratio otherwise. It writes
 The default workload replays the public coding-agent traces
 `semianalysisai/cc-traces-weka-062126` (about 1.9 GB, downloaded once). Pass
 `--workload` with a directory or `.jsonl` file of Weka-format traces to replay
-your own traffic, or `synthetic` to run without a download. By default the
-session count is set so that session contexts total 1.5 times the KV cache
-capacity. A workload without cache pressure cannot distinguish the ratios, and
-the report says so.
+your own traffic, or `synthetic` to run without a download. Unless `--sessions`
+is given, the command first runs short probes on fresh servers with session
+contexts totalling half to twice the KV cache capacity. It keeps the largest
+count whose prefix hit rate stays within 60% of the best probe, so that idle
+sessions compete for the cache without evicting each other's prefixes before
+reuse. The report warns when the trials show no cache pressure or no reuse.
 
 `--effort quick|standard|thorough` sets the trial count and length. A
 standard run makes six trials of 10 minutes of warmup and 20 minutes of

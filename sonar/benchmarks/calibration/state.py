@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from sonar.benchmarks.calibration.fit import CostFit
+from sonar.benchmarks.calibration.pressure import PressureStep
 from sonar.benchmarks.calibration.profile import ProfileMeasurement
 from sonar.benchmarks.calibration.search import TrialMeasurement
 
 STATE_FILE = "state.json"
-STATE_VERSION = 1
+STATE_VERSION = 2
 
 
 def _now() -> str:
@@ -45,6 +46,8 @@ class CalibrationState:
     max_model_len: int | None = None
     kv_capacity_tokens: int | None = None
     sessions: int | None = None
+    sessions_note: str | None = None
+    pressure: list[PressureStep] = field(default_factory=list)
     startup_seconds: list[float] = field(default_factory=list)
     trials: list[TrialRecord] = field(default_factory=list)
     finished: bool = False
@@ -70,6 +73,7 @@ class CalibrationState:
         if data.pop("version", None) != STATE_VERSION:
             raise ValueError(f"{path} was written by an incompatible Sonar version; start a new calibration.")
         data["profile"] = [ProfileMeasurement(**entry) for entry in data["profile"]]
+        data["pressure"] = [PressureStep(**entry) for entry in data["pressure"]]
         if data["fit"] is not None:
             fit = data["fit"]
             fit["ratio_interval"] = tuple(fit["ratio_interval"])
