@@ -173,6 +173,8 @@ def test_reports_warn_without_cache_pressure_or_with_failures():
     assert "Increase --sessions" in notes[0]
     assert "3 requests failed" in notes[1]
     assert pressure_notes([_measurement(0.2, 1.0, usage=0.99)]) == []
+    # After the probe showed more sessions thrash, low usage is not a problem to fix.
+    assert pressure_notes([_measurement(0.2, 1.0, usage=0.8)], more_sessions_tested=True) == []
 
 
 def test_reports_warn_when_requests_evict_each_other():

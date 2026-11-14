@@ -25,12 +25,7 @@ from sonar.benchmarks.calibration.pressure import PressureStep
 from sonar.benchmarks.calibration.profile import ProfileMeasurement
 from sonar.benchmarks.calibration.search import SearchConfig, Selection, TrialMeasurement, format_ratio, select
 
-STAGES = (
-    ("profile", "Profile prefill"),
-    ("pressure", "Probe sessions"),
-    ("search", "Search ratios"),
-    ("report", "Report"),
-)
+STAGES = (("profile", "Profile"), ("pressure", "Probe"), ("search", "Search"), ("report", "Report"))
 _BAR_WIDTH = 16
 _PARTIAL_BLOCKS = " ▏▎▍▌▋▊▉"
 
