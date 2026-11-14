@@ -804,7 +804,13 @@ def _run(options: CalibrationOptions, serve_args: list[str], console: Console) -
     output = resume or Path(options.output_dir or default_output_dir(info.model))
     workload = _load_workload(options, max_model_len, console)
     with console.status("Loading the tokenizer…"):
-        sampler = load_sampler(info, options.seed)
+        try:
+            sampler = load_sampler(info, options.seed)
+        except (OSError, ValueError) as error:
+            raise CalibrationError(
+                f"Could not load the tokenizer of {info.tokenizer!r}: {error}\n"
+                "Check that the model is downloaded, or that the Hugging Face Hub is reachable."
+            ) from None
 
     if state.profile_schedule is None:
         max_tokens = options.profile_max_tokens or default_profile_max_tokens(max_model_len, workload)
