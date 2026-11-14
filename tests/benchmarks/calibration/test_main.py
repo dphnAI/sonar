@@ -168,13 +168,10 @@ def test_state_round_trips_and_detects_changed_settings(tmp_path):
     assert fingerprint_differences(loaded.fingerprint, changed) == ["effort: saved 'standard', now 'quick'"]
 
 
-def test_reports_warn_without_cache_pressure_or_with_failures():
+def test_reports_warn_about_failures_but_not_low_running_kv_usage():
     notes = pressure_notes([_measurement(0.2, 1.0, usage=0.5), _measurement(0.0, 1.0, usage=0.6, failed=3)])
-    assert "Increase --sessions" in notes[0]
-    assert "3 requests failed" in notes[1]
+    assert notes == ["3 requests failed during measurement windows; see the trial server logs."]
     assert pressure_notes([_measurement(0.2, 1.0, usage=0.99)]) == []
-    # After the probe showed more sessions thrash, low usage is not a problem to fix.
-    assert pressure_notes([_measurement(0.2, 1.0, usage=0.8)], more_sessions_tested=True) == []
 
 
 def test_reports_warn_when_requests_evict_each_other():

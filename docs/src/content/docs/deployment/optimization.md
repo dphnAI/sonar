@@ -256,7 +256,7 @@ is given, the command first runs short probes on fresh servers with session
 contexts totalling half to twice the KV cache capacity. It keeps the largest
 count whose prefix hit rate stays within 60% of the best probe, so that idle
 sessions compete for the cache without evicting each other's prefixes before
-reuse. The report warns when the trials show no cache pressure or no reuse.
+reuse. The report warns when the trials show almost no prefix-cache reuse.
 
 `--effort quick|standard|thorough` sets the trial count and length. A
 standard run makes six trials of 10 minutes of warmup and 20 minutes of

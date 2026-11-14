@@ -249,17 +249,11 @@ def trial_measurement(
 # Reporting
 
 
-def pressure_notes(trials: Sequence[TrialMeasurement], *, more_sessions_tested: bool = False) -> list[str]:
-    """Warnings about the trial conditions. `more_sessions_tested` means the
-    session probe already found that larger counts stop reusing the cache, so
-    low KV usage is the most pressure this workload can usefully apply."""
+def pressure_notes(trials: Sequence[TrialMeasurement]) -> list[str]:
+    """Warnings about the trial conditions. KV cache usage is not one: Sonar
+    counts only blocks held by running requests, so a cache full of evictable
+    prefixes still reports low usage."""
     notes = []
-    usages = [trial.kv_usage_p50 for trial in trials if trial.kv_usage_p50 is not None]
-    if usages and max(usages) < 0.9 and not more_sessions_tested:
-        notes.append(
-            f"KV cache usage stayed at or below {max(usages) * 100:.0f}% in every trial, so eviction rarely ran. "
-            "Increase --sessions to calibrate under cache pressure."
-        )
     hit_rates = [trial.prefix_hit_rate for trial in trials if trial.prefix_hit_rate is not None]
     if hit_rates and max(hit_rates) < 0.1:
         notes.append(
@@ -283,10 +277,7 @@ def write_report(
 ) -> list[Path]:
     fit = state.fit
     assert fit is not None
-    probe_capped = any(step.sessions > (state.sessions or 0) for step in state.pressure)
-    notes = [note for note in (selection.note,) if note] + pressure_notes(
-        state.measurements, more_sessions_tested=probe_capped
-    )
+    notes = [note for note in (selection.note,) if note] + pressure_notes(state.measurements)
     result = {
         "prefill_cost_coefficients": list(recommended),
         "ratio": selection.ratio,
