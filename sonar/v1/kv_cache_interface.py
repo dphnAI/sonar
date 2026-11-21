@@ -923,11 +923,10 @@ class SlidingWindowSpec(AttentionSpec):
         """
         # During chunked prefill, we hold KV for the last `sliding_window-1`
         # computed tokens plus the in-flight tokens (frees happen on the
-        # processed-token basis); never more than `max_model_len`. An additional
-        # `extra_retained_tokens` trailing tokens are kept alive below the
-        # window for multi-module spec decoding, and must be accounted here too.
+        # processed-token basis). The retained span includes any history needed
+        # for speculative re-prefill or for a continuation cache hit.
         num_tokens = min(
-            self.sliding_window - 1 + self.extra_retained_tokens + max_in_flight_tokens,
+            self.num_retained_tokens + max_in_flight_tokens,
             max_model_len,
         )
         # +1 because the sliding window may not start from the beginning of
@@ -1007,6 +1006,7 @@ class SlidingWindowMLASpec(SlidingWindowSpec):
     alignment: int | None = None  # Default to None for no padding.
     model_version: str | None = None
     bounded_replay: bool = False
+    decode_tail_retention_tokens: int = 0
     # See MLAAttentionSpec.non_causal_multi_token_decode (windowed DSpark drafts).
     non_causal_multi_token_decode: bool = False
 
@@ -1023,6 +1023,10 @@ class SlidingWindowMLASpec(SlidingWindowSpec):
         return not self.bounded_replay
 
     @property
+    def num_retained_tokens(self) -> int:
+        return super().num_retained_tokens + self.decode_tail_retention_tokens
+
+    @property
     def prefix_replay_tokens(self) -> int:
         return self.sliding_window if self.bounded_replay else 0
 
@@ -1037,6 +1041,7 @@ class SlidingWindowMLASpec(SlidingWindowSpec):
         sliding_window_set = set(spec.sliding_window for spec in specs)
         extra_retained_set = set(spec.extra_retained_tokens for spec in specs)
         bounded_replay_set = set(spec.bounded_replay for spec in specs)
+        decode_tail_retention_set = {spec.decode_tail_retention_tokens for spec in specs}
         block_stride_alignment_set = {spec.block_stride_alignment for spec in specs}
         kv_quant_mode_set = {spec.kv_quant_mode for spec in specs}
         alignment_set = {spec.alignment for spec in specs}
@@ -1049,6 +1054,7 @@ class SlidingWindowMLASpec(SlidingWindowSpec):
             and len(sliding_window_set) == 1
             and len(extra_retained_set) == 1
             and len(bounded_replay_set) == 1
+            and len(decode_tail_retention_set) == 1
             and len(block_stride_alignment_set) == 1
             and len(kv_quant_mode_set) == 1
             and len(alignment_set) == 1
@@ -1076,6 +1082,7 @@ class SlidingWindowMLASpec(SlidingWindowSpec):
             tokens_per_state=tokens_per_state_set.pop(),
             model_version=model_version_set.pop(),
             bounded_replay=bounded_replay_set.pop(),
+            decode_tail_retention_tokens=decode_tail_retention_set.pop(),
             kv_quant_mode=kv_quant_mode_set.pop(),
             alignment=alignment_set.pop(),
             non_causal_multi_token_decode=any(spec.non_causal_multi_token_decode for spec in specs),

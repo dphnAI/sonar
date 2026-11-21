@@ -411,6 +411,13 @@ and fixed-token `prompt_logprob_token_ids` scoring, including fixed-token
 requests without ordinary prompt logprobs. Ordinary generation still uses
 the bounded decoder window.
 
+With local prefix caching and `--prefix-cache-retention-interval 0` (the
+default), the native backend also keeps the early-layer window at the last
+reusable boundary of a completed generation. A continuation can reuse the
+previous output up to that boundary, including with DSpark. The backend
+keeps one extra cache-hit interval of live window history in the default
+DSpark configuration. Decoder replay is unchanged.
+
 For BF16 query chunks, including prefill, the backend fuses query/KV RMSNorm
 with MXFP8 query quantization and the KV rotary embedding. The query
 projection and optional indexer reuse the quantized query with their

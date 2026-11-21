@@ -5,19 +5,29 @@ the hit to rebuild the non-cacheable sliding-window group, keeps the hit's
 blocks, and hands the worker the replay start."""
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 import torch
+from transformers import OPTConfig
 
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_planning import get_global_kv_cache_groups, get_kv_cache_configs
+from sonar.v1.core.kv_cache_utils import (
+    generate_scheduler_kv_cache_config,
+    get_request_block_hasher,
+    resolve_kv_cache_block_sizes,
+)
 from sonar.v1.core.sched.scheduler import Scheduler
 from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
+    MLAAttentionSpec,
     SlidingWindowMLASpec,
 )
-from sonar.v1.outputs import ModelRunnerOutput
-from sonar.v1.request import RequestStatus
+from sonar.v1.outputs import DraftTokenIds, ModelRunnerOutput
+from sonar.v1.request import Request, RequestStatus
 from sonar.v1.structured_output import StructuredOutputManager
 from tests.v1.kv_connector.unit.utils import MockKVConfig, create_model_runner_output
 
@@ -324,3 +334,76 @@ def test_kv_load_zeroing_respects_loaded_groups(is_async, loads_window):
             assert not new_ids & zeroed
         else:
             assert new_ids <= zeroed
+
+
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    "native,num_drafts,eviction,expected_hit",
+    [(False, None, "lru", 96), (True, None, "lru", 192), (True, 7, "queueguard", 192)],
+)
+def test_sm120_continuation_reuses_final_output_window(tmp_path: Path, native, num_drafts, eviction, expected_hit):
+    OPTConfig(architectures=["OPTForCausalLM"], max_position_embeddings=512).save_pretrained(tmp_path)
+    config = create_scheduler(
+        model=str(tmp_path),
+        skip_tokenizer_init=True,
+        enable_prefix_caching=True,
+        num_speculative_tokens=num_drafts,
+        block_size=32,
+        max_model_len=512,
+    ).sonar_config
+    config.cache_config.prefix_cache_eviction = eviction
+    config.cache_config.kv_cache_layout = "BLHNC"
+    window = SlidingWindowMLASpec(
+        block_size=16,
+        num_kv_heads=1,
+        head_size=16,
+        dtype=torch.uint8,
+        sliding_window=16,
+        cache_dtype_str="b12x_dsv41" if native else None,
+    )
+    specs = {
+        "compressed": MLAAttentionSpec(
+            block_size=32, num_kv_heads=1, head_size=16, dtype=torch.uint8, tokens_per_state=2
+        ),
+        "encoder-window": window,
+        "decoder-window": dataclasses.replace(window, bounded_replay=True),
+    }
+    groups = get_global_kv_cache_groups(config, [specs])
+    cache = generate_scheduler_kv_cache_config(get_kv_cache_configs(config, [specs], [1 << 20], groups))
+    block_size, hash_block_size = resolve_kv_cache_block_sizes(cache, config)
+    scheduler = Scheduler(
+        config, cache, StructuredOutputManager(config), block_size=block_size, hash_block_size=hash_block_size
+    )
+    first = create_requests(num_requests=1, num_tokens=100, max_tokens=124, block_size=hash_block_size)[0]
+    scheduler.add_request(first)
+    step = 0
+    while not first.is_finished():
+        drafts = [2000 + step * 7 + i for i in range(num_drafts or 0)]
+        if drafts and step:
+            scheduler.update_draft_token_ids(DraftTokenIds([first.request_id], [drafts]))
+        output = scheduler.schedule()
+        offered = output.scheduled_spec_decode_tokens.get(first.request_id, [])
+        scheduler.update_from_output(
+            output,
+            ModelRunnerOutput(
+                req_ids=[first.request_id],
+                sampled_token_ids=[offered[: step % 3] + [1000]],
+                logprobs=None,
+                prompt_logprobs_dict={},
+                pooler_output=None,
+            ),
+        )
+        step += 1
+
+    # The 224th token was sampled, so a continuation can reuse through 192.
+    # The window ending there is already outside the live attention window.
+    continuation = Request(
+        "continuation",
+        prompt_token_ids=[*first.all_token_ids, 200],
+        sampling_params=first.sampling_params,
+        pooling_params=None,
+        block_hasher=get_request_block_hasher(hash_block_size, sha256),
+    )
+    assert scheduler.kv_cache_manager.get_num_cached_tokens(continuation) == expected_hit
+    scheduler.add_request(continuation)
+    assert _new_req_data(scheduler.schedule(), continuation).replay_start == expected_hit - 16

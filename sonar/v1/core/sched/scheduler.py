@@ -2389,6 +2389,11 @@ class Scheduler(SchedulerInterface):
                 finish_reason = request.get_finished_reason()
                 finished = self._handle_stopped_request(request)
                 if finished:
+                    if not output_is_stale and request.status in (
+                        RequestStatus.FINISHED_STOPPED,
+                        RequestStatus.FINISHED_LENGTH_CAPPED,
+                    ):
+                        self.kv_cache_manager.coordinator.cache_finished_decode_tail(request)
                     kv_transfer_params, ec_transfer_params = self._free_request(request)
                     if (
                         prefill_stats is not None

@@ -784,7 +784,7 @@ def _promote_local_kv_cache_specs(
                 # Promoted specs allocate blocks for all tokens and never free
                 # below the window, so the trailing-edge extension and replay
                 # bound are moot.
-                drop=("extra_retained_tokens", "bounded_replay"),
+                drop=("extra_retained_tokens", "bounded_replay", "decode_tail_retention_tokens"),
                 block_size=block_size,
                 page_size_padded=promoted_page_size_padded(spec, block_size),
             )
@@ -1568,6 +1568,41 @@ def get_kv_cache_configs(
     return kv_cache_configs
 
 
+def _retain_native_dsv41_decode_tail(sonar_config: SonarConfig, groups: list[KVCacheGroupSpec]) -> None:
+    cache = sonar_config.cache_config
+    if (
+        not cache.enable_prefix_caching
+        or cache.prefix_cache_retention_interval != 0
+        or cache.kv_offloading_size is not None
+        or sonar_config.kv_transfer_config is not None
+    ):
+        return
+    spec_config = sonar_config.speculative_config
+    hash_lookahead = sonar_config.num_hash_lookahead_tokens
+    if spec_config is not None and spec_config.use_eagle_block_drop() and not hash_lookahead:
+        return
+
+    # The final aligned hit can sit up to a scheduler block behind the
+    # computed prefix. Size this slack before the pool and admission checks.
+    alignment = math.lcm(*(group.kv_cache_spec.block_size for group in groups))
+    tokens = alignment + max(0, hash_lookahead - 1)
+    for group in groups:
+        spec = group.kv_cache_spec
+        first = spec.first_spec if isinstance(spec, UniformTypeKVCacheSpecs) else spec
+        if not (
+            isinstance(first, SlidingWindowMLASpec) and first.cache_dtype_str == "b12x_dsv41" and first.prefix_cacheable
+        ):
+            continue
+        if isinstance(spec, UniformTypeKVCacheSpecs):
+            layer_specs: dict[str, KVCacheSpec] = {}
+            for name, layer_spec in spec.kv_cache_specs.items():
+                assert isinstance(layer_spec, SlidingWindowMLASpec)
+                layer_specs[name] = replace(layer_spec, decode_tail_retention_tokens=tokens)
+            group.kv_cache_spec = replace(spec, kv_cache_specs=layer_specs)
+        else:
+            group.kv_cache_spec = replace(first, decode_tail_retention_tokens=tokens)
+
+
 def get_global_kv_cache_groups(
     sonar_config: SonarConfig,
     kv_cache_specs: list[dict[str, KVCacheSpec]],
@@ -1609,6 +1644,7 @@ def get_global_kv_cache_groups(
         for group in global_kv_cache_groups:
             group.is_eagle_group = not draft_layer_names.isdisjoint(group.layer_names)
         _warn_if_unannotated_eagle_mamba(spec_config, global_kv_cache_groups)
+    _retain_native_dsv41_decode_tail(sonar_config, global_kv_cache_groups)
     return global_kv_cache_groups
 
 
