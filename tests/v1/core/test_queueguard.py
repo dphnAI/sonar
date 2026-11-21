@@ -15,7 +15,7 @@ from sonar.v1.core.kv_cache_utils import get_request_block_hasher, init_none_has
 from sonar.v1.core.queueguard import QueueGuard
 from sonar.v1.core.sched.scheduler import Scheduler
 from sonar.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
-from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheGroupSpec, SlidingWindowMLASpec
+from sonar.v1.kv_cache_interface import KVCacheConfig, KVCacheGroupSpec, MLAAttentionSpec, SlidingWindowMLASpec
 from sonar.v1.request import Request
 from sonar.v1.structured_output import StructuredOutputManager
 
@@ -70,53 +70,58 @@ def test_shared_prefix_survives_tail_eviction_and_owner_departure() -> None:
 
 
 @pytest.mark.parametrize("eviction,keeps_waiter", [("lru", False), ("queueguard", True)])
-def test_fcfs_prefill_preserves_next_prefix_with_swa_replay(
-    tmp_path: Path, eviction: PrefixCacheEviction, keeps_waiter: bool
+@pytest.mark.parametrize("cached_window", [False, True], ids=["replay", "mixed-sm120"])
+def test_fcfs_prefill_preserves_next_prefix(
+    tmp_path: Path, eviction: PrefixCacheEviction, keeps_waiter: bool, cached_window: bool
 ) -> None:
-    OPTConfig(architectures=["OPTForCausalLM"], max_position_embeddings=128).save_pretrained(tmp_path)
+    OPTConfig(architectures=["OPTForCausalLM"], max_position_embeddings=256).save_pretrained(tmp_path)
     config = SonarConfig(
         model_config=ModelConfig(model=str(tmp_path), skip_tokenizer_init=True),
         scheduler_config=SchedulerConfig(
-            max_num_seqs=1, max_num_batched_tokens=64, max_model_len=128, watermark=0.0, is_encoder_decoder=False
+            max_num_seqs=1, max_num_batched_tokens=64, max_model_len=256, watermark=0.0, is_encoder_decoder=False
         ),
-        cache_config=CacheConfig(block_size=BLOCK, enable_prefix_caching=True, prefix_cache_eviction=eviction),
+        cache_config=CacheConfig(block_size=2 * BLOCK, enable_prefix_caching=True, prefix_cache_eviction=eviction),
     )
-    config.cache_config.num_gpu_blocks = 8
+    config.cache_config.num_gpu_blocks = 10
     register_all_kvcache_specs(config)
-    cache_config = KVCacheConfig(
-        num_blocks=8,
-        kv_cache_tensors=[],
-        kv_cache_groups=[
-            KVCacheGroupSpec(
-                ["main"],
-                FullAttentionSpec(block_size=BLOCK, num_kv_heads=1, head_size=16, dtype=torch.bfloat16),
-            ),
-            KVCacheGroupSpec(
-                ["window"],
-                SlidingWindowMLASpec(
-                    block_size=BLOCK,
-                    num_kv_heads=1,
-                    head_size=16,
-                    dtype=torch.bfloat16,
-                    sliding_window=BLOCK,
-                    bounded_replay=True,
-                ),
-            ),
-        ],
+    # Native SM120 can mix cacheable pre-CED windows, replayed decoder/draft
+    # windows and full MLA history. Test a window constituent at a hash
+    # boundary finer than the full-attention page size.
+    history = MLAAttentionSpec(block_size=2 * BLOCK, num_kv_heads=1, head_size=16, dtype=torch.bfloat16)
+    window = SlidingWindowMLASpec(
+        block_size=BLOCK, num_kv_heads=1, head_size=16, dtype=torch.bfloat16, sliding_window=2 * BLOCK
     )
-    scheduler = Scheduler(config, cache_config, StructuredOutputManager(config), block_size=BLOCK)
+    replay = SlidingWindowMLASpec(
+        block_size=BLOCK,
+        num_kv_heads=1,
+        head_size=16,
+        dtype=torch.bfloat16,
+        sliding_window=2 * BLOCK,
+        bounded_replay=True,
+    )
+    groups = [KVCacheGroupSpec(["history"], history), KVCacheGroupSpec(["replay"], replay)]
+    if cached_window:
+        groups.append(KVCacheGroupSpec(["window"], window))
+    cache_config = KVCacheConfig(num_blocks=10, kv_cache_tensors=[], kv_cache_groups=groups)
+    scheduler = Scheduler(
+        config, cache_config, StructuredOutputManager(config), block_size=2 * BLOCK, hash_block_size=BLOCK
+    )
     pool = scheduler.kv_cache_manager.block_pool
-    waiting = request("waiting", 1, 2, 3)
-    idle = request("idle", 4, 5)
-    cached, discard = pool.get_new_blocks(3), pool.get_new_blocks(2)
-    pool.cache_full_blocks(waiting, cached, 0, 3, BLOCK, 0)
-    pool.cache_full_blocks(idle, discard, 0, 2, BLOCK, 0)
-    pool.free_blocks([*cached, *discard])
+    waiting = request("waiting", 1, 2, 3, 4)
+    cached = pool.get_new_blocks(2)
+    pool.cache_full_blocks(waiting, cached, 0, 2, 2 * BLOCK, 0)
+    tails = pool.get_new_blocks(2) if cached_window else []
+    if tails:
+        pool.cache_full_blocks(waiting, [pool.null_block, pool.null_block, *tails], 2, 4, BLOCK, 2)
+    discard = pool.get_new_blocks(pool.get_num_free_blocks())
+    idle = request("idle", *range(10, 10 + 2 * len(discard)))
+    pool.cache_full_blocks(idle, discard, 0, len(discard), 2 * BLOCK, 0)
+    pool.free_blocks([*tails, *cached, *discard])
+    assert scheduler.kv_cache_manager.get_num_cached_tokens(waiting) == 4 * BLOCK
 
     first = request("first", 6)
     scheduler.add_request(first)
     scheduler.add_request(waiting)
     output = scheduler.schedule()
     assert list(output.num_scheduled_tokens) == [first.request_id]
-    hit_blocks = [pool.get_cached_block(h, [0]) for h in waiting.block_hashes]
-    assert all(hit_blocks) is keeps_waiter
+    assert scheduler.kv_cache_manager.get_num_cached_tokens(waiting) == (4 * BLOCK if keeps_waiter else 0)

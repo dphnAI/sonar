@@ -187,14 +187,14 @@ be disabled.
 ### Protect waiting prefixes with QueueGuard
 
 Add `--prefix-cache-eviction queueguard` to a DeepSeek-V4.1 launch with
-prefix caching, FCFS admission and bounded SWA replay enabled. QueueGuard
-evicts unprotected blocks before blocks used by waiting requests. When
-protected blocks must be reclaimed, it favors requests near the queue head.
-It needs no prefill-cost coefficients or frontier checkpoints.
+prefix caching and FCFS admission. QueueGuard protects cached blocks used
+by waiting requests, including native SM120's cached sliding-window pages.
+It favors requests near the queue head when protected blocks must be
+reclaimed. It needs no prefill-cost coefficients or frontier checkpoints
+and does not change the model's replay settings.
 
-QueueGuard requires a local KV cache and full-attention cache groups with
-one common logical page size. It does not support KV offloading, cache-aware
-admission or cached sliding-window tails.
+QueueGuard requires a local KV block pool. It does not support KV
+offloading or cache-aware admission.
 
 ### Hybrid-model checkpoints
 

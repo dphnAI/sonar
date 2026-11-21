@@ -5,6 +5,7 @@ import time
 from collections import defaultdict, deque
 from collections.abc import Iterable
 from dataclasses import replace
+from math import gcd
 from typing import Any
 
 from sonar.compilation.cuda_graph import CUDAGraphStat
@@ -60,7 +61,7 @@ from sonar.v1.core.sched.request_queue import (
     create_request_queue,
 )
 from sonar.v1.core.sched.utils import check_stop, remove_all
-from sonar.v1.core.single_type_kv_cache_manager import FullAttentionManager, MambaManager
+from sonar.v1.core.single_type_kv_cache_manager import FullAttentionManager, MambaManager, SlidingWindowManager
 from sonar.v1.engine import EngineCoreEventType, EngineCoreOutput, EngineCoreOutputs
 from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
@@ -373,17 +374,19 @@ class Scheduler(SchedulerInterface):
             if self.connector is not None or self.cache_config.kv_offloading_size is not None:
                 raise ValueError("QueueGuard requires a local KV cache without offloading")
             pool = self.kv_cache_manager.block_pool
-            page_sizes = set()
+            page_size = 0
             for manager in self.kv_cache_manager.coordinator.single_type_managers:
                 if not manager.kv_cache_spec.prefix_cacheable:
                     continue
-                if type(manager) is not FullAttentionManager or manager.block_pool is not pool:
-                    raise ValueError("QueueGuard requires full-attention cache groups; use bounded SWA replay")
-                page_sizes.add(manager.block_size)
-            if len(page_sizes) != 1:
-                raise ValueError("QueueGuard requires one common prefix-cache page size")
+                if type(manager) not in (FullAttentionManager, SlidingWindowManager) or manager.block_pool is not pool:
+                    raise ValueError("QueueGuard requires full-attention or sliding-window groups in one block pool")
+                # Every group's page hash occurs at a multiple of this common
+                # span, including cached windows alongside compressed MLA pages.
+                page_size = gcd(page_size, manager.block_size)
+            if not page_size:
+                raise ValueError("QueueGuard requires at least one prefix-cacheable group")
             self.queueguard = QueueGuard(
-                pool, page_sizes.pop(), lambda: itertools.chain(self.kv_holding_waiting, self.waiting)
+                pool, page_size, lambda: itertools.chain(self.kv_holding_waiting, self.waiting)
             )
             pool.eviction_policy = self.queueguard
 
