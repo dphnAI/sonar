@@ -184,6 +184,18 @@ sonar serve MODEL --no-enable-prefix-caching
 Keep it enabled unless the target platform or a specific feature requires it to
 be disabled.
 
+### Protect waiting prefixes with QueueGuard
+
+Add `--prefix-cache-eviction queueguard` to a DeepSeek-V4.1 launch with
+prefix caching, FCFS admission and bounded SWA replay enabled. QueueGuard
+evicts unprotected blocks before blocks used by waiting requests. When
+protected blocks must be reclaimed, it favors requests near the queue head.
+It needs no prefill-cost coefficients or frontier checkpoints.
+
+QueueGuard requires a local KV cache and full-attention cache groups with
+one common logical page size. It does not support KV offloading, cache-aware
+admission or cached sliding-window tails.
+
 ### Hybrid-model checkpoints
 
 [FlashStates](https://github.com/FutureMLS-Lab/FlashStates) retains recurrent

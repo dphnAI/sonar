@@ -44,6 +44,7 @@ from sonar.v1.core.hybrid_checkpoint.manager import HybridCheckpointManager, che
 from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
 from sonar.v1.core.kv_cache_metrics import KVCacheMetricsCollector
 from sonar.v1.core.kv_cache_utils import KVCacheBlock
+from sonar.v1.core.queueguard import QueueGuard
 from sonar.v1.core.sched.interface import PauseState, SchedulerInterface
 from sonar.v1.core.sched.output import (
     CachedRequestData,
@@ -59,7 +60,7 @@ from sonar.v1.core.sched.request_queue import (
     create_request_queue,
 )
 from sonar.v1.core.sched.utils import check_stop, remove_all
-from sonar.v1.core.single_type_kv_cache_manager import MambaManager
+from sonar.v1.core.single_type_kv_cache_manager import FullAttentionManager, MambaManager
 from sonar.v1.engine import EngineCoreEventType, EngineCoreOutput, EngineCoreOutputs
 from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
@@ -364,6 +365,27 @@ class Scheduler(SchedulerInterface):
             else 0
         )
         self.cache_aware_threshold = self.scheduler_config.cache_aware_admission_threshold
+
+        self.queueguard: QueueGuard | None = None
+        if self.cache_config.prefix_cache_eviction == "queueguard":
+            if self.policy != SchedulingPolicy.FCFS or self.cache_aware_window:
+                raise ValueError("QueueGuard requires FCFS without cache-aware admission")
+            if self.connector is not None or self.cache_config.kv_offloading_size is not None:
+                raise ValueError("QueueGuard requires a local KV cache without offloading")
+            pool = self.kv_cache_manager.block_pool
+            page_sizes = set()
+            for manager in self.kv_cache_manager.coordinator.single_type_managers:
+                if not manager.kv_cache_spec.prefix_cacheable:
+                    continue
+                if type(manager) is not FullAttentionManager or manager.block_pool is not pool:
+                    raise ValueError("QueueGuard requires full-attention cache groups; use bounded SWA replay")
+                page_sizes.add(manager.block_size)
+            if len(page_sizes) != 1:
+                raise ValueError("QueueGuard requires one common prefix-cache page size")
+            self.queueguard = QueueGuard(
+                pool, page_sizes.pop(), lambda: itertools.chain(self.kv_holding_waiting, self.waiting)
+            )
+            pool.eviction_policy = self.queueguard
 
         self.has_mamba_layers = kv_cache_config.has_mamba_layers
         self.needs_kv_cache_zeroing = kv_cache_config.needs_kv_cache_zeroing
@@ -738,6 +760,8 @@ class Scheduler(SchedulerInterface):
         scheduled_timestamp = time.monotonic()
 
         self.kv_cache_manager.new_step_starts()
+        if self.queueguard is not None:
+            self.queueguard.begin_step()
         self._prefill_export_positions.clear()
 
         # DP prefill balancing: on a throttled (non-cadence-aligned) step, defer
@@ -3118,6 +3142,8 @@ class Scheduler(SchedulerInterface):
         reset_successful = self.kv_cache_manager.reset_prefix_cache()
         if reset_successful and self.mamba_checkpoints is not None:
             self.mamba_checkpoints.reset()
+        if reset_successful and self.queueguard is not None:
+            self.queueguard.reset()
         if reset_running_requests and not reset_successful:
             raise RuntimeError(
                 "Failed to reset KV cache even when all the running requests are "

@@ -174,7 +174,7 @@ def is_known_kv_cache_dtype(name: str) -> bool:
 MambaDType = Literal["auto", "float32", "float16", "bfloat16"]
 MambaCacheMode = Literal["align", "none"]
 MambaSpecStateLayout = Literal["per_position", "compact"]
-PrefixCacheEviction = Literal["lru", "gds"]
+PrefixCacheEviction = Literal["lru", "gds", "queueguard"]
 PrefixCachingHashAlgo = Literal["sha256", "sha256_cbor", "xxhash", "xxhash_cbor"]
 KVOffloadingBackend = Literal["native", "lmcache"]
 
@@ -331,8 +331,9 @@ class CacheConfig:
     """Export recurrent checkpoints inside prefill chunks without splitting
     the chunks at each checkpoint. Requires a supporting backend."""
     prefix_cache_eviction: PrefixCacheEviction = "lru"
-    """Evict by recency ("lru") or by saved prefill cost per freed block ("gds").
-    GDS evicts whole resumable states and requires frontier checkpoints."""
+    """Evict by recency ("lru"), prefill cost per freed block ("gds"), or
+    FCFS prefix priority ("queueguard"). GDS requires frontier checkpoints.
+    QueueGuard protects waiting prefixes without a prefill cost model."""
     prefill_cost_coefficients: tuple[float, float] | None = None
     """GDS cost coefficients (d, e). Prefilling positions [a, b) costs
     `d * (b - a) + e * (b**2 - a**2) / 200000` seconds.
@@ -527,7 +528,12 @@ class CacheConfig:
                 raise ValueError('prefix_cache_eviction="gds" requires mamba_frontier_checkpoint')
             if self.prefill_cost_coefficients is None:
                 raise ValueError('prefix_cache_eviction="gds" requires prefill_cost_coefficients')
-        elif self.prefix_cache_leaf_last:
+        elif self.prefix_cache_eviction == "queueguard":
+            if not self.enable_prefix_caching:
+                raise ValueError('prefix_cache_eviction="queueguard" requires prefix caching')
+            if self.mamba_frontier_checkpoint:
+                raise ValueError('prefix_cache_eviction="queueguard" does not support frontier checkpoints')
+        if self.prefix_cache_eviction != "gds" and self.prefix_cache_leaf_last:
             raise ValueError('prefix_cache_leaf_last requires prefix_cache_eviction="gds"')
         if self.prefix_cache_leaf_idle_seconds is not None and not self.prefix_cache_leaf_last:
             raise ValueError("prefix_cache_leaf_idle_seconds requires prefix_cache_leaf_last")

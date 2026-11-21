@@ -2390,10 +2390,11 @@ Default: `False`.
 
 `--prefix-cache-eviction PREFIX_CACHE_EVICTION`
 
-Evict by recency ("lru") or by saved prefill cost per freed block ("gds").
-GDS evicts whole resumable states and requires frontier checkpoints.
+Evict by recency (`lru`), prefill cost per freed block (`gds`), or
+FCFS prefix priority (`queueguard`). GDS requires frontier checkpoints.
+QueueGuard protects waiting prefixes without a prefill cost model.
 
-Choices: `gds`, `lru`.
+Choices: `gds`, `lru`, `queueguard`.
 
 Default: `lru`.
 
