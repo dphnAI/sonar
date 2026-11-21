@@ -49,6 +49,26 @@ and a driver supporting CUDA 13.2 or newer. Supported compute capabilities are
 8.0, 8.6, 8.9, 9.0, 10.0, 10.3, and 12.x. ARM64 wheels also support 11.0
 (Jetson Thor). Jetson Orin (8.7) and CUDA 12 drivers are not supported.
 
+On supported NVIDIA hardware, an installed CUDA forward-compatibility package
+can provide the required driver API without upgrading the host driver. The
+installer accepts this when a Python 3 probe loads `libcuda.so.1`, reports API
+13.2 or newer, initializes CUDA, and finds an accessible device. GPU architecture
+checks still apply.
+
+If the compatibility libraries are already on `LD_LIBRARY_PATH`, no additional
+option is needed. Otherwise, opt in and select their directory:
+
+```bash
+export SONAR_ENABLE_CUDA_COMPATIBILITY=1
+export SONAR_CUDA_COMPATIBILITY_PATH=/usr/local/cuda-13.2/compat
+curl -LsSf https://sonar.dphn.ai/install.sh | sh
+```
+
+Keep the `LD_LIBRARY_PATH` export printed by the installer in the environment
+that launches Sonar, including service definitions. The installer does not
+install compatibility libraries or change the host driver or global linker
+configuration.
+
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). Then
 create an environment and install Sonar.
 
