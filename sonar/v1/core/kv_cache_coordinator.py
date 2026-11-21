@@ -25,6 +25,7 @@ from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheSpec,
     MambaSpec,
+    SlidingWindowMLASpec,
     SlidingWindowSpec,
 )
 from sonar.v1.request import Request
@@ -182,6 +183,13 @@ class KVCacheCoordinator(ABC):
         # 0 = keep only the latest replay boundary; None = dense;
         self.retention_interval = kv_cache_config.prefix_cache_retention_interval
         _validate_prefix_cache_retention_interval(self.retention_interval, self.scheduler_block_size, kv_cache_config)
+        self.decode_tail_managers = tuple(
+            manager
+            for manager in self.single_type_managers
+            if manager.enable_caching
+            and isinstance(manager.kv_cache_spec, SlidingWindowMLASpec)
+            and manager.kv_cache_spec.decode_tail_retention_tokens
+        )
 
     def get_num_blocks_to_allocate(
         self,
@@ -363,6 +371,38 @@ class KVCacheCoordinator(ABC):
                 retention_interval=self.retention_interval,
                 replay_boundaries=boundaries,
             )
+
+    def cache_finished_decode_tail(self, request: Request) -> None:
+        """Publish the final settled SWA window before its pages are freed."""
+        if not self.decode_tail_managers:
+            return
+        pool = self.block_pool
+        boundary = round_down(
+            min(
+                request.num_computed_tokens - request.num_in_flight_tokens,
+                request.num_tokens - 1,
+                len(request.block_hashes) * pool.hash_block_size,
+            ),
+            self.scheduler_block_size,
+        )
+        if boundary <= request.num_prompt_tokens - max(1, pool.num_hash_lookahead_tokens):
+            return
+        for manager in self.decode_tail_managers:
+            spec = manager.kv_cache_spec
+            assert isinstance(spec, SlidingWindowMLASpec)
+            end = boundary // manager.block_size
+            start = max(0, end - cdiv(spec.sliding_window - 1, manager.block_size))
+            blocks = manager.req_to_blocks.get(request.request_id)
+            if blocks is None or end > len(blocks):
+                continue
+            window = blocks[start:end]
+            if any(block.is_null for block in window):
+                continue
+            mask = [block.block_hash is None for block in window]
+            if any(mask):
+                pool.cache_full_blocks(
+                    request, blocks, start, end, manager.block_size, manager.kv_cache_group_id, block_mask=mask
+                )
 
     def emit_cached_block_events(self, request: Request, computed_blocks: tuple[list[KVCacheBlock], ...]) -> None:
         for group_idx, group_blocks in enumerate(computed_blocks):
