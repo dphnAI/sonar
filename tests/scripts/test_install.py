@@ -17,6 +17,41 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(scope="module")
+def cuda_driver(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Exercise the real dynamic loader without depending on the test host GPU."""
+    compiler = shutil.which("cc")
+    if platform.system() != "Linux" or compiler is None:
+        pytest.skip("CUDA driver probe tests require Linux and a C compiler")
+    assert compiler is not None
+    directory = tmp_path_factory.mktemp("cuda compat")
+    subprocess.run(
+        [compiler, "-shared", "-fPIC", "-x", "c", "-", "-o", str(directory / "libcuda.so.1")],
+        input="""
+        #include <stdlib.h>
+        static int value(const char *name, int fallback) {
+            const char *text = getenv(name);
+            return text ? atoi(text) : fallback;
+        }
+        int cuDriverGetVersion(int *version) {
+            *version = value("TEST_DRIVER_API", 13020);
+            return value("TEST_DRIVER_STATUS", 0);
+        }
+        int cuInit(unsigned int flags) {
+            return value("TEST_INIT_STATUS", 0);
+        }
+        int cuDeviceGetCount(int *count) {
+            *count = value("TEST_DEVICE_COUNT", 1);
+            return value("TEST_COUNT_STATUS", 0);
+        }
+        """,
+        text=True,
+        check=True,
+        capture_output=True,
+    )
+    return directory
+
+
 @pytest.fixture
 def installer_environment(tmp_path: Path) -> dict[str, str]:
     commands = {
@@ -47,6 +82,8 @@ def installer_environment(tmp_path: Path) -> dict[str, str]:
         "TEST_MACHINE": "aarch64",
         "TEST_COMPUTE_CAPS": "11.0",
         "TEST_CUDA_VERSION": "13.2",
+        "SONAR_ENABLE_CUDA_COMPATIBILITY": "0",
+        "SONAR_CUDA_COMPATIBILITY_PATH": "",
     }
 
 
@@ -127,6 +164,7 @@ def test_installer_validates_cuda_platform(
     tmp_path: Path,
     installer_environment: dict[str, str],
     machine: str,
+    cuda_driver: Path,
     os_name: str,
     cuda_version: str,
     compute_caps: str,
@@ -138,6 +176,7 @@ def test_installer_validates_cuda_platform(
         TEST_CUDA_VERSION=cuda_version,
         TEST_COMPUTE_CAPS=compute_caps,
     )
+    installer_environment.update(LD_LIBRARY_PATH=str(cuda_driver), TEST_DRIVER_API="13000")
     result = _installer_dry_run(tmp_path, installer_environment, "cuda")
 
     if error is None:
@@ -147,6 +186,66 @@ def test_installer_validates_cuda_platform(
         assert result.returncode != 0, result.stdout + result.stderr
         assert error in result.stderr
         assert "https://sonar.invalid/whl/" not in result.stdout
+    assert not (tmp_path / "venv").exists()
+
+
+@pytest.mark.parametrize("explicit_path", [False, True])
+@pytest.mark.parametrize(
+    "overrides,error",
+    [
+        ({}, None),
+        ({"TEST_DRIVER_API": "13000"}, "requires CUDA 13.2"),
+        ({"TEST_DRIVER_STATUS": "999"}, "cuDriverGetVersion failed"),
+        ({"TEST_INIT_STATUS": "803"}, "cuInit failed"),
+        ({"TEST_DEVICE_COUNT": "0"}, "exposes no devices"),
+        ({"TEST_COUNT_STATUS": "100"}, "cuDeviceGetCount failed"),
+        ({"TEST_COMPUTE_CAPS": "8.7"}, "compute capability: 8.7"),
+    ],
+)
+def test_installer_probes_compatibility_driver(
+    tmp_path: Path, installer_environment: dict[str, str], cuda_driver: Path, explicit_path: bool, overrides, error
+) -> None:
+    installer_environment.update(
+        TEST_CUDA_VERSION="13.0",
+        LD_LIBRARY_PATH=str(tmp_path / "unused"),
+        SONAR_ENABLE_CUDA_COMPATIBILITY="true" if explicit_path else "0",
+        SONAR_CUDA_COMPATIBILITY_PATH=str(cuda_driver),
+    )
+    if not explicit_path:
+        installer_environment["LD_LIBRARY_PATH"] = str(cuda_driver)
+    installer_environment.update(overrides)
+    result = _installer_dry_run(tmp_path, installer_environment, "cuda")
+    if error is None:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "https://download.pytorch.org/whl/cu132" in result.stdout
+        export = next(line.strip() for line in result.stdout.splitlines() if "export LD_LIBRARY_PATH=" in line)
+        subprocess.run(
+            [
+                "sh",
+                "-c",
+                f"{export}; exec python3 -c 'import ctypes; assert ctypes.CDLL(\"libcuda.so.1\").cuInit(0) == 0'",
+            ],
+            env={**installer_environment, "LD_LIBRARY_PATH": ""},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    else:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert error in result.stderr
+        assert "https://sonar.invalid/whl/" not in result.stdout
+    assert not (tmp_path / "venv").exists()
+
+
+def test_installer_rejects_missing_explicit_compatibility_library(tmp_path: Path, installer_environment) -> None:
+    installer_environment.update(
+        TEST_CUDA_VERSION="13.0",
+        SONAR_ENABLE_CUDA_COMPATIBILITY="1",
+        SONAR_CUDA_COMPATIBILITY_PATH=str(tmp_path / "missing"),
+    )
+    result = _installer_dry_run(tmp_path, installer_environment, "cuda")
+    assert result.returncode != 0
+    assert "CUDA compatibility library not found" in result.stderr
     assert not (tmp_path / "venv").exists()
 
 

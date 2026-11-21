@@ -48,6 +48,10 @@ Options:
 Environment overrides:
   SONAR_BASE_URL              Site that hosts Sonar platform wheels.
   SONAR_UV_VERSION            uv installer version.
+  SONAR_ENABLE_CUDA_COMPATIBILITY
+                              Opt in to installed CUDA compatibility libraries.
+  SONAR_CUDA_COMPATIBILITY_PATH
+                              Override the compatibility library directory.
 EOF
 }
 
@@ -215,6 +219,37 @@ version_at_least() {
     [ "$first" = "$required" ]
 }
 
+check_cuda_driver() {
+    command -v python3 >/dev/null 2>&1 ||
+        die "python3 is required to validate CUDA compatibility. Install it or update the NVIDIA driver."
+    python3 - <<'PY'
+import ctypes
+import sys
+
+try:
+    cuda = ctypes.CDLL("libcuda.so.1")
+    version = ctypes.c_int()
+    status = cuda.cuDriverGetVersion(ctypes.byref(version))
+    if status:
+        raise RuntimeError(f"cuDriverGetVersion failed with CUDA error {status}")
+    if version.value < 13020:
+        raise RuntimeError(f"loaded libcuda reports driver API {version.value}, requires CUDA 13.2 (13020)")
+    status = cuda.cuInit(0)
+    if status:
+        raise RuntimeError(f"cuInit failed with CUDA error {status}")
+    count = ctypes.c_int()
+    status = cuda.cuDeviceGetCount(ctypes.byref(count))
+    if status:
+        raise RuntimeError(f"cuDeviceGetCount failed with CUDA error {status}")
+    if count.value < 1:
+        raise RuntimeError("loaded CUDA driver exposes no devices")
+except (OSError, AttributeError, RuntimeError) as error:
+    print(f"CUDA driver probe: {error}", file=sys.stderr)
+    sys.exit(1)
+print(f"Loaded CUDA driver API {version.value}, accessible devices: {count.value}.")
+PY
+}
+
 check_cuda() {
     command -v nvidia-smi >/dev/null 2>&1 ||
         die "nvidia-smi is required to validate the NVIDIA driver."
@@ -225,8 +260,32 @@ check_cuda() {
         head -n 1)
     [ -n "$supported_cuda" ] ||
         die "Could not determine the CUDA version supported by the NVIDIA driver."
-    version_at_least "$supported_cuda" 13.2 ||
-        die "The NVIDIA driver supports CUDA $supported_cuda. Sonar requires CUDA 13.2 or newer."
+    compat_path=
+    compat_enabled=$(printf '%s' "${SONAR_ENABLE_CUDA_COMPATIBILITY:-0}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    case "$compat_enabled" in
+        1 | true)
+            compat_path=${SONAR_CUDA_COMPATIBILITY_PATH:-}
+            if [ -z "$compat_path" ]; then
+                if [ -n "${CONDA_PREFIX:-}" ] && [ -d "$CONDA_PREFIX/cuda-compat" ]; then
+                    compat_path=$CONDA_PREFIX/cuda-compat
+                else
+                    compat_path=/usr/local/cuda-13.2/compat
+                fi
+            fi
+            [ -f "$compat_path/libcuda.so.1" ] ||
+                die "CUDA compatibility library not found at $compat_path/libcuda.so.1."
+            export LD_LIBRARY_PATH="$compat_path${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            ;;
+    esac
+    if ! version_at_least "$supported_cuda" 13.2 || [ "${compat_path:-}" ]; then
+        check_cuda_driver ||
+            die "Sonar requires a working CUDA 13.2 driver. Update the driver or explicitly configure supported CUDA compatibility libraries."
+        say "nvidia-smi reports CUDA $supported_cuda; the loaded CUDA driver passed compatibility checks."
+        if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+            say "Keep this environment when launching Sonar, including in services:"
+            say "  export LD_LIBRARY_PATH=$(shell_quote "$LD_LIBRARY_PATH")"
+        fi
+    fi
 
     compute_caps=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null || true)
     [ -n "$compute_caps" ] ||
