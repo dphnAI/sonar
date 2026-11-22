@@ -60,7 +60,7 @@ def installer_environment(tmp_path: Path) -> dict[str, str]:
             'case "${1:-}" in\n'
             '  -L) echo "GPU 0: Test GPU";;\n'
             '  --query-gpu=compute_cap) printf "%s\\n" "$TEST_COMPUTE_CAPS";;\n'
-            '  "") echo "CUDA Version: $TEST_CUDA_VERSION";;\n'
+            '  "") echo "$TEST_CUDA_LABEL: $TEST_CUDA_VERSION";;\n'
             "  *) exit 1;;\n"
             "esac"
         ),
@@ -82,6 +82,7 @@ def installer_environment(tmp_path: Path) -> dict[str, str]:
         "TEST_MACHINE": "aarch64",
         "TEST_COMPUTE_CAPS": "11.0",
         "TEST_CUDA_VERSION": "13.2",
+        "TEST_CUDA_LABEL": "CUDA Version",
         "SONAR_ENABLE_CUDA_COMPATIBILITY": "0",
         "SONAR_CUDA_COMPATIBILITY_PATH": "",
     }
@@ -143,6 +144,7 @@ def test_installer_selects_platform_index(
     assert not (tmp_path / "venv").exists()
 
 
+@pytest.mark.parametrize("cuda_label", ["CUDA Version", "CUDA UMD Version"])
 @pytest.mark.parametrize(
     ("machine", "os_name", "cuda_version", "compute_caps", "error"),
     [
@@ -150,6 +152,7 @@ def test_installer_selects_platform_index(
         ("aarch64", "Linux", "13.2", "11.0", None),
         ("aarch64", "Linux", "13.2", "11.0\n12.1", None),
         ("x86_64", "Linux", "13.2", "12.1", None),
+        ("x86_64", "Linux", "13.4", "12.0", None),
         ("x86_64", "Linux", "13.2", "11.0", "compute capability: 11.0"),
         ("aarch64", "Linux", "13.2", "8.7", "compute capability: 8.7"),
         ("aarch64", "Linux", "13.2", "11.0\n8.7", "compute capability: 8.7"),
@@ -167,6 +170,7 @@ def test_installer_validates_cuda_platform(
     cuda_driver: Path,
     os_name: str,
     cuda_version: str,
+    cuda_label: str,
     compute_caps: str,
     error: str | None,
 ) -> None:
@@ -174,6 +178,7 @@ def test_installer_validates_cuda_platform(
         TEST_MACHINE=machine,
         TEST_OS=os_name,
         TEST_CUDA_VERSION=cuda_version,
+        TEST_CUDA_LABEL=cuda_label,
         TEST_COMPUTE_CAPS=compute_caps,
     )
     installer_environment.update(LD_LIBRARY_PATH=str(cuda_driver), TEST_DRIVER_API="13000")
