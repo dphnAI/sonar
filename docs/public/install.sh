@@ -256,7 +256,7 @@ check_cuda() {
     nvidia-smi -L >/dev/null 2>&1 || die "The NVIDIA driver cannot access a GPU."
 
     supported_cuda=$(nvidia-smi 2>/dev/null |
-        sed -n 's/.*CUDA Version: \([0-9][0-9.]*\).*/\1/p' |
+        sed -nE 's/.*CUDA (UMD )?Version: ([0-9][0-9.]*).*/\2/p' |
         head -n 1)
     [ -n "$supported_cuda" ] ||
         die "Could not determine the CUDA version supported by the NVIDIA driver."
@@ -583,7 +583,7 @@ fi
 
 say
 say "Activate the environment with:"
-say "  . $(shell_quote "$venv_path/bin/activate")"
+say "  source $(shell_quote "$venv_path/bin/activate")"
 say
 say "Then verify the installation with:"
 say "  sonar --version"
